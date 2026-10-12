@@ -1,8 +1,11 @@
 # orange Agent Guide
 
-> Language: 中文（Chinese）
+> Language: English
 
-orange 是一个帮助用户学习高等数学、数学分析与矩阵计算知识的 Web 系统，能够展现函数的图像并提供动态交互。后端使用 C++20 实现，前端使用 TypeScript 实现。
+orange is a Web system for studying advanced mathematics, mathematical
+analysis, and matrix computation that renders function graphs and provides
+dynamic interaction. The backend is implemented in C++20 and the frontend in
+TypeScript.
 
 This guide applies to the repository root and every descendant path unless a
 closer `AGENTS.md` adds stricter path-specific rules. External system,
