@@ -3,9 +3,11 @@
 > Language: English
 
 orange is a Web system for studying advanced mathematics, mathematical
-analysis, and matrix computation that renders function graphs and provides
-dynamic interaction. The backend is implemented in C++20 and the frontend in
-TypeScript.
+analysis, and matrix computation, as well as physics and chemistry; it renders
+function graphs and provides dynamic interaction, with a backend implemented
+in C++20 and a frontend implemented in TypeScript. Developing orange is also
+part of the learning goal: the project doubles as a hands-on study of the C++
+and Web technologies it is built with.
 
 This guide applies to the repository root and every descendant path unless a
 closer `AGENTS.md` adds stricter path-specific rules. External system,
