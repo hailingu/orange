@@ -773,6 +773,16 @@ implementation or operation continues.
 11. Report changed files, verification results, known limitations, and stable
     evidence. Do not claim completion while required work remains.
 
+## Issue Tracking
+
+Before creating an issue for orange, read and follow
+[the issue standard](docs/development/issue-standard.md) for title format,
+severity, labels, body structure, evidence, and closure. Use the
+`hailingu/orange` tracker. References in that standard to another repository
+or to a policy absent from this guide do not override this guide.
+An issue records work; it does not replace an Accepted ADR or OCR when one
+is required for implementation or operation.
+
 ## Scope Routing
 
 For each affected path or operation, evaluate the rows below in listed order
