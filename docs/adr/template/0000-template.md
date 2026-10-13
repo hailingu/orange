@@ -119,7 +119,7 @@ Variable Dictionary
 
 | Variable | Meaning |
 |----------|---------|
-| `{{RELATED_LINKS}}` | Related Trello card, issue, PR, review or approval context, or ADR references |
+| `{{RELATED_LINKS}}` | Related GitHub issue or Projects item, PR, review or approval context, or ADR references |
 | `{{APPROVAL_CONTEXT_REVISION}}` | Optional immutable revision that exactly represents the approved document content; informational and non-binding, otherwise remove this field |
 | `{{OPTIONAL_SUPPORTING_NOTE}}` | Useful supporting context that is not required for acceptance, implementation, or verification |
 

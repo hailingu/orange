@@ -6,15 +6,15 @@
 - Route the ADD before assigning its number: repository-wide or cross-boundary
   documents use `docs/architecture/`; single-service or single-package internal
   documents use `<service-or-package>/docs/architecture/`.
-- For a new ADD sourced from Trello requirements, inspect the worktree and
+- For a new ADD sourced from captured demand (a GitHub Projects item or issue), inspect the worktree and
   create and switch to a new task branch dedicated to this ADD before copying
   this template, assigning the number, creating the file, or adding the index
   row. Do not reuse the current task branch; if unrelated work prevents a safe
   switch, stop without stashing or moving it.
 - After routing, numbering, and naming this ADD, add its row to
   `docs/architecture/INDEX.md` in the same change that creates the file.
-- Capture the Trello baseline used for this revision and report later drift;
-  Trello edits do not silently revise the ADD.
+- Capture the demand baseline used for this revision and report later drift;
+  demand edits do not silently revise the ADD.
 - Describe capabilities as externally meaningful behavior, keep data design
   conceptual or logical, and keep architecture and flows at solution level.
   Leave physical schema, source-file plans, commands, and other task-level
@@ -86,7 +86,7 @@ Variable Dictionary
 | `{{REQUIRED_APPROVER}}` | Concrete `@<actor-id>` or rule identifying who is authorized to approve |
 | `{{SCOPE_LEVEL}}` | `Repository / Cross-project` or `Service / Package internal` |
 | `{{SCOPE}}` | Projects, services, packages, or capabilities covered |
-| `{{TRELLO_SOURCES}}` | Stable URLs of all source Trello cards |
+| `{{DEMAND_SOURCES}}` | Stable URLs or citations of all source GitHub Projects items, issues, or captured demand statements |
 | `{{CONTEXT}}` | Requirement context and the problem the solution must address |
 | `{{SOLUTION_SUMMARY}}` | Concise end-to-end solution view |
 | `{{DESIGN_BOUNDARY}}` | Explicit boundary between solution design and later ADR implementation design |
@@ -114,7 +114,7 @@ Variable Dictionary
 | Variable | Section | Meaning |
 | --- | --- | --- |
 | `{{REQ_ID}}` | Requirement Baseline | Stable local requirement ID, e.g. R-1 |
-| `{{TRELLO_URL}}` | Requirement Baseline | Stable source card URL |
+| `{{DEMAND_URL}}` | Requirement Baseline | Stable source GitHub Projects item, issue, or demand citation |
 | `{{REQUIREMENT}}` | Requirement Baseline | Captured requirement statement |
 | `{{ACCEPTANCE_OUTCOME}}` | Requirement Baseline | Observable product outcome requested |
 | `{{REQUIREMENT_CONSTRAINTS}}` | Requirement Baseline | Priority and binding constraints |
@@ -211,7 +211,7 @@ Variable Dictionary
 - **Retirement Reason [Conditionally Required — Design Status is `Deprecated` or `Superseded`]**: Pending
 - **Scope Level**: {{SCOPE_LEVEL}}
 - **Scope**: {{SCOPE}}
-- **Trello Sources**: {{TRELLO_SOURCES}}
+- **Demand Sources**: {{DEMAND_SOURCES}}
 - **Figma Sources [Conditionally Required — UI is in scope]**: {{FIGMA_SOURCES}}
 - **Related [Optional]**: {{RELATED_LINKS}}
 - **Supersedes [Conditionally Required — this ADD replaces another]**: {{SUPERSEDES}}
@@ -243,9 +243,9 @@ Unlabeled fields inside a `[Required]` section are required.
 
 ## Requirement Baseline [Required]
 
-| ID | Trello source | Requirement baseline | Acceptance outcome | Priority and constraints | Last checked |
+| ID | Demand source | Requirement baseline | Acceptance outcome | Priority and constraints | Last checked |
 | --- | --- | --- | --- | --- | --- |
-| {{REQ_ID}} | {{TRELLO_URL}} | {{REQUIREMENT}} | {{ACCEPTANCE_OUTCOME}} | {{REQUIREMENT_CONSTRAINTS}} | {{LAST_CHECKED}} |
+| {{REQ_ID}} | {{DEMAND_URL}} | {{REQUIREMENT}} | {{ACCEPTANCE_OUTCOME}} | {{REQUIREMENT_CONSTRAINTS}} | {{LAST_CHECKED}} |
 
 ## Goals And Non-Goals [Required]
 
@@ -352,7 +352,7 @@ Allowed task-candidate statuses: `Ready`, `Selected`, `Complete`, or `Deferred`.
 ## Approval And Review Checklist [Required]
 
 - [ ] Scope routing, filename, number, metadata, and central index row are correct.
-- [ ] Every Trello source has a captured baseline, acceptance outcome, and last-checked date.
+- [ ] Every demand source has a captured baseline, acceptance outcome, and last-checked date.
 - [ ] Every functional capability cites captured requirement IDs, and every stated behavior traces to those cited baselines.
 - [ ] When Data Model Design is triggered, ownership, lifecycle, sensitivity, relationships, and invariants are populated; otherwise the section records `N/A — <reason>`.
 - [ ] Every architecture component has a responsibility, conceptual inputs and outputs, dependencies, and cited accepted constraints; the required Mermaid architecture diagram covers every component ID, boundary, dependency, and applicable conceptual flow and agrees with the table.

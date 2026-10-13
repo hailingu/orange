@@ -20,7 +20,7 @@
   skipped when unneeded, and stable target-, time-, exit-, and result-bearing
   evidence for every executed stage.
 - Complete Conditional Extensions only for their stated trigger.
-- Put Trello and pull-request references in Metadata `Related`; neither changes
+- Put GitHub issue/Projects and pull-request references in Metadata `Related`; neither changes
   this record's status or supplies approval without the canonical exact
   `Approve` response.
 - Replace every variable in retained or triggered content.
@@ -95,7 +95,7 @@ Required when the stated trigger applies; otherwise use `N/A — <reason>`.
 
 | Variable | Meaning |
 |----------|---------|
-| `{{RELATED_LINKS}}` | Related Trello card, issue, PR, exact review revision, ADR, incident, or change ticket references |
+| `{{RELATED_LINKS}}` | Related GitHub issue or Projects item, PR, exact review revision, ADR, incident, or change ticket references |
 | `{{APPROVAL_CONTEXT_REVISION}}` | Optional immutable revision that exactly represents the approved document content; informational and non-binding, otherwise remove this field |
 | `{{OPTIONAL_SUPPORTING_NOTE}}` | Useful operational context that is not required for approval, execution, recovery, or verification |
 

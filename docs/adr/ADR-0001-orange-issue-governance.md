@@ -2,30 +2,35 @@
 
 ## Metadata [Required]
 
-- **Type**: Full ADR
-- **Record Identity**: `docs/adr/ADR-0001-orange-issue-governance.md`
-- **Author**: `@codex`
-- **Decision Owner**: `@hailingu`
-- **Required Approver**: Repository owner `@hailingu`; MUST NOT be the author
 - **Decision Status**: Accepted
 - **Implementation Status**: Blocked
-- **Scope**: Repository-wide issue creation, classification, evidence, and closure
-- **Primary Implementation Boundary**: Repository process governance
-- **Architecture Source**: N/A — process governance, not product-demand implementation
-- **Baseline Revision**: `5ec976c64263e0ddd5565a8847d3ac2b818d5fc1`
-- **Approver** [Conditionally Required — accepted decision]: `@hailingu` — repository owner, self-declared identity in the approval context, distinct from author `@codex`
-- **Approval Time** [Conditionally Required — accepted decision]: 2026-10-13T08:07:03Z
-- **Approval Evidence** [Conditionally Required — accepted decision]: `Approve`
-- **Approval Context Revision** [Optional — informational and non-binding]: `b919326794047e9f91be404a929ff61bb3f4a35a` — immutable revision whose record content equals the content present for approval; the acceptance edits were made after approval within the same change
-- **Rejector / Rejection Time / Rejection Evidence / Rejection Reason** [Conditionally Required — rejected decision]: N/A — not rejected
-- **Retired By / Retirement Time / Retirement Evidence / Retirement Reason** [Conditionally Required — retired decision]: N/A — not retired
-- **Supersedes / Superseded By**: None — first issue-governance proposal
-- **Blocked From** [Conditionally Required — Implementation Status is Blocked]: Not Started
-- **Blocker And Evidence** [Conditionally Required — Implementation Status is Blocked]: AC-06 requires the configured governance validator at `tools/governance-validator` whose `npm test` and `npm run validate` both exit 0. The package does not exist; every recorded attempt exits 254 with ENOENT (see Preparation And Verification Evidence). Creating it is source work outside this record's accepted scope — Complete Task And Scope explicitly excludes restoration of the missing governance tooling — and requires a Full ADR, which the repository-wide serialization gate blocks while this record is non-terminal. Blocker-resolution ADR: `docs/adr/ADR-0002-governance-validator-adoption.md`
-- **Blocker Owner** [Conditionally Required — Implementation Status is Blocked]: `@hailingu`
-- **Blocker Exit Or Recheck Criterion** [Conditionally Required — Implementation Status is Blocked]: Re-run `npm test --prefix tools/governance-validator` and `npm run validate --prefix tools/governance-validator` from repository root after `docs/adr/ADR-0002-governance-validator-adoption.md` reaches an accepted, implemented state; both exit 0 with no reported document errors. On satisfaction, Implementation Status returns to the recorded prior status `Not Started` and ST-01 proceeds to record AC-02 through AC-12.
+- **Date**: 2026-10-13
+- **Author**: @codex
+- **Decision Owner**: @hailingu
+- **Required Approver**: @hailingu
+- **Record Scope**: Repository-wide issue creation, classification, evidence, and closure
+- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: @hailingu
+- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: 2026-10-13T08:07:03Z
+- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Approve
+- **Approval Context Revision [Optional — informational and non-binding]**: b919326794047e9f91be404a929ff61bb3f4a35a — immutable revision whose record content equaled the approved content; the later template-structure alignment is approval-preserving maintenance under the owner determination recorded in docs/adr/ADR-0002-governance-validator-adoption.md
+- **Rejector [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Reason [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Retired By [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Time [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Evidence [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Reason [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Blocked From [Conditionally Required — Implementation Status is `Blocked`]**: Not Started
+- **Blocker And Evidence [Conditionally Required — Implementation Status is `Blocked`]**: AC-06 requires the configured governance validator at `tools/governance-validator` whose `npm test` and `npm run validate` both exit 0. The package did not exist when this record entered Blocked; every recorded attempt exited 254 with ENOENT (see Supporting Notes). Creating it is source work outside this record's accepted scope — the Scope section explicitly excludes restoring the missing governance tooling — and requires a Full ADR, which the repository-wide serialization gate blocks while this record is non-terminal. Blocker-resolution ADR: docs/adr/ADR-0002-governance-validator-adoption.md
+- **Blocker Owner [Conditionally Required — Implementation Status is `Blocked`]**: @hailingu
+- **Blocker Exit Or Recheck Criterion [Conditionally Required — Implementation Status is `Blocked`]**: Re-run `npm test --prefix tools/governance-validator` and `npm run validate --prefix tools/governance-validator` from repository root after docs/adr/ADR-0002-governance-validator-adoption.md reaches an accepted, implemented state; both exit 0 with no reported document errors. On satisfaction, Implementation Status returns to the recorded prior status `Not Started` and T-1 proceeds to record AC-02 through AC-12.
+- **Related [Optional]**: docs/adr/ADR-0002-governance-validator-adoption.md — sole blocker-resolution record under the AGENTS.md serialization exception
+- **Architecture Source [Conditionally Required — product demand]**: N/A — process governance, not product-demand implementation
+- **Supersedes [Conditionally Required — this ADR replaces another]**: None
+- **Superseded By [Conditionally Required — this ADR is replaced]**: None — first issue-governance proposal
 
-## Requirement Levels [Required]
+## Requirement Level Legend [Required]
 
 - **`[Required]`**: The section or field always applies and MUST remain present
   with complete, verifiable content. Use `None — <reason>` only when the
@@ -39,339 +44,325 @@
   execution, completion, or verification. If retained, it MUST be accurate and
   complete; optional content MUST NOT substitute for required evidence.
 
-## Context And Constraints [Required]
+Unlabeled fields inside a `[Required]` section are required.
+
+## Context And Problem Statement [Required]
 
 [PR #4](https://github.com/hailingu/orange/pull/4) added mandatory issue
 governance without an Accepted Full ADR. Its copied standard named the
-`hailingu/PlotWeave` tracker and relied on an absent Review And Response Policy,
-severity policy, out-of-scope threat model, and review-round budget.
+`hailingu/PlotWeave` tracker and relied on an absent Review And Response
+Policy, severity policy, out-of-scope threat model, and review-round budget.
 
-AGENTS.md Decision Records and Approval and Status remain authoritative.
-This record is a proposal and authorizes no active issue policy. The issue
-route and standard explicitly remain inactive until this ADR is Accepted.
-Publishing a proposal, a passing PR review, and an instruction to push are
-not the exact approval evidence required by that contract.
+AGENTS.md Decision Records and Approval and Status remain authoritative. This
+record was a proposal authorizing no active issue policy while Proposed, and
+its route and standard explicitly remained inactive until this record was
+Accepted. Publishing a proposal, a passing PR review, and an instruction to
+push are not the exact approval evidence required by that contract. After being
+informed that the Full ADR template, index, and validator were absent, the
+repository owner instructed “直接修复后在本次PR里推送” (directly repair and push
+in this PR); that authorized preparing and publishing the corrected proposal
+and its index on the existing PR branch and was not recorded as `Approve`.
 
-No ADR or ADR index existed at the baseline revision; there is no non-terminal
-record competing with this proposal under repository-wide serialization.
+No ADR or ADR index existed at the original baseline revision
+`5ec976c64263e0ddd5565a8847d3ac2b818d5fc1`; no non-terminal record competed
+with this proposal under repository-wide serialization. The prescribed
+templates were absent at drafting time; the repository owner restored the
+template family before acceptance, and this record has since been aligned to
+the restored template structure as approval-preserving maintenance under the
+owner determination recorded in
+docs/adr/ADR-0002-governance-validator-adoption.md. The configured governance
+checks could not run until their package existed; those failures are retained
+in Supporting Notes rather than reported as passing validation.
 
-### Preparation Authorization And Missing Prerequisites
-
-After being informed that the Full ADR template, index, and validator were
-absent, the repository owner instructed: “直接修复后在本次PR里推送”
-(directly repair and push in this PR). This authorizes preparing and publishing
-the corrected proposal and its index on the existing PR branch. It is not
-recorded as `Approve` and does not accept this ADR.
-
-At proposal time the prescribed `docs/adr/template/0000-template.md` and
-`docs/README.md` were absent; both were restored before acceptance (see Open
-Questions and the Change Log). This first proposal follows the existing AGENTS.md requirement-level,
-scope, metadata, subtask, acceptance-check, and index contracts directly.
-It adds no substitute template, validator, dependency, or general workflow
-exception. The configured governance checks cannot run successfully until
-their package exists; their failures are retained below rather than reported
-as passing validation.
-
-## Complete Task And Scope [Required]
+## Scope [Required]
 
 The complete outcome is one authoritative, self-contained issue standard for
 `hailingu/orange`, routed from AGENTS.md only after acceptance. A reader can
 classify an issue, record a known boundary, and close an issue using local
 requirements without consulting undefined policies or another tracker.
 
-Included paths and stable anchors:
+In scope:
 
 - `AGENTS.md` — Issue Tracking; first legal comment position for provenance.
-- `docs/development/issue-standard.md` — applicability, status, Required Reading,
-  Title Format, Severity, Labels, Known Boundary Content, and Closing.
+- `docs/development/issue-standard.md` — applicability, status, Required
+  Reading, Title Format, Severity, Labels, Known Boundary Content, and
+  Closing.
 - `docs/adr/INDEX.md` — this record's identity and lifecycle row.
 - `docs/adr/fixtures/orange-issue-governance-cases.md` — fixed constructed
   issue bodies, closure comments, and positive/negative cases for review.
 
-Excluded: source and configuration, ADD-0001, live GitHub label creation or
-application, issue creation or closure, review-round limits, threat-model
-changes, and restoration of the missing governance tooling. An issue still cannot authorize source,
-configuration, builds, or operations requiring an Accepted ADR or OCR.
+Out of scope:
 
-## Decision Drivers And Options [Required]
+- Source and configuration changes of any kind.
+- Changes to ADD-0001 or the architecture baseline.
+- Live GitHub label creation or application, and issue creation or closure.
+- Review-round limits, threat-model changes, and restoration of the missing
+  governance tooling (adopted separately by
+  docs/adr/ADR-0002-governance-validator-adoption.md).
+- Waiving any mandatory merge or completion gate: an issue still cannot
+  authorize source, configuration, builds, or operations requiring an
+  Accepted ADR or OCR.
 
-Drivers are local applicability, deterministic disposition rules, real approval
-evidence, preservation of existing implementation gates, and the smallest
-reviewable repair to PR #4.
+## Tensions, Constraints, And Open Questions [Required]
 
-| Option | Consequence | Proposed disposition |
-| --- | --- | --- |
-| Retain a local standard, keep it inactive until this Full ADR is Accepted | Preserves the proposed issue workflow and existing approval contract | Selected proposal |
-| Remove the new route and standard entirely | Removes PR #4's issue-governance deliverable | Not selected |
-| Activate the standard without an Accepted record | Violates the pre-existing governance gate | Rejected option |
+### Identified Tensions [Conditionally Required — competing goals or trade-offs exist]
 
-These option dispositions are design choices within a Proposed record; they
-are not Decision Status acceptance or rejection events.
+| ID | Tension | Impact | Decision |
+| --- | --- | --- | --- |
+| TN-1 | Self-contained local rules versus relying on external policies and trackers | Undefined referenced policies make issue dispositions undecidable and bind orange to another repository's example | Define severity, labels, bodies, and closure locally with orange scope examples and a local defect template |
+| TN-2 | Activating the issue route immediately versus preserving the approval gate | Activation without an Accepted record violates the pre-existing governance gate; staying inactive leaves PR #4's deliverable inert | Keep the route and standard inactive while Proposed; activate only through canonical acceptance |
+| TN-3 | Reporter convenience versus deterministic triage state | Missing labels at creation either block issue intake or leave permanently unlabeled records | Allow unlabeled creation; maintainers own labeling and missing-label provisioning before triage completion |
 
-## Proposed Decision [Required]
+### Constraints [Required]
 
-1. Route issues to `hailingu/orange`; use orange scope examples and a local
-   defect template instead of another repository's example as a policy input.
-2. Define P1–P3 severity within the issue standard. Remove dependencies on the
-   absent threat model and review-round budget. Restrict Conventional-Commit
-   type-word prohibition to the leading title tag, allowing `docs` as a scope.
-   Pure new-capability requests use P3 as a planning category with an unmet
-   user need, expected benefit, and observable acceptance outcomes; they do not
-   require a defect trigger or reproduction. Requests remedying an existing
-   defect retain its severity and the defect-report structure.
-   Existing non-P1 functional defects and contract inconsistencies use P2
-   regardless of reproducibility or workaround availability. Classification,
-   P3 scheduling, and known-boundary dispositions cannot waive mandatory
-   merge or completion gates, including documentation before a newly added
-   public symbol's implementation body.
-3. Reporters supply title and body at creation; a reporter without label
-   permissions may open an unlabeled issue awaiting triage. Maintainers with
-   triage access own label application and correction before completing triage
-   or closing an issue on behalf of the repository. Missing labels await
-   provisioning by a maintainer with write access, not action by the reporter.
-   This proposal does not create or apply live labels. A known boundary records
-   the trigger, existing controls, residual impact,
-   owner identity, explicit owner decision, rationale, supporting evidence,
-   and an observable reopening criterion. Only P2/P3 issues may receive the
-   known-boundary label or be closed as retained boundaries. Proposed retention
-   of a P1 issue leaves it open until resolution or evidence-backed non-P1
-   reclassification; willingness to retain the impact cannot justify a downgrade.
-4. Closure with code references the resolving commit and verification evidence.
-   Closure without code records a named disposition, rationale, evidence, and
-   reopening criterion; duplicates link the issue tracking the same problem,
-   and retained boundaries include the required owner decision.
-5. Keep both the AGENTS route and the standard inactive while this record is
-   Proposed. Acceptance uses the existing canonical approval contract, followed
-   by consistent status and index maintenance before activation.
+- AGENTS.md Decision Records and Approval and Status are authoritative for
+  this record's lifecycle.
+- The issue route and standard impose no obligations unless this record is
+  `Accepted`.
+- An issue records work; it does not authorize implementation or operation
+  that requires an Accepted ADR or OCR.
+- Severity, labels, and dispositions cannot waive mandatory AGENTS.md merge or
+  completion gates, including intent-bearing documentation before a newly
+  added public symbol's implementation body.
 
-## Subtasks [Required]
+### Open Questions [Conditionally Required — material questions exist or were resolved during drafting]
 
-| ID | Objective / deliverable | Included scope | Status | Actual implementation evidence |
+| ID | Question | Owner | Due | Status | Resolution and evidence |
+| --- | --- | --- | --- | --- | --- |
+| Q-1 | Restore the prescribed Full ADR template and documentation catalog before acceptance, or obtain an explicit owner determination covering their absence | @hailingu | 2026-10-13 | Resolved | Owner restored the template family and instructed that `docs/README.md` be created; both were satisfied in the acceptance change of 2026-10-13 |
+| Q-2 | Supply the configured governance validator before completing AC-06, or obtain an explicit owner-approved change to that verification requirement | @hailingu | Before AC-06 completion | Open | The owner adopted the validator through docs/adr/ADR-0002-governance-validator-adoption.md (Accepted, In Progress); AC-06 records the two commands' current failing state and completes only when both exit 0. Structured review is supplementary and does not turn ENOENT into passing validation |
+
+## Decision Drivers [Required]
+
+1. **Local applicability**: every disposition rule must be decidable from repository-local requirements.
+2. **Deterministic disposition**: classification, retention, and closure have binary outcomes with cited clauses.
+3. **Real approval evidence**: activation requires the exact canonical `Approve`, not publication or review passage.
+4. **Preserved implementation gates**: issue workflow must not weaken any ADR, OCR, or documentation gate.
+5. **Smallest reviewable repair**: the change stays the smallest coherent repair to PR #4.
+
+## Options Considered [Required]
+
+### Option: Retain a local standard, inactive until this Full ADR is Accepted
+
+Keep the proposed issue workflow and the existing approval contract; the route
+activates only through canonical acceptance.
+
+Pros:
+
+- Preserves the AGENTS.md approval gate and the full issue workflow.
+- Keeps every disposition rule decidable locally.
+
+Cons:
+
+- Leaves the deliverable inert until approval is given.
+
+### Option: Remove the new route and standard entirely
+
+Delete PR #4's issue-governance deliverable.
+
+Pros:
+
+- No inactive policy is retained.
+
+Cons:
+
+- Removes the intended issue-governance capability entirely.
+
+### Option: Activate the standard without an Accepted record
+
+Apply the issue policy immediately on publication.
+
+Pros:
+
+- Immediate effect.
+
+Cons:
+
+- Violates the pre-existing governance gate and fabricates authority.
+
+## Decision [Required]
+
+**Selected option**: Retain a local standard, inactive until this Full ADR is
+Accepted.
+
+**Rationale**: It is the only option that delivers the complete outcome — a
+self-contained, locally decidable issue standard — without breaking the
+canonical approval contract or weakening any implementation gate. The record
+was accepted by the repository owner on 2026-10-13 through the exact
+`Approve` response, so the route and standard are now active; the remaining
+lifecycle work is evidential, not structural.
+
+### Consequences [Required]
+
+Positive:
+
+- Issue classification, retention, and closure in `hailingu/orange` are
+  governed by one local standard with cited clauses and fixed fixtures.
+- The approval contract survived intact: activation came only from the exact
+  `Approve`, establishing the pattern for later records.
+
+Negative:
+
+- The standard's obligations now constrain all issue work, including the
+  owner's, with no exception path short of governed revision.
+
+Mitigations:
+
+- Severity and label rules are deliberately local and small; drift is
+  corrected through revision of this record rather than external policy.
+- Existing GitHub issues and labels are unchanged by this decision.
+
+## Implementation Plan [Required]
+
+**Complete task outcome**: One authoritative, self-contained orange issue
+standard, active under this Accepted record, with every acceptance check
+recorded as `Pass` or a reasoned `N/A` after acceptance.
+
+**Primary implementation boundary**: Repository process governance.
+
+Allowed subtask statuses: `Not Started`, `In Progress`, `Blocked`, `Complete`,
+or `N/A — <specific reason>`.
+
+| ID | Objective or deliverable | Included scope | Status | Actual implementation evidence |
 | --- | --- | --- | --- | --- |
-| ST-01 | Activate one approved, self-contained orange issue standard | AGENTS Issue Tracking and the local standard, with governing-record provenance | Not Started | None — only the inactive proposal has been published; no issue policy is activated |
+| T-1 | Activate one approved, self-contained orange issue standard | AGENTS Issue Tracking and the local standard, with governing-record provenance; re-record AC-02 through AC-12 after acceptance | Blocked | Route and standard activated at acceptance on 2026-10-13 (AGENTS.md conditional route; standard Status: Active; AC-01 Pass). AC-02 through AC-12 re-recording is blocked on the AC-06 validator delivery per this record's blocker fields |
 
-Approval, index maintenance, and verification are lifecycle gates, not extra
-implementation deliverables.
+**Affected paths**: `AGENTS.md`, `docs/development/issue-standard.md`,
+`docs/adr/INDEX.md`, `docs/adr/fixtures/orange-issue-governance-cases.md`
+
+### Stable Implementation Touchpoints [Conditionally Required — source or configuration implementation]
+
+N/A — this record changes documentation only; it has no source or
+configuration implementation touchpoint.
+
+**Migration and rollback strategy [Conditionally Required — this replaces or
+changes existing behavior]**: N/A — no existing behavior is replaced; the
+inactive-to-active transition occurred through canonical acceptance.
+
+### Engineering Exceptions [Conditionally Required — an engineering rule is exceeded or waived]
+
+N/A — no repository software-engineering standard exists yet and no
+engineering rule is exceeded or waived by a documentation-only record.
+
+## Contract-To-Check Traceability [Conditionally Required — source or configuration implementation]
+
+N/A — this record changes documentation only. It declares no normative public
+or internal runtime contract clause; its governing clauses live in
+`docs/development/issue-standard.md` and are exercised by AC-02 through AC-12
+against the fixed fixture corpus.
+
+## Risk Coverage Matrix [Conditionally Required — source or configuration implementation]
+
+N/A — this record changes documentation only; there is no runtime behavior
+whose concurrency, deadline, cancellation, resource-bound, or trust-boundary
+failure mode could occur. The five baseline dimensions cannot apply to a
+documentation deliverable.
 
 ## Acceptance Checks [Required]
-
-All checks own ST-01. Results must be recorded again after acceptance before
-Implementation Status becomes Complete or Verified.
 
 AC-03 through AC-05 and AC-07 through AC-12 use only the fixed inputs in
 [the fixture corpus](fixtures/orange-issue-governance-cases.md), including its
 stated synthetic premises and exact variant changes. A check passes only if
 every listed case matches its expected Conforming/Nonconforming outcome and
-decisive clause. Record actual outcomes by case ID and both document blobs;
-do not choose live issues or infer real owner decisions or runtime evidence
-from the constructed inputs.
+decisive clause. Actual outcomes are recorded by case ID together with the
+standard and fixture document blobs; no live issue, real owner decision, or
+runtime evidence may be inferred from the constructed inputs.
 
-| ID | Preconditions / input | Deterministic verification method | Exact expected result | Evidence to capture | Result |
+| Check ID | Subtask | Binary acceptance point | Preconditions or input | Verification method | Exact expected result | Expected evidence | Status | Actual result and evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC-1 | T-1 | The record is accepted with complete approval metadata and a matching index row | Eligible approver responds in the context of this exact record | Inspect approval context, metadata, and index row | Decision Status `Accepted`; Approval Evidence exactly `Approve`; concrete approver identity distinct from author; ISO 8601 approval time with offset; matching index statuses | Approval context, record and index blobs | Pass | Recorded 2026-10-13: repository owner @hailingu (self-declared, distinct from author @codex) responded with the exact word `Approve` in a context identifying this record path; Decision Status, approval metadata, and the index row were updated together in the acceptance change |
+| AC-2 | T-1 | The final route and standard cite this exact record and activate only on acceptance | Final issue route and standard | Resolve local links and inspect activation clauses and first legal comments | Route and standard cite this exact record path; authoritative obligations apply only while the record is `Accepted` | Commit and governed-file blobs | Not Started | Pending — re-record after acceptance |
+| AC-3 | T-1 | Defect-issue classification rules accept the conforming fixture and reject each nonconforming one | Fixture cases D-OK, D-LABEL, D-MULTI | Apply applicability, Title Format, Severity, Labels, and defect body rules to the fixed D inputs | Outcomes respectively Conforming, Nonconforming, Nonconforming; label mismatch and multiple classification labels rejected | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Started | Pending — re-record after acceptance |
+| AC-4 | T-1 | Known-boundary rules accept the conforming fixture and reject each nonconforming one | Fixture cases B-OK, B-OWNER, B-LABEL, B-REOPEN | Apply Labels and Known Boundary Content to the fixed B inputs | Outcomes respectively Conforming, Nonconforming, Nonconforming, Nonconforming; missing owner decision, boundary label, or reopening criterion rejected | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Started | Pending — re-record after acceptance |
+| AC-5 | T-1 | Closing rules accept the conforming fixtures and reject each nonconforming one | Fixture cases C-OK, C-EVIDENCE, U-OK, U-LINK, K-OK, K-REOPEN | Apply Closing to the fixed issue bodies, comments, and duplicate target | Outcomes respectively Conforming, Nonconforming, Conforming, Nonconforming, Conforming, Nonconforming; each missing closure element rejected under its cited clause | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Started | Pending — re-record after acceptance |
+| AC-6 | T-1 | Both configured governance commands pass from repository root | Configured governance validator is available at `tools/governance-validator` | Run `npm test --prefix tools/governance-validator` and `npm run validate --prefix tools/governance-validator` from repository root | Both exit 0; all configured document checks pass | Commands, exit codes, diagnostics | Not Started | Blocked on the recorded blocker; every attempt before the blocker resolution exited 254 with ENOENT because the package did not exist (see Supporting Notes) |
+| AC-7 | T-1 | Title format rules accept the conforming fixture and reject the nonconforming one | Fixture cases T-OK, T-PREFIX | Apply Title Format and Labels to the exact titles and labels | Outcomes respectively Conforming, Nonconforming; `docs` permitted in scope and summary, rejected as the classification prefix | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Started | Pending — re-record after acceptance |
+| AC-8 | T-1 | Severity and body-structure rules classify feature and defect-remedy fixtures correctly | Fixture cases F-OK, F-PRIORITY, R-OK, R-BODY | Apply Severity and Body Structure to the fixed feature and defect-remedy bodies | Outcomes respectively Conforming, Nonconforming, Conforming, Nonconforming; pure feature assigned P3 without reproduction; defect remedy retains P2 and defect structure | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Started | Pending — re-record after acceptance |
+| AC-9 | T-1 | Non-core defects without workarounds classify as P2, not P3 | Fixture cases O-OK, O-P3 | Apply Severity to the fixed non-core defect with repeated failures and no workaround | Outcomes respectively Conforming, Nonconforming | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Started | Pending — re-record after acceptance |
+| AC-10 | T-1 | Mandatory documentation gates hold for every classification | Fixture cases M-BLOCK, M-ALLOW, M-DOCUMENTED | Apply the issue standard's mandatory-gate clause and AGENTS.md Core Rules to the fixed P3 task and documentation dispositions | Outcomes respectively Conforming, Nonconforming, Conforming; missing required documentation blocks merge and completion despite P3; supplying it before the implementation body satisfies that gate | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Started | Pending — re-record after acceptance |
+| AC-11 | T-1 | P1 retention cannot label or close; P2 retention remains eligible | Fixture cases P1-OPEN, P1-LABEL, P1-CLOSE, P2-RETAIN | Apply Severity, Labels, and Closing eligibility to the fixed P1 data-loss issue, retention action/comment, and P2 boundary | Outcomes respectively Conforming, Nonconforming, Nonconforming, Conforming | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Started | Pending — re-record after acceptance |
+| AC-12 | T-1 | Reporter and maintainer label obligations classify correctly at every stage | Fixture cases L-CREATE, L-REJECT, L-TRIAGE-MISSING, L-TRIAGED, L-PROVISION | Apply the fixed permission, triage-stage, label-availability, and action inputs to Labels | Outcomes respectively Conforming, Nonconforming, Nonconforming, Conforming, Conforming; unlabeled external creation allowed; maintainers must apply labels before completing triage, and missing labels wait for write-access provisioning | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Started | Pending — re-record after acceptance |
+
+Allowed final check statuses are `Pass`, `Fail`, or `N/A — <specific reason>`.
+`Fail` blocks completion. `N/A` is valid only when the check's stated trigger or
+precondition demonstrably does not apply.
+
+## Completion Checklist [Required]
+
+| ID | Item | Completion Criterion | Expected Evidence | Status | Actual Evidence |
 | --- | --- | --- | --- | --- | --- |
-| AC-01 | Eligible approver responds in the context of this exact record | Inspect approval context, metadata, and index row | Decision Status Accepted; Approval Evidence exactly Approve; concrete approver identity distinct from author; ISO 8601 approval time with offset; matching index statuses | Approval context, record and index blobs | Pass — recorded in this change: repository owner `@hailingu` (self-declared, distinct from author `@codex`) responded with the exact word `Approve` in a context identifying this record path on 2026-10-13; Decision Status, approval metadata, and the index row were updated together |
-| AC-02 | Final issue route and standard | Resolve local links and inspect activation clauses and first legal comments | Route and standard cite this exact record; no obligations apply while Proposed; authoritative route requires Accepted | Commit and governed-file blobs | Not Run — inactive draft reviewed only |
-| AC-03 | Fixture cases D-OK, D-LABEL, D-MULTI | Apply applicability, Title Format, Severity, Labels, and defect body rules to the fixed D inputs | Outcomes respectively Conforming, Nonconforming, Nonconforming; label mismatch and multiple classification labels rejected | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
-| AC-04 | Fixture cases B-OK, B-OWNER, B-LABEL, B-REOPEN | Apply Labels and Known Boundary Content to the fixed B inputs | Outcomes respectively Conforming, Nonconforming, Nonconforming, Nonconforming; missing owner decision, boundary label, or reopening criterion rejected | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
-| AC-05 | Fixture cases C-OK, C-EVIDENCE, U-OK, U-LINK, K-OK, K-REOPEN | Apply Closing to the fixed issue bodies, comments, and duplicate target | Outcomes respectively Conforming, Nonconforming, Conforming, Nonconforming, Conforming, Nonconforming; each missing closure element rejected under its cited clause | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
-| AC-06 | Configured governance validator is available | Run npm test --prefix tools/governance-validator and npm run validate --prefix tools/governance-validator from repository root | Both exit 0; all configured document checks pass | Commands, exit codes, diagnostics | Not Run — validator package absent; attempted commands fail with exit 254 |
-| AC-07 | Fixture cases T-OK, T-PREFIX | Apply Title Format and Labels only to the exact titles and labels | Outcomes respectively Conforming, Nonconforming; docs permitted in scope and summary, rejected as the classification prefix | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
-| AC-08 | Fixture cases F-OK, F-PRIORITY, R-OK, R-BODY | Apply Severity and Body Structure to the fixed feature and defect-remedy bodies | Outcomes respectively Conforming, Nonconforming, Conforming, Nonconforming; pure feature assigned P3 without reproduction; defect remedy retains P2 and defect structure | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
-| AC-09 | Fixture cases O-OK, O-P3 | Apply Severity to the fixed non-core defect with repeated failures and no workaround | Outcomes respectively Conforming, Nonconforming; non-P1 functional defect assigned P2, not P3 | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
-| AC-10 | Fixture cases M-BLOCK, M-ALLOW, M-DOCUMENTED | Apply the issue standard's mandatory-gate clause and AGENTS.md Core Rules to the fixed P3 task and documentation dispositions | Outcomes respectively Conforming, Nonconforming, Conforming; missing required documentation blocks merge and completion despite P3; supplying it before the implementation body satisfies that gate | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
-| AC-11 | Fixture cases P1-OPEN, P1-LABEL, P1-CLOSE, P2-RETAIN | Apply Severity, Labels, and Closing eligibility to the fixed P1 data-loss issue, retention action/comment, and P2 boundary | Outcomes respectively Conforming, Nonconforming, Nonconforming, Conforming; P1 retention cannot add the label or close the issue despite an owner decision; P2 retention remains eligible | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
-| AC-12 | Fixture cases L-CREATE, L-REJECT, L-TRIAGE-MISSING, L-TRIAGED, L-PROVISION | Apply the fixed permission, triage-stage, label-availability, and action inputs to Labels | Outcomes respectively Conforming, Nonconforming, Nonconforming, Conforming, Conforming; unlabeled external creation allowed; maintainers must apply labels before completing triage, and missing labels wait for write-access provisioning | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
+| A-1 | ADR approved | An eligible non-author approver, approval time, and exact `Approval Evidence: Approve` are recorded; any optional Approval Context Revision is informational, non-binding, and exactly represents the approved document | ADR metadata | Complete | Approver @hailingu, Approval Time 2026-10-13T08:07:03Z, Approval Evidence `Approve`, informational context revision `b919326794047e9f91be404a929ff61bb3f4a35a` |
+| A-2 | Complete task delivered | Every declared subtask has actual implementation evidence, every applicable acceptance check is `Pass` with actual result and evidence, and together they satisfy the complete task outcome | Implementation Plan and Acceptance Checks rows | Not Started | Pending — T-1 blocked on AC-6 |
+| A-3 | Reciprocal ADD link synchronized, when applicable | The selected candidate records this exact ADR path, this ADR records the exact ADD path and candidate ID, both references agree, and the candidate reaches `Complete` only with this ADR's `Complete` or `Verified` status | Exact ADD path, candidate ID, ADR path, and Git blob or commit | N/A — Architecture Source is `N/A`; no ADD task candidate applies | N/A |
+| A-4 | Requirement levels satisfied | Every required section is complete, every conditional trigger is assessed and completed or marked `N/A — <reason>`, and optional sections are complete or removed | Structured document review | Not Started | Pending |
+| A-5 | Acceptance checks are decidable | Every check names one subtask, preconditions or input, deterministic method, exact expected result, and evidence; no unqualified subjective criterion remains | Structured acceptance-check review | Not Started | Pending |
+| A-6 | Engineering exceptions governed, when applicable | Every exceeded or waived engineering rule has one complete exception row, an accountable owner, a lifecycle, and verification evidence before approval; otherwise the conditional subsection records `N/A — <reason>` | Engineering Exceptions subsection and affected-file evidence | N/A — documentation-only record; the subsection records its N/A reason | N/A |
+| A-7 | Contract and baseline risks covered, when applicable | Every normative contract clause maps to an explicit check or deterministic test, and every required Risk Coverage Matrix row is complete before approval and reaches Pass or specific N/A before review-ready or completion | Contract-To-Check Traceability, Risk Coverage Matrix, acceptance checks, and stable evidence | N/A — documentation-only record; both sections record their N/A reasons | N/A |
+| A-8 | Governance validation passed | The independent validator reports no required-section, template-field, lifecycle-status, index, reciprocal-link, or Mermaid contract error for this record and repository | `npm run validate --prefix tools/governance-validator` output | Not Started | Pending — blocked with AC-6 |
 
-## Source And Configuration Contracts [Conditionally Required — source or configuration changes]
+## Supporting Notes [Optional]
 
-N/A — this proposal changes documentation only. Source touchpoints,
-Contract-To-Check Traceability, and the five-dimension runtime Risk Coverage
-Matrix are not triggered. The document acceptance checks above still apply.
+Preparation and verification evidence retained from the proposal stage:
 
-## Consequences, Activation, And Rollback [Required]
+- Checkout and remote matched `hailingu/orange`, PR #4 head branch
+  `docs/add-0001-orange-v1-baseline`, at baseline
+  `5ec976c64263e0ddd5565a8847d3ac2b818d5fc1`. The PR targeted dev. No
+  protected branch was modified or synchronized.
+- `git ls-tree -r --name-only HEAD docs/adr` at the baseline returned no
+  records. This was the first ADR and its single index row; no competing ADR
+  was found.
+- Both configured npm checks were attempted from repository root and exited
+  254 because `tools/governance-validator/package.json` did not exist. They
+  had not passed. No test suite or build artifact was claimed.
+- Structured review at preparation: activation requires `Accepted` in both
+  entry points; tracker applicability agrees; severity is local;
+  known-boundary and non-code closure have explicit evidence; referenced
+  AGENTS sections exist; index metadata and local links agree; conditional
+  fields have specific N/A reasons; no approval metadata is fabricated; no
+  source or configuration changes are included.
+- Preparation fixture inspections by `@codex` across successive baselines
+  (`9496b5f0…`, `4cae5d92…`, `8f8679e5…`, `6df2afdb…`, `8de32ca9…`,
+  `7528b622…`) applied the standard's clauses to all 33 fixed fixture cases;
+  actual outcomes matched the expected clause outcomes in every round. These
+  were preparation inspections, not acceptance or automated-test evidence.
+- Historical commit-trailer reviews confirmed one nonempty ADR and one OCR
+  trailer on each named historical PR commit, and repaired the PR
+  description's footer format so a constructed squash candidate parses both
+  trailers. The reported squash object could not be resolved locally or
+  through GitHub and was never claimed amended.
 
-Before acceptance, the corrected standard can be reviewed without introducing
-mandatory issue obligations. After acceptance, its local evidence and
-disposition rules govern orange issues. Existing GitHub issues and labels
-are not changed by this proposal.
+## Archival [Conditionally Required — Decision Status is `Rejected`, or Decision Status is `Deprecated` or `Superseded` and Implementation Status is final]
 
-Acceptance must populate actual approval metadata and update the index in the
-same change; the standard's displayed status must also agree. Activation and
-final checks belong to ST-01. No approval or implementation status is inferred
-from this repair's publication.
+Archive this record in the same change that retires it when either Decision
+Status is `Rejected` with Implementation Status `Not Applicable`, or Decision
+Status is `Deprecated` or `Superseded` with Implementation Status `Verified`,
+`Complete`, or `Not Applicable`. Before that trigger, retain this section as
+inactive future-lifecycle guidance; its checklist does not affect acceptance or
+implementation completion. When triggered:
 
-If the proposal is rejected, use the canonical rejection and archival ritual.
-For any later authorized rollback of active governance, remove the issue
-route and standard obligations, retain decision history, and record a truthful
-terminal status with evidence. Do not label partial active policy Not Applicable.
-
-## Open Questions [Required]
-
-- Resolved before acceptance (2026-10-13): the repository owner restored the
-  prescribed decision-record templates (`docs/adr/template/0000-template.md`,
-  `0000-lightweight-template.md`, `0000-operational-change-template.md`) and
-  the ADD template (`docs/architecture/template/0000-add-template.md`), and
-  directed that `docs/README.md` be created in this acceptance change. The
-  pre-acceptance restoration prerequisite is satisfied in this change.
-- Open before completion (not acceptance): before completing AC-06, supply the
-  configured governance validator or obtain an explicit owner-approved change
-  to that verification requirement. Structured review below is supplementary
-  and does not turn ENOENT into passing validation.
-
-The acceptance-blocking question is resolved. The validator prerequisite now
-gates only Implementation Status `Complete` or `Verified`, never the recorded
-acceptance above.
-
-## Preparation And Verification Evidence [Required]
-
-- Checkout and remote match `hailingu/orange`, PR #4 head branch
-  `docs/add-0001-orange-v1-baseline`, at baseline `5ec976c64263e0ddd5565a8847d3ac2b818d5fc1`.
-  The PR targets dev. No protected branch was modified or synchronized.
-- `git ls-tree -r --name-only HEAD docs/adr` at the baseline returned no records.
-  This is the first ADR and its single index row; no competing ADR was found.
-- Both configured npm checks were attempted from repository root and exited 254
-  because `tools/governance-validator/package.json` does not exist. They have
-  not passed. No test suite or build artifact is claimed.
-- Structured review: activation requires Accepted in both entry points; tracker
-  applicability agrees; severity is local; known-boundary and non-code closure
-  have explicit evidence; referenced AGENTS sections exist; index metadata and
-  local links agree; conditional fields have specific N/A reasons; no approval
-  metadata is fabricated; no source or configuration changes are included.
-- `git diff --check` passed for the initial preparation changes. Historical
-  preparation blobs from repair commit `9496b5f0c82ae6516ed24314c5983b55efec195d`:
-  `AGENTS.md` at `53676b2d74f84df6c5316f2ce6aaf8bbbf950bba`,
-  `docs/development/issue-standard.md` at
-  `5bd97a193a039f3868520be15905930ccba322f2`, and `docs/adr/INDEX.md` at
-  `9a168874a920ad33604198162990d50a7ebf9c9d`. These are preparation evidence,
-  not accepted implementation evidence.
-- Follow-up preparation from baseline `9496b5f0c82ae6516ed24314c5983b55efec195d`:
-  type-word exclusion is confined to the title prefix; `docs` remains a valid
-  scope; pure feature requests have a P3 planning category and require goals,
-  benefits, and observable outcomes instead of defect reproduction; defect
-  remedies retain their defect classification. Reviewed standard blob:
-  `d1f0dcafbc798de38620beed92a5a23fc6d16218`. `git diff --check` passes; both
-  configured npm checks were attempted again and exit 254 with the same missing
-  validator package.json. No approval status changes.
-- Fixture preparation review from baseline
-  `4cae5d9211998ffddeb4dedbc813fb51e2c48fc6`: inspected the fixed inputs against
-  standard blob `d1f0dcafbc798de38620beed92a5a23fc6d16218` and fixture blob
-  `b81fc943e5dc81dcaa0e9af72fef518f6a7f3fd6`. Actual outcomes are recorded below;
-  all agree with their expected clause outcomes. This is preparation inspection
-  by `@codex`, not acceptance, runtime verification, or passing automated tests.
-  Both configured npm commands were attempted again and exited 254 with the
-  missing validator package.json. `git diff --check` passed.
-
-| Preparation cases, in order | Actual outcomes, in order |
-| --- | --- |
-| D-OK, D-LABEL, D-MULTI | Conforming, Nonconforming, Nonconforming |
-| B-OK, B-OWNER, B-LABEL, B-REOPEN | Conforming, Nonconforming, Nonconforming, Nonconforming |
-| C-OK, C-EVIDENCE, U-OK, U-LINK, K-OK, K-REOPEN | Conforming, Nonconforming, Conforming, Nonconforming, Conforming, Nonconforming |
-| T-OK, T-PREFIX | Conforming, Nonconforming |
-| F-OK, F-PRIORITY, R-OK, R-BODY | Conforming, Nonconforming, Conforming, Nonconforming |
-
-Follow-up preparation review by `@codex` from baseline
-`8f8679e5aca12afa1aadc4e1494b667b802afbdf`: inspected all 24 fixed cases
-against standard blob `4672aa5ca2bed1de8f45eff2cb2b49fda328db3f` and fixture
-blob `96b269909be9e86da8b572094ae358a082e5fb29`. The 19 existing cases retain
-the actual outcomes in the preceding table; the five additional outcomes
-are below. All match their expected clauses. P2 covers ordinary non-core
-failures without workarounds, while mandatory public-symbol documentation
-still gates P3 feature implementation. ADR and index remain Proposed / Not
-Started. This is preparation inspection, not acceptance or automated test
-evidence. `git diff --check` passed. Both configured npm checks were attempted
-again from repository root and exited 254 (ENOENT: missing
-`tools/governance-validator/package.json`); they have not passed.
-
-| Additional preparation cases, in order | Actual outcomes, in order |
-| --- | --- |
-| O-OK, O-P3 | Conforming, Nonconforming |
-| M-BLOCK, M-ALLOW, M-DOCUMENTED | Conforming, Nonconforming, Conforming |
-
-P1-retention preparation review by `@codex` from baseline
-`6df2afdbbc5d489ad077a269bcbdda3737e0f3ec`: inspected all 28 fixed cases
-against standard blob `66ac8714a5b8abd3df68ba2e3abc79e99eddbb93` and fixture
-blob `4c8bc774a5159330b1042d3a09396d9fe4f49f4e`. The 24 existing cases retain
-their previously recorded outcomes; the four additional outcomes are below.
-All match the expected clauses. P1 retention cannot add the label, close the
-issue, waive the fix-before-merge gate, or justify a severity downgrade; P2
-retention remains eligible. ADR and index remain Proposed / Not Started.
-This is preparation inspection, not acceptance or automated test evidence.
-`git diff --check` passed. Both configured npm checks were attempted again
-from repository root and exited 254 (ENOENT: missing
-`tools/governance-validator/package.json`); they have not passed.
-
-| P1-retention preparation cases, in order | Actual outcomes, in order |
-| --- | --- |
-| P1-OPEN, P1-LABEL, P1-CLOSE, P2-RETAIN | Conforming, Nonconforming, Nonconforming, Conforming |
-
-External-reporter preparation review by `@codex` from baseline
-`8de32ca9e89225d7dda89dea0f82c86dd7035ef2`: inspected all 33 fixed cases
-against standard blob `27d68f32af54195be20e42c9e4c2d3c940ef2985` and fixture
-blob `bf045196a395785f51f2d4ad6a2913760886ab21`. The 28 existing cases retain
-their recorded outcomes at the now-explicit completed-triage stage; the five
-additional outcomes are below. All match the expected clauses. External
-reporters can open unlabeled issues; maintainers own labeling and missing-label
-provisioning before triage completion or repository closure. The P1 retention
-prohibition applies at every stage. ADR and index remain Proposed / Not Started.
-This is preparation inspection, not acceptance or automated test evidence.
-`git diff --check` passed. Both configured npm checks were attempted again
-from repository root and exited 254 (ENOENT: missing
-`tools/governance-validator/package.json`); they have not passed.
-
-| External-reporter preparation cases, in order | Actual outcomes, in order |
-| --- | --- |
-| L-CREATE, L-REJECT, L-TRIAGE-MISSING, L-TRIAGED, L-PROVISION | Conforming, Nonconforming, Nonconforming, Conforming, Conforming |
-
-Historical commit-trailer review at baseline
-`8de32ca9e89225d7dda89dea0f82c86dd7035ef2`: the GitHub PR commit collection
-then contained `5ec976c`, `9496b5f`, `4cae5d9`, `8f8679e`, `6df2afd`, and
-`8de32ca`. For each exact commit, its `git show -s --format=%B` output was
-passed to `git interpret-trailers --parse`; all six yield one nonempty ADR
-and one nonempty OCR trailer. The reviewed `12c6e2f` was not in that collection
-and could not be resolved locally or through GitHub at that inspection.
-These results cover only the named immutable commits, not the current PR
-commit set or any later squash or rebase message.
-
-Squash-message preparation review by `@codex` from baseline
-`7528b622c580d37134a1e72623544bf6aeab7ce1`: `git ls-remote` independently
-confirmed this live PR branch head, and the GitHub PR commit collection had
-the six historical commits above plus `7528b62`. Each actual message was
-passed to `git interpret-trailers --parse`; all seven contain one ADR and one
-OCR trailer. The reported squash `d9f1da89f34e4308e73c35048f594ee65fe3dd5a`
-could not be resolved by local `git cat-file` or GitHub's commit lookup.
-This inspection does not claim to have amended that unavailable object.
-
-The PR description's ADR/OCR references were still prose bullets. A candidate
-message constructed from the PR title, a blank line, and that description
-produced no output from `git interpret-trailers --parse`. The repaired
-candidate description ends with separate, unbulleted footer lines:
-
-```text
-ADR: docs/adr/ADR-0001-orange-issue-governance.md
-OCR: N/A — documentation proposal repair; no governed build or operation
-```
-
-Parsing the repaired candidate returns exactly those two trailers. This
-checks the prepared message, not an already-created squash commit; the exact
-final commit message must still be checked after any squash or rebase under
-AGENTS.md's existing commit policy. ADR and index remain Proposed / Not Started.
-
-For this evidence repair, `git diff --check` passed. Both configured npm
-commands were attempted again from repository root and exited 254 (ENOENT:
-missing `tools/governance-validator/package.json`). Structured review confirms
-that historical and candidate-message results are distinguished, approval and
-index metadata are unchanged, and no issue-policy or fixture behavior changes.
-These checks do not claim passing governance validation or record acceptance.
+- [ ] Move this file to `archive/ADR-0001-orange-issue-governance.md` under this same ADR
+      root (project `docs/adr/archive/` or `<service>/docs/adr/archive/`).
+- [ ] Update every code marker that cites this file's pre-archive path to the new
+      archive path, or remove the marker if the governed code was deleted.
+- [ ] If Decision Status is `Superseded`, set the replacement record's
+      `Supersedes` field and this record's `Superseded By` field to each other's
+      final repository-relative path.
+- [ ] If no record supersedes this one, retain `Superseded By: None — first issue-governance proposal`.
+- [ ] Update this record's single row in `docs/adr/INDEX.md` with the archived
+      path, scope, and final status.
+- [ ] Confirm no ADR or OCR outside an `archive/` directory, and no code marker, still cites the pre-archive path.
 
 ## Change Log [Required]
 
-| Date | Actor | Change |
+| Date | Change | Author |
 | --- | --- | --- |
-| 2026-10-13 | @codex | Prepare the first Proposed Full ADR and index for PR #4; localize the issue standard and remove unapproved activation under the owner's direct repair-and-push instruction |
-| 2026-10-13 | @codex | Resolve follow-up title-scope and feature-classification findings in the same Proposed ADR; add AC-07 and AC-08 without activating governance |
-| 2026-10-13 | @codex | Replace generic disposition-check inputs with fixed constructed issue/closure fixtures and explicit positive/negative outcomes; use the same corpus for title and feature checks |
-| 2026-10-13 | @codex | Cover reproducible non-core defects without workarounds in P2; preserve mandatory merge/completion documentation gates regardless of classification; add fixed AC-09 and AC-10 inputs without activating governance |
-| 2026-10-13 | @codex | Restrict known-boundary labeling and retained-boundary closure to P2/P3; preserve P1 resolution and evidence-backed triage gates; add fixed AC-11 inputs without activating governance |
-| 2026-10-13 | @codex | Move label obligations from issue creation to maintainer triage after creation; add fixed permission/stage cases and retain existing P1 restrictions without activating governance |
-| 2026-10-13 | @codex | Scope trailer evidence to named historical revisions; reproduce missing trailers in a PR-title/body squash candidate and repair its footer format without claiming to amend an unavailable commit |
-| 2026-10-13 | @zcode | Record acceptance per repository owner `@hailingu`'s exact `Approve`: Decision Status Proposed→Accepted with approval metadata and an informational approval context revision; resolve the pre-acceptance open question by versioning the owner-restored decision-record and ADD templates and creating `docs/README.md` in this change; update the index row and the standard's displayed status; mark AC-01 Pass. Implementation Status remains Not Started (ST-01 not yet run). |
-| 2026-10-13 | @zcode | Enter Blocked from Not Started: AC-06's governance validator does not exist and its creation is source work outside this record's accepted scope, blocked by repository-wide ADR serialization. Record blocker fields and cite the blocker-resolution ADR `docs/adr/ADR-0002-governance-validator-adoption.md` under the AGENTS.md serialization exception; update the index row in the same change. |
+| 2026-10-13 | Prepare the first Proposed Full ADR and index for PR #4; localize the issue standard and remove unapproved activation under the owner's direct repair-and-push instruction | @codex |
+| 2026-10-13 | Resolve follow-up title-scope and feature-classification findings in the same Proposed ADR; add the title and feature checks without activating governance | @codex |
+| 2026-10-13 | Replace generic disposition-check inputs with fixed constructed issue/closure fixtures and explicit positive/negative outcomes; use the same corpus for title and feature checks | @codex |
+| 2026-10-13 | Cover reproducible non-core defects without workarounds in P2; preserve mandatory merge/completion documentation gates regardless of classification; add fixed non-core and mandatory-gate inputs without activating governance | @codex |
+| 2026-10-13 | Restrict known-boundary labeling and retained-boundary closure to P2/P3; preserve P1 resolution and evidence-backed triage gates; add fixed P1-retention inputs without activating governance | @codex |
+| 2026-10-13 | Move label obligations from issue creation to maintainer triage after creation; add fixed permission/stage cases and retain existing P1 restrictions without activating governance | @codex |
+| 2026-10-13 | Scope trailer evidence to named historical revisions; reproduce missing trailers in a PR-title/body squash candidate and repair its footer format without claiming to amend an unavailable commit | @codex |
+| 2026-10-13 | Record acceptance per repository owner @hailingu's exact `Approve`: Decision Status Proposed→Accepted with approval metadata and an informational approval context revision; resolve the pre-acceptance open question by versioning the owner-restored decision-record and ADD templates and creating `docs/README.md`; update the index row and the standard's displayed status; mark the approval check Pass. Implementation Status remained Not Started | @zcode |
+| 2026-10-13 | Enter Blocked from Not Started: AC-6's governance validator did not exist and its creation is source work outside this record's accepted scope, blocked by repository-wide ADR serialization. Record blocker fields and cite the blocker-resolution ADR under the AGENTS.md serialization exception; update the index row in the same change | @zcode |
+| 2026-10-13 | Align this record to the restored Full ADR template structure as approval-preserving maintenance under the owner determination recorded in ADR-0002: template section set, metadata field syntax, and acceptance-check columns change form only; the complete task outcome, scope, subtask semantics, check semantics, statuses (Accepted/Blocked), and approval metadata are unchanged | @zcode |

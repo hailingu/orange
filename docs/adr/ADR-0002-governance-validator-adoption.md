@@ -13,18 +13,18 @@
 - **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: 2026-10-13T08:50:13Z
 - **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Approve
 - **Approval Context Revision [Optional — informational and non-binding]**: 01ec65b0771c4d2eec0d4a144155ee5549ea29c0 — immutable revision whose record content equals the content present for approval; implementation edits began after approval
-- **Rejector [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with the concrete `@<actor-id>`
-- **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with an ISO 8601 date-time containing `Z` or an explicit `±HH:MM` offset
-- **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with exactly `Reject`
-- **Rejection Reason [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with a concrete explanation of why the proposal was rejected, including the deciding constraint or evidence when applicable; outside `Rejected`, retain a reasoned `N/A — <reason>` value
-- **Retired By [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: Pending — replace with the concrete `@<actor-id>`
-- **Retirement Time [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: Pending — replace with an ISO 8601 date-time containing `Z` or an explicit `±HH:MM` offset
-- **Retirement Evidence [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: Pending — replace with exactly `Deprecate` or `Supersede`
-- **Retirement Reason [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: Pending
-- **Blocked From [Conditionally Required — Implementation Status is `Blocked`]**: Pending — `Not Started` or `In Progress`
-- **Blocker And Evidence [Conditionally Required — Implementation Status is `Blocked`]**: Pending
-- **Blocker Owner [Conditionally Required — Implementation Status is `Blocked`]**: Pending
-- **Blocker Exit Or Recheck Criterion [Conditionally Required — Implementation Status is `Blocked`]**: Pending
+- **Rejector [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Reason [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Retired By [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Time [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Evidence [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Reason [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Blocked From [Conditionally Required — Implementation Status is `Blocked`]**: N/A — Implementation Status is not Blocked
+- **Blocker And Evidence [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
+- **Blocker Owner [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
+- **Blocker Exit Or Recheck Criterion [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
 - **Related [Optional]**: Blocked record docs/adr/ADR-0001-orange-issue-governance.md (Accepted, Blocked) — this ADR is its sole blocker-resolution record under the AGENTS.md serialization exception
 - **Architecture Source [Conditionally Required — product demand]**: N/A — blocker-resolution governance tooling under the AGENTS.md serialization exception
 - **Supersedes [Conditionally Required — this ADR replaces another]**: None
@@ -298,9 +298,9 @@ unmet; no other system state depends on this package.
 | Check ID | Subtask | Binary acceptance point | Preconditions or input | Verification method | Exact expected result | Expected evidence | Status | Actual result and evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | AC-1 | T-1 | The validator's own test suite passes after localization | Localized package at `tools/governance-validator/` | `npm test --prefix tools/governance-validator` from repository root | Exit code 0 with at least 208 passing and 0 failing tests | Command output summary with pass/fail counts and exit code | Not Started | Pending |
-| AC-2 | T-1 | No source-repository reference survives in governed files | Localized package and restored templates | `grep -rn "koduck\|Trello\|provider-neutral-turn-kernel\|required-ai-ci-postgres" tools/governance-validator docs/adr/template docs/architecture/template --exclude-dir=node_modules --exclude=package-lock.json`; then inspect every `// ADR:` marker line in `tools/governance-validator` outside `node_modules` | First grep exits 1 with no matches; every marker line references exactly `docs/adr/ADR-0002-governance-validator-adoption.md` | Both command outputs | Not Started | Pending |
+| AC-2 | T-1 | No source-repository reference survives in governed files | Localized package and restored templates | `grep -rn -e koduck -e Trello -e provider-neutral-turn-kernel -e required-ai-ci-postgres tools/governance-validator docs/adr/template docs/architecture/template --exclude-dir=node_modules --exclude=package-lock.json`; then inspect every `// ADR:` marker line in `tools/governance-validator` outside `node_modules` | First grep exits 1 with no matches; every marker line references exactly `docs/adr/ADR-0002-governance-validator-adoption.md` | Both command outputs | Not Started | Pending |
 | AC-3 | T-1 | Package identity and dependency pins are orange-local and exact | Localized `package.json` and `package-lock.json` | `node -p "const p=require('./tools/governance-validator/package.json');p.name==='@orange/governance-validator'&&Object.values(p.dependencies).every(v=>/^\\d+\\.\\d+\\.\\d+$/.test(v))"` plus `grep -m1 '"name"' tools/governance-validator/package-lock.json` | The node expression prints `true`; the lockfile's first name entry is `@orange/governance-validator` | Both command outputs | Not Started | Pending |
-| AC-4 | T-2 | ADR-0001's approval metadata and statuses survive template alignment | Aligned `docs/adr/ADR-0001-orange-issue-governance.md` | `grep -n "Approval Evidence.*Approve\|Decision Status.*Accepted\|Implementation Status.*Blocked" docs/adr/ADR-0001-orange-issue-governance.md` | All three assertions are present in active metadata, with Approver `@hailingu` intact and no re-approval ritual recorded as required | Grep output; validator run of AC-6 confirming index agreement | Not Started | Pending |
+| AC-4 | T-2 | ADR-0001's approval metadata and statuses survive template alignment | Aligned `docs/adr/ADR-0001-orange-issue-governance.md` | `grep -n -e "Approval Evidence.*Approve" -e "Decision Status.*Accepted" -e "Implementation Status.*Blocked" docs/adr/ADR-0001-orange-issue-governance.md` | All three assertions are present in active metadata, with Approver `@hailingu` intact and no re-approval ritual recorded as required | Grep output; validator run of AC-6 confirming index agreement | Not Started | Pending |
 | AC-5 | T-2 | ADD-0001 remains a Draft ADD with agreeing index rows after alignment | Aligned ADD and both index files | `grep -n "Design Status.*Draft" docs/architecture/ADD-0001-orange-v1-baseline.md` plus AC-6's validator run | ADD-0001 active metadata shows Design Status `Draft`; the architecture index row shows `Draft` and the same scope fields | Grep output and validator output | Not Started | Pending |
 | AC-6 | T-3 | The full repository passes configured validation | Aligned repository | `npm run validate --prefix tools/governance-validator` from repository root | Exit code 0 and no error diagnostics printed | Command output and exit code | Not Started | Pending |
 | AC-7 | T-3 | ADR-0001's recorded exit criterion is demonstrated satisfiable from repository root | Both configured commands available | Run `npm test --prefix tools/governance-validator` and `npm run validate --prefix tools/governance-validator` from repository root in one shell | Both commands exit 0 | Combined command transcript with both exit codes, citable by ADR-0001's resume change | Not Started | Pending |

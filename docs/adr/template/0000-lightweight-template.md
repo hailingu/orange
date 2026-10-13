@@ -45,7 +45,7 @@
 - For product demand, keep both ADD/ADR references synchronized in one change
   and mark the candidate `Complete` only when this ADR is `Complete` or
   `Verified`.
-- Put Trello and pull-request references in Metadata `Related`; neither changes
+- Put GitHub issue/Projects and pull-request references in Metadata `Related`; neither changes
   this record's status or supplies approval without the canonical exact
   `Approve` response.
 - Replace every variable in retained or triggered content.
@@ -111,7 +111,7 @@ Variable Dictionary
 
 | Variable | Meaning |
 |----------|---------|
-| `{{RELATED_LINKS}}` | Related Trello card, issue, PR, review or approval context, or ADR references |
+| `{{RELATED_LINKS}}` | Related GitHub issue or Projects item, PR, review or approval context, or ADR references |
 | `{{APPROVAL_CONTEXT_REVISION}}` | Optional immutable revision that exactly represents the approved document content; informational and non-binding, otherwise remove this field |
 | `{{NOTE}}` | Useful supporting context that is not required for acceptance, implementation, or verification |
 
