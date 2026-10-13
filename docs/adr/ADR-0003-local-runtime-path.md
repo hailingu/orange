@@ -3,7 +3,7 @@
 ## Metadata [Required]
 
 - **Decision Status**: Accepted
-- **Implementation Status**: In Progress
+- **Implementation Status**: Blocked
 - **Date**: 2026-10-13
 - **Author**: @zcode
 - **Decision Owner**: @hailingu
@@ -21,10 +21,10 @@
 - **Retirement Time [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
 - **Retirement Evidence [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
 - **Retirement Reason [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
-- **Blocked From [Conditionally Required — Implementation Status is `Blocked`]**: N/A — Implementation Status is not Blocked
-- **Blocker And Evidence [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
-- **Blocker Owner [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
-- **Blocker Exit Or Recheck Criterion [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
+- **Blocked From [Conditionally Required — Implementation Status is `Blocked`]**: In Progress
+- **Blocker And Evidence [Conditionally Required — Implementation Status is `Blocked`]**: The repository owner directed on 2026-10-14 that the engineering standards must precede any implementation ("先完善 development 里的软件工程标准"), and reverted the started T-1 transport code. AGENTS.md requires reading docs/development/software-engineering-standard.md and every matching language standard before writing source code; neither exists. Authoring them is normative governance documentation outside this record's accepted scope and requires a Full ADR, which the repository-wide serialization gate blocks while this record is non-terminal. Blocker-resolution ADR: docs/adr/ADR-0004-engineering-standards.md
+- **Blocker Owner [Conditionally Required — Implementation Status is `Blocked`]**: @hailingu
+- **Blocker Exit Or Recheck Criterion [Conditionally Required — Implementation Status is `Blocked`]**: docs/adr/ADR-0004-engineering-standards.md is Accepted and Complete with docs/development/software-engineering-standard.md and the C++20 development standard in place and cataloged in docs/README.md; on satisfaction, Implementation Status returns to the recorded prior status `In Progress` and T-1 restarts under the standards
 - **Related [Optional]**: GitHub issue #6 (P3 planning item tracking this candidate); docs/adr/ADR-0001-orange-issue-governance.md governs its closure
 - **Architecture Source [Conditionally Required — product demand]**: docs/architecture/ADD-0001-orange-v1-baseline.md — CAND-0001
 - **Supersedes [Conditionally Required — this ADR replaces another]**: None
@@ -391,6 +391,7 @@ implementation completion. When triggered:
 | 2026-10-13 | Initial Proposed draft selecting CAND-0001 from the Current ADD-0001; records the cpp-httplib-with-vcpkg and fixed-origin decisions and the full test-first implementation plan | @zcode |
 | 2026-10-13 | Revise per repository owner direction: the transport becomes a hand-written POSIX socket HTTP server within a declared minimal HTTP/1.1 subset (learning purpose, D-03), with cpp-httplib kept as the exactly pinned fallback under a binary trigger (owner direction, or the T-1 suite needing protocol machinery beyond the declared subset); scope, touchpoints, AC-1, and the resource-bounds risk row updated accordingly | @zcode |
 | 2026-10-13 | Record acceptance per repository owner @hailingu's exact Approve in the session context identifying this record (after five owner-directed revisions); Decision Status Proposed→Accepted with approval metadata and an informational context revision; enter In Progress and begin T-1 | @zcode |
+| 2026-10-14 | Enter Blocked from In Progress per owner direction: the engineering standards must precede implementation, the started T-1 transport code was reverted (never committed), and standards authoring needs a Full ADR that the serialization gate blocks. Record blocker fields citing docs/adr/ADR-0004-engineering-standards.md under the AGENTS.md blocker-resolution exception; update the index row in the same change | @zcode |
 | 2026-10-13 | Fifth owner-directed revision: the connection model becomes a single-threaded `poll()` event loop multiplexing all sockets through readiness-driven read/write state machines, so multiple connections (multiple browser tabs, anticipated by ADD-0001 INV-16 and GO-02) are served concurrently without threads or head-of-line blocking; the one-client one-stable-connection standard remains the exercised and tested model, and the 5-second idle timeout now bounds descriptor accumulation. Consequences trade-off updated from bounded waiting to state-machine complexity | @zcode |
 | 2026-10-13 | Fourth owner-directed revision, applied wholesale to the one-client one-stable-connection standard: the connection model becomes a single-threaded iterative loop serving one keep-alive connection at a time with backlog queueing and a 5-second idle timeout; the thread-per-connection model, the max-16 bound, and every multi-client test (including the two-connection head-of-line check) are removed; consequences, risk rows, and AC-1 now describe exactly one persistent client as the exercised model | @zcode |
 | 2026-10-13 | Third owner-directed revision: the concurrency scenario shrinks to one persistent client performing multiple request-response cycles on a single connection (single-user origin, D-06), and the connection-bound check becomes a two-connection no-head-of-line-blocking case (one held idle, one active); the max-16 connection bound stays a declared construction guard rather than a storm-tested guarantee | @zcode |
