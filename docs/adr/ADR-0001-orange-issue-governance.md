@@ -80,6 +80,8 @@ Included paths and stable anchors:
 - `docs/development/issue-standard.md` — applicability, status, Required Reading,
   Title Format, Severity, Labels, Known Boundary Content, and Closing.
 - `docs/adr/INDEX.md` — this record's identity and lifecycle row.
+- `docs/adr/fixtures/orange-issue-governance-cases.md` — fixed constructed
+  issue bodies, closure comments, and positive/negative cases for review.
 
 Excluded: source and configuration, ADD-0001, GitHub label creation, issue
 creation or closure, review-round limits, threat-model changes, and restoration
@@ -137,16 +139,24 @@ implementation deliverables.
 All checks own ST-01. Results must be recorded again after acceptance before
 Implementation Status becomes Complete or Verified.
 
+AC-03 through AC-05, AC-07, and AC-08 use only the fixed inputs in
+[the fixture corpus](fixtures/orange-issue-governance-cases.md), including its
+stated synthetic premises and exact variant changes. A check passes only if
+every listed case matches its expected Conforming/Nonconforming outcome and
+decisive clause. Record actual outcomes by case ID and both document blobs;
+do not choose live issues or infer real owner decisions or runtime evidence
+from the constructed inputs.
+
 | ID | Preconditions / input | Deterministic verification method | Exact expected result | Evidence to capture | Result |
 | --- | --- | --- | --- | --- | --- |
 | AC-01 | Eligible approver responds in the context of this exact record | Inspect approval context, metadata, and index row | Decision Status Accepted; Approval Evidence exactly Approve; concrete approver identity distinct from author; ISO 8601 approval time with offset; matching index statuses | Approval context, record and index blobs | Not Run — no approval received |
 | AC-02 | Final issue route and standard | Resolve local links and inspect activation clauses and first legal comments | Route and standard cite this exact record; no obligations apply while Proposed; authoritative route requires Accepted | Commit and governed-file blobs | Not Run — inactive draft reviewed only |
-| AC-03 | Orange issue titled P2(graph): a stated defect, with P2 label | Apply applicability, Title Format, Severity, and Labels | Tracker hailingu/orange; one area scope; exactly one P2 severity label matching title; trigger or reproduction evidence required locally | Clause-based review report | Not Run — proposal not active |
-| AC-04 | Owner decides to retain a known behavior | Apply Labels and Known Boundary Content | known-boundary label and all eight elements: trigger, controls, residual impact, owner identity, owner decision, rationale, evidence, reopening criterion | Clause-based review report | Not Run — proposal not active |
-| AC-05 | One code fix, one duplicate, and one retained boundary | Apply Closing to all three cases | Code fix cites commit and verification; duplicate cites disposition, rationale, evidence, reopening criterion, and duplicate issue; retained boundary also cites owner decision | Clause-based review report | Not Run — proposal not active |
+| AC-03 | Fixture cases D-OK, D-LABEL, D-MULTI | Apply applicability, Title Format, Severity, Labels, and defect body rules to the fixed D inputs | Outcomes respectively Conforming, Nonconforming, Nonconforming; label mismatch and multiple classification labels rejected | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
+| AC-04 | Fixture cases B-OK, B-OWNER, B-LABEL, B-REOPEN | Apply Labels and Known Boundary Content to the fixed B inputs | Outcomes respectively Conforming, Nonconforming, Nonconforming, Nonconforming; missing owner decision, boundary label, or reopening criterion rejected | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
+| AC-05 | Fixture cases C-OK, C-EVIDENCE, U-OK, U-LINK, K-OK, K-REOPEN | Apply Closing to the fixed issue bodies, comments, and duplicate target | Outcomes respectively Conforming, Nonconforming, Conforming, Nonconforming, Conforming, Nonconforming; each missing closure element rejected under its cited clause | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
 | AC-06 | Configured governance validator is available | Run npm test --prefix tools/governance-validator and npm run validate --prefix tools/governance-validator from repository root | Both exit 0; all configured document checks pass | Commands, exit codes, diagnostics | Not Run — validator package absent; attempted commands fail with exit 254 |
-| AC-07 | Titles P3(docs): a documentation gap and docs(graph): a documentation gap | Apply Title Format to both titles | First title permitted with P3 label; second rejected because its leading tag is a commit type; type words in scope or summary do not violate the prefix prohibition | Clause-based review report | Not Run — proposal not active |
-| AC-08 | A new matrix capability without an existing failure; a feature request remedying an existing P2 defect | Apply Severity and Body Structure to each request | New capability uses P3 title and label plus Goal, Draft Approach, and observable Acceptance Criteria without reproduction; defect remedy uses P2 and the defect structure with trigger or reproduction evidence | Clause-based review report | Not Run — proposal not active |
+| AC-07 | Fixture cases T-OK, T-PREFIX | Apply Title Format and Labels only to the exact titles and labels | Outcomes respectively Conforming, Nonconforming; docs permitted in scope and summary, rejected as the classification prefix | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
+| AC-08 | Fixture cases F-OK, F-PRIORITY, R-OK, R-BODY | Apply Severity and Body Structure to the fixed feature and defect-remedy bodies | Outcomes respectively Conforming, Nonconforming, Conforming, Nonconforming; pure feature assigned P3 without reproduction; defect remedy retains P2 and defect structure | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
 
 ## Source And Configuration Contracts [Conditionally Required — source or configuration changes]
 
@@ -212,6 +222,22 @@ remain visible and prevent a false claim of accepted or verified governance.
   `d1f0dcafbc798de38620beed92a5a23fc6d16218`. `git diff --check` passes; both
   configured npm checks were attempted again and exit 254 with the same missing
   validator package.json. No approval status changes.
+- Fixture preparation review from baseline
+  `4cae5d9211998ffddeb4dedbc813fb51e2c48fc6`: inspected the fixed inputs against
+  standard blob `d1f0dcafbc798de38620beed92a5a23fc6d16218` and fixture blob
+  `b81fc943e5dc81dcaa0e9af72fef518f6a7f3fd6`. Actual outcomes are recorded below;
+  all agree with their expected clause outcomes. This is preparation inspection
+  by `@codex`, not acceptance, runtime verification, or passing automated tests.
+  Both configured npm commands were attempted again and exited 254 with the
+  missing validator package.json. `git diff --check` passed.
+
+| Preparation cases, in order | Actual outcomes, in order |
+| --- | --- |
+| D-OK, D-LABEL, D-MULTI | Conforming, Nonconforming, Nonconforming |
+| B-OK, B-OWNER, B-LABEL, B-REOPEN | Conforming, Nonconforming, Nonconforming, Nonconforming |
+| C-OK, C-EVIDENCE, U-OK, U-LINK, K-OK, K-REOPEN | Conforming, Nonconforming, Conforming, Nonconforming, Conforming, Nonconforming |
+| T-OK, T-PREFIX | Conforming, Nonconforming |
+| F-OK, F-PRIORITY, R-OK, R-BODY | Conforming, Nonconforming, Conforming, Nonconforming |
 
 ## Change Log [Required]
 
@@ -219,3 +245,4 @@ remain visible and prevent a false claim of accepted or verified governance.
 | --- | --- | --- |
 | 2026-10-13 | @codex | Prepare the first Proposed Full ADR and index for PR #4; localize the issue standard and remove unapproved activation under the owner's direct repair-and-push instruction |
 | 2026-10-13 | @codex | Resolve follow-up title-scope and feature-classification findings in the same Proposed ADR; add AC-07 and AC-08 without activating governance |
+| 2026-10-13 | @codex | Replace generic disposition-check inputs with fixed constructed issue/closure fixtures and explicit positive/negative outcomes; use the same corpus for title and feature checks |
