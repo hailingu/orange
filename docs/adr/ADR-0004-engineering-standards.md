@@ -2,24 +2,24 @@
 
 ## Metadata [Required]
 
-- **Decision Status**: Proposed
-- **Implementation Status**: Not Started
+- **Decision Status**: Accepted
+- **Implementation Status**: In Progress
 - **Date**: 2026-10-14
 - **Author**: @zcode
 - **Decision Owner**: @hailingu
 - **Required Approver**: @hailingu
 - **Record Scope**: Project
-- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — replace with the concrete `@<actor-id>`
-- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — replace with an ISO 8601 date-time containing `Z` or an explicit `±HH:MM` offset
-- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — replace with exactly `Approve`
-- **Approval Context Revision [Optional — informational and non-binding]**: remove — no immutable revision contains the approved content yet
-- **Rejector [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with the concrete `@<actor-id>`
-- **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with an ISO 8601 date-time containing `Z` or an explicit `±HH:MM` offset
-- **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with exactly `Reject`
+- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: @hailingu
+- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: 2026-10-13T17:19:57Z
+- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Approve
+- **Approval Context Revision [Optional — informational and non-binding]**: b48a4a3909a859f4c8fa9c0616dde50ff8d36c3b — immutable revision whose record content equals the content present for approval; the acceptance edits were made after approval within the same change
+- **Rejector [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
 - **Rejection Reason [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
-- **Retired By [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: Pending — replace with the concrete `@<actor-id>`
-- **Retirement Time [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: Pending — replace with an ISO 8601 date-time containing `Z` or an explicit `±HH:MM` offset
-- **Retirement Evidence [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: Pending — replace with exactly `Deprecate` or `Supersede`
+- **Retired By [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Time [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Evidence [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
 - **Retirement Reason [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
 - **Blocked From [Conditionally Required — Implementation Status is `Blocked`]**: N/A — Implementation Status is not Blocked
 - **Blocker And Evidence [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
@@ -262,18 +262,17 @@ and the catalog rows.
 
 | Risk dimension | Applicability and scenario, or specific N/A reason | Owning boundary | Deterministic verification method | Exact expected result | Acceptance check IDs | Status | Actual evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| concurrency and ordering | N/A — documentation deliverable with no runtime behavior | Documentation | N/A | N/A | N/A | N/A — no concurrent behavior exists | N/A — not run |
-| timeout and deadline | N/A — documentation deliverable with no runtime behavior | Documentation | N/A | N/A | N/A | N/A — no deadline-bound behavior exists | N/A — not run |
-| cancellation and interruption | N/A — documentation deliverable; an interrupted authoring run resumes by editing the files | Documentation | N/A | N/A | N/A | N/A — no interruptible runtime state exists | N/A — not run |
-| resource bounds and backpressure | N/A — static Markdown files with no inputs or queues | Documentation | N/A | N/A | N/A | N/A — no resource admission exists | N/A — not run |
-| framework or trust-boundary rejection | N/A — the documents consume no external input and execute nothing | Documentation | N/A | N/A | N/A | N/A — no external trust boundary exists | N/A — not run |
-
+| concurrency and ordering | N/A — a documentation deliverable has no concurrent behavior; nothing in the standards introduces or governs runtime concurrency in this change | Documentation | AC-3's repository validation run on the delivered documents | No concurrency construct is introduced or exercised; validation exits 0 | AC-3 | N/A — documentation-only deliverable | N/A — not run |
+| timeout and deadline | N/A — a documentation deliverable has no deadline-bound behavior; nothing in the standards creates a runtime deadline in this change | Documentation | AC-3's repository validation run on the delivered documents | No deadline behavior is introduced or exercised; validation exits 0 | AC-3 | N/A — documentation-only deliverable | N/A — not run |
+| cancellation and interruption | N/A — static Markdown files keep no interruptible runtime state; an interrupted authoring run resumes by editing the files | Documentation | AC-1's file existence and heading inspection | Both files exist complete; no runtime state exists to cancel | AC-1 | N/A — documentation-only deliverable | N/A — not run |
+| resource bounds and backpressure | N/A — static Markdown files accept no inputs or queues; no resource admission exists in this change | Documentation | AC-1's file existence and heading inspection | Both files exist complete with no input surface | AC-1 | N/A — documentation-only deliverable | N/A — not run |
+| framework or trust-boundary rejection | N/A — the documents consume no external input and execute nothing; no trust boundary is crossed in this change | Documentation | AC-3's repository validation run on the delivered documents | No external input is processed; validation exits 0 | AC-3 | N/A — documentation-only deliverable | N/A — not run |
 ## Acceptance Checks [Required]
 
 | Check ID | Subtask | Binary acceptance point | Preconditions or input | Verification method | Exact expected result | Expected evidence | Status | Actual result and evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | AC-1 | T-1 | Both standards exist with their required sections | Drafted `docs/development/` files | `test -f` on both paths, then inspect headings | Both files exist; the baseline contains Purpose And Precedence, Size And Complexity Guardrails, Responsibility And Module Boundaries, Dependency Design, Abstractions And Design Patterns, State/Concurrency/Failure, Testing And Change Design, Incremental Adoption And Exceptions, and Before Writing Code; the C++ standard contains Required Reading, Baseline Practices, layout, error policy, testing, and Before Writing Code | Command output and inspection record | Not Started | Pending |
-| AC-2 | T-2 | The README catalog resolves the required-reading rule | Updated `docs/README.md` | `grep -n "software-engineering-standard\|cpp-development-standard" docs/README.md` | Both standards are listed in the Language And Platform Standards Catalog with paths and scope | Grep output | Not Started | Pending |
+| AC-2 | T-2 | The README catalog resolves the required-reading rule | Updated `docs/README.md` | `grep -n -e software-engineering-standard -e cpp-development-standard docs/README.md` | Both standards are listed in the Language And Platform Standards Catalog with paths and scope | Grep output | Not Started | Pending |
 | AC-3 | T-2 | The repository passes configured validation | Authored documents | `npm run validate --prefix tools/governance-validator` from repository root | Exit code 0 with no diagnostics | Command output and exit code | Not Started | Pending |
 | AC-4 | T-2 | ADR-0003's exit criterion is demonstrably satisfiable | ADR-0004 accepted and complete | Inspect ADR-0003's Blocker Exit Or Recheck Criterion against the delivered state | Both standards exist and are cataloged, so the criterion's inputs hold; the resume statement is recorded for ADR-0003's resume change to cite | Inspection record citable by ADR-0003's resume change | Not Started | Pending |
 
@@ -319,4 +318,5 @@ implementation completion. When triggered:
 
 | Date | Change | Author |
 | --- | --- | --- |
+| 2026-10-14 | Record acceptance per repository owner @hailingu's exact Approve in the session context identifying this record; Decision Status Proposed→Accepted with approval metadata and an informational context revision; enter In Progress and begin T-1 | @zcode |
 | 2026-10-14 | Initial Proposed draft under the AGENTS.md blocker-resolution exception for ADR-0003's recorded standards blocker; records the PlotWeave two-tier adaptation decision, the resolved guardrail, error-policy, and toolchain parameters, and the cataloging plan | @zcode |
