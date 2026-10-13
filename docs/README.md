@@ -40,6 +40,14 @@ exist and defers lifecycle status to the indexes below.
 
 ## Development Standards — `docs/development/`
 
+- [`docs/development/software-engineering-standard.md`](development/software-engineering-standard.md) —
+  the repository-wide engineering baseline: size and complexity guardrails,
+  module boundaries, dependency direction, abstraction guidance, testing,
+  and the engineering-exception process.
+- [`docs/development/cpp-development-standard.md`](development/cpp-development-standard.md) —
+  the C++20 standard narrowing the baseline for `service/**`: toolchain,
+  verification commands, error policy, resource and event-loop rules, and
+  testing.
 - [`docs/development/issue-standard.md`](development/issue-standard.md) —
   issue title, severity, label, body, evidence, and closure rules for the
   `hailingu/orange` tracker, governed by
@@ -47,12 +55,18 @@ exist and defers lifecycle status to the indexes below.
 
 ## Language And Platform Standards Catalog
 
-orange's backend is C++20 and its frontend is TypeScript. No repository-owned
-C++20, TypeScript, or general software-engineering standard has been authored
-yet. When one is added under `docs/development/`, list it here with its scope
-so the AGENTS.md required-reading rule can find it. Until then this catalog
-has no language or platform entries, and AGENTS.md plus the documents routed
-above are the complete documentation baseline.
+This catalog is what the AGENTS.md required-reading rule resolves: before
+writing, modifying, or reviewing source code, read every entry below whose
+scope matches the affected paths, in full.
+
+| Scope | Matching standard |
+| --- | --- |
+| All maintained source and test code, any language | [`docs/development/software-engineering-standard.md`](development/software-engineering-standard.md) |
+| C++20 compilation units (`service/**`) | [`docs/development/cpp-development-standard.md`](development/cpp-development-standard.md) |
+
+TypeScript does not yet have a language standard; when web client source
+first lands, its standard is authored and cataloged in the same governed
+change that adds its Scope Routing row.
 
 ## Verification Tooling
 
