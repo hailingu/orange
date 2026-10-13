@@ -66,3 +66,9 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Node (governance validator and future web client)
+node_modules/
+
+# macOS Finder metadata
+.DS_Store
