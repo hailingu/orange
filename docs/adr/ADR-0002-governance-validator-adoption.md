@@ -2,17 +2,17 @@
 
 ## Metadata [Required]
 
-- **Decision Status**: Proposed
-- **Implementation Status**: Not Started
+- **Decision Status**: Accepted
+- **Implementation Status**: In Progress
 - **Date**: 2026-10-13
 - **Author**: @zcode
 - **Decision Owner**: @hailingu
 - **Required Approver**: @hailingu
 - **Record Scope**: Project
-- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — replace with the concrete `@<actor-id>`
-- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — replace with an ISO 8601 date-time containing `Z` or an explicit `±HH:MM` offset
-- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — replace with exactly `Approve`
-- **Approval Context Revision [Optional — informational and non-binding]**: remove — no immutable revision contains the approved content yet
+- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: @hailingu
+- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: 2026-10-13T08:50:13Z
+- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Approve
+- **Approval Context Revision [Optional — informational and non-binding]**: 01ec65b0771c4d2eec0d4a144155ee5549ea29c0 — immutable revision whose record content equals the content present for approval; implementation edits began after approval
 - **Rejector [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with the concrete `@<actor-id>`
 - **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with an ISO 8601 date-time containing `Z` or an explicit `±HH:MM` offset
 - **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with exactly `Reject`
@@ -348,3 +348,4 @@ implementation completion. When triggered:
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-13 | Initial Proposed draft under the AGENTS.md blocker-resolution exception for ADR-0001's recorded blocker; records the owner's GitHub Projects demand-tracking decision and the approval-preserving alignment determination | @zcode |
+| 2026-10-13 | Record acceptance per repository owner @hailingu's exact Approve in the session context identifying this record; Decision Status Proposed→Accepted with approval metadata and informational context revision; enter In Progress and begin T-1 | @zcode |
