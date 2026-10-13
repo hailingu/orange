@@ -86,11 +86,13 @@ In scope:
   `{"status":"ok"}`; static file serving from `web/dist/` at `/` with a
   small MIME map; HTTP 405 for unsupported methods and 404 for unknown
   paths; an 8 KiB header-block cap answering 431 and a 1 MiB body cap
-  answering 413; and a single-threaded iterative connection model built
-  around one client on one stable connection: the active keep-alive
-  connection is served exclusively, additional connections wait in the
-  listen backlog until it closes (client close or the 5-second idle
-  timeout), and the backlog depth is a declared construction guard.
+  answering 413; and a single-threaded `poll()` event-loop connection model:
+  one thread multiplexes every open socket through readiness-driven reads
+  and writes, so several connections (for example, multiple browser tabs)
+  are served concurrently without threads or head-of-line blocking, while
+  the exercised and tested client model remains one persistent client on
+  one stable connection. Idle connections are closed after the declared
+  5-second timeout to bound descriptor use.
 - TLS: an `https://127.0.0.1:8443` listener terminated through OpenSSL
   (exactly pinned; crypto primitives are never hand-rolled — only the
   protocol layer is), with a self-signed certificate generated on first run
@@ -248,10 +250,9 @@ Negative:
 - Hand-written HTTP over a broad feature set carries real protocol-defect
   risk a vetted library would not, and the declared feature set must grow
   deliberately in later slices.
-- The one-connection-at-a-time model serializes any additional connection
-  behind the active one for at most the 5-second idle timeout; a browser
-  that opens parallel connections observes bounded waiting, not parallel
-  service.
+- The readiness-driven state machines are structurally more intricate than
+  an iterative loop; protocol defects now hide in event ordering as well as
+  parsing.
 
 Mitigations:
 
@@ -262,9 +263,10 @@ Mitigations:
   encode, range responses, both caps, the idle timeout, loopback binding on
   both listeners, and one persistent multi-cycle client before the server
   is trusted.
-- The minimal client page loads its script and fetches health sequentially
-  on one connection, matching the single-client standard; the 5-second idle
-  timeout bounds any wait a stray parallel connection could cause.
+- The `poll()` loop serves additional connections (multiple browser tabs,
+  as anticipated by ADD-0001 INV-16 and GO-02) without head-of-line
+  blocking, while the single persistent client remains the exercised and
+  tested model.
 - The exactly pinned cpp-httplib fallback is pre-authorized with a binary
   trigger, so adopting it does not reopen the decision.
 
@@ -285,7 +287,7 @@ or `N/A — <specific reason>`.
 
 | ID | Objective or deliverable | Included scope | Status | Actual implementation evidence |
 | --- | --- | --- | --- | --- |
-| T-1 | Hand-written HTTP/1.1 transport core, developed test-first | `service/` CMake project and POSIX socket code: single-threaded iterative accept loop with backlog queueing, keep-alive connection lifecycle with the declared 5-second idle timeout, request-line/header/body parsing (Content-Length and chunked decode), response framing (Content-Length and chunked encode), the 8 KiB header cap (431) and 1 MiB body cap (413); CTest unit suite for every behavior, with one persistent client completing multiple request-response cycles on a single stable connection as the exercised client model | Not Started | Pending |
+| T-1 | Hand-written HTTP/1.1 transport core, developed test-first | `service/` CMake project and POSIX socket code: single-threaded `poll()` event loop with readiness-driven read/write state machines, keep-alive connection lifecycle with the declared 5-second idle timeout, request-line/header/body parsing (Content-Length and chunked decode), response framing (Content-Length and chunked encode), the 8 KiB header cap (431) and 1 MiB body cap (413); CTest unit suite for every behavior, with one persistent client completing multiple request-response cycles on a single stable connection as the exercised client model | Not Started | Pending |
 | T-2 | Serving features and TLS listener, developed test-first | Route dispatch, `GET /api/health`, `POST /api/echo` with chunked responses, static serving with MIME map and single-range 206/416, 405/404, loopback bind on both listeners, and the OpenSSL-terminated `https://127.0.0.1:8443` listener with first-run self-signed certificate; CTest integration suite plus `curl`-based end-to-end checks over both plaintext and TLS | Not Started | Pending |
 | T-3 | TypeScript status page, one documented run path, and verification evidence | `web/` npm project with pinned `typescript`, `src/status.ts` and its `node --test` suite, `tsc` build to `web/dist/`, `scripts/dev.sh` with first-run certificate generation, root `README.md` run section, repository-root verification runs of the acceptance checks | Not Started | Pending |
 
@@ -297,7 +299,7 @@ never committed)
 
 | Path | Stable symbol or contract anchor | Key code excerpt, when needed | Purpose | Source revision |
 | --- | --- | --- | --- | --- |
-| `service/src/http_server.cpp` | `serve_loopback(port, handler)` | N/A — stable symbol or anchor is sufficient | Owns the single-threaded iterative accept loop, backlog queueing, and the keep-alive connection lifecycle with the 5-second idle timeout | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
+| `service/src/http_server.cpp` | `serve_loopback(port, handler)` | N/A — stable symbol or anchor is sufficient | Owns the single-threaded `poll()` event loop and the per-connection readiness-driven read/write state machines with the 5-second idle timeout | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
 | `service/src/http_messages.cpp` | `parse_request()` and `write_response()` | N/A — stable symbol or anchor is sufficient | Own the wire format: request-line/header/body parsing with Content-Length and chunked decoding, the 8 KiB and 1 MiB caps, and response framing with the chunked encoder | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
 | `service/src/tls.cpp` | `serve_tls()` | N/A — stable symbol or anchor is sufficient | Terminates TLS through the pinned OpenSSL library on the https listener using the generated self-signed certificate; crypto primitives are never hand-rolled | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
 | `service/src/routes.cpp` | `handle_request()` | N/A — stable symbol or anchor is sufficient | Dispatches health, echo, static-with-single-range (206/416), and 405/404 outcomes | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
@@ -328,9 +330,9 @@ replaced. Rollback is deleting the added paths.
 | Risk dimension | Applicability and scenario, or specific N/A reason | Owning boundary | Deterministic verification method | Exact expected result | Acceptance check IDs | Status | Actual evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | concurrency and ordering | Applicable: one keep-alive connection reused for multiple sequential requests must return responses in request order with correct framing (the single-user origin's observable requirement) | Runtime assembly (service) | CTest case with one persistent client performing 3 request-response cycles on a single connection | All 3 responses are correct, complete, and answered in request order on the same connection | AC-1 | Not Started | Not run — implementation not started |
-| timeout and deadline | Applicable: the single stable connection must not be held open forever when idle, because a waiting backlog connection is served only after it closes | Runtime assembly (service) | CTest case with the idle timeout configured to 1 second: send a request, then hold the connection idle | The server closes the idle connection after the timeout and returns to accepting | AC-1 | Not Started | Not run — implementation not started |
+| timeout and deadline | Applicable: idle keep-alive connections must not accumulate descriptors forever once their owners stop using them | Runtime assembly (service) | CTest case with the idle timeout configured to 1 second: send a request, then hold the connection idle | The server closes the idle connection after the timeout; other connections continue to be served | AC-1 | Not Started | Not run — implementation not started |
 | cancellation and interruption | N/A — the endpoints are stateless with no session or persisted state; the interruption outcome is the documented restart path | Runtime assembly | AC-5 restart procedure | The same origins serve the page and health after restart | AC-5 | N/A — stateless endpoints; restart is the recovery path and is covered by AC-5 | N/A — not run |
-| resource bounds and backpressure | Applicable: a hand-written parser must not accept unbounded input; the listen backlog is the only connection buffer (a declared construction guard, not a storm-tested guarantee) | Runtime assembly (service) | CTest cases sending a header block over 8 KiB (expect 431) and a body over 1 MiB (expect 413) | Each over-limit input receives its coded rejection without crashing, and the single stable connection continues to serve subsequent requests | AC-1 | Not Started | Not run — implementation not started |
+| resource bounds and backpressure | Applicable: a hand-written parser must not accept unbounded input, and the idle timeout is the declared bound on descriptor accumulation (no storm-tested connection guarantee) | Runtime assembly (service) | CTest cases sending a header block over 8 KiB (expect 431) and a body over 1 MiB (expect 413) | Each over-limit input receives its coded rejection without crashing, and the single stable connection continues to serve subsequent requests | AC-1 | Not Started | Not run — implementation not started |
 | framework or trust-boundary rejection | Applicable: both listeners must bind loopback only, and the TLS listener must present the generated self-signed certificate | Runtime assembly (service) | CTest bind assertions for both listeners plus a live `lsof` inspection, a LAN-address connection attempt on both ports, and a `curl -k` TLS handshake check | Listener list shows only `127.0.0.1:8080` and `127.0.0.1:8443`; LAN connections fail; the TLS handshake succeeds and serves the health body | AC-1, AC-2, AC-6 | Not Started | Not run — implementation not started |
 
 ## Acceptance Checks [Required]
@@ -388,6 +390,7 @@ implementation completion. When triggered:
 | --- | --- | --- |
 | 2026-10-13 | Initial Proposed draft selecting CAND-0001 from the Current ADD-0001; records the cpp-httplib-with-vcpkg and fixed-origin decisions and the full test-first implementation plan | @zcode |
 | 2026-10-13 | Revise per repository owner direction: the transport becomes a hand-written POSIX socket HTTP server within a declared minimal HTTP/1.1 subset (learning purpose, D-03), with cpp-httplib kept as the exactly pinned fallback under a binary trigger (owner direction, or the T-1 suite needing protocol machinery beyond the declared subset); scope, touchpoints, AC-1, and the resource-bounds risk row updated accordingly | @zcode |
+| 2026-10-13 | Fifth owner-directed revision: the connection model becomes a single-threaded `poll()` event loop multiplexing all sockets through readiness-driven read/write state machines, so multiple connections (multiple browser tabs, anticipated by ADD-0001 INV-16 and GO-02) are served concurrently without threads or head-of-line blocking; the one-client one-stable-connection standard remains the exercised and tested model, and the 5-second idle timeout now bounds descriptor accumulation. Consequences trade-off updated from bounded waiting to state-machine complexity | @zcode |
 | 2026-10-13 | Fourth owner-directed revision, applied wholesale to the one-client one-stable-connection standard: the connection model becomes a single-threaded iterative loop serving one keep-alive connection at a time with backlog queueing and a 5-second idle timeout; the thread-per-connection model, the max-16 bound, and every multi-client test (including the two-connection head-of-line check) are removed; consequences, risk rows, and AC-1 now describe exactly one persistent client as the exercised model | @zcode |
 | 2026-10-13 | Third owner-directed revision: the concurrency scenario shrinks to one persistent client performing multiple request-response cycles on a single connection (single-user origin, D-06), and the connection-bound check becomes a two-connection no-head-of-line-blocking case (one held idle, one active); the max-16 connection bound stays a declared construction guard rather than a storm-tested guarantee | @zcode |
 | 2026-10-13 | Second owner-directed revision: expand the declared feature set to keep-alive, chunked transfer in both directions, single-range requests, request-body parsing via a `POST /api/echo` diagnostic route, and a TLS listener through pinned OpenSSL with a first-run self-signed certificate; the stable origin becomes `https://127.0.0.1:8443` with `http://127.0.0.1:8080` kept as the comparison endpoint; the connection model becomes bounded thread-per-connection (max 16) with a declared idle timeout; subtasks, touchpoints, risk matrix (timeout now applicable), and acceptance checks restructured accordingly | @zcode |
