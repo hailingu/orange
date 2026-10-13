@@ -1,11 +1,10 @@
 <!-- Governance proposal: docs/adr/ADR-0001-orange-issue-governance.md -->
 # Issue Standard
 
-**Status**: Proposed. This standard becomes authoritative only when
-[the governing Full ADR](../adr/ADR-0001-orange-issue-governance.md) is
-`Accepted` under the approval contract in [AGENTS.md](../../AGENTS.md).
-Until then, all mandatory language below describes proposed requirements
-and imposes no issue creation, classification, or closure obligations.
+**Status**: Active. [The governing Full ADR](../adr/ADR-0001-orange-issue-governance.md)
+is `Accepted` (2026-10-13) under the approval contract in
+[AGENTS.md](../../AGENTS.md); the mandatory language below now governs issue
+creation, classification, and closure in the `hailingu/orange` tracker.
 
 **Applies to**: every issue opened in the `hailingu/orange` GitHub
 tracker, by humans and agents alike. Like the other standards under

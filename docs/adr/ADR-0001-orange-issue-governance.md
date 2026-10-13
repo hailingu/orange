@@ -7,15 +7,16 @@
 - **Author**: `@codex`
 - **Decision Owner**: `@hailingu`
 - **Required Approver**: Repository owner `@hailingu`; MUST NOT be the author
-- **Decision Status**: Proposed
+- **Decision Status**: Accepted
 - **Implementation Status**: Not Started
 - **Scope**: Repository-wide issue creation, classification, evidence, and closure
 - **Primary Implementation Boundary**: Repository process governance
 - **Architecture Source**: N/A — process governance, not product-demand implementation
 - **Baseline Revision**: `5ec976c64263e0ddd5565a8847d3ac2b818d5fc1`
-- **Approver** [Conditionally Required — accepted decision]: N/A — no approval received
-- **Approval Time** [Conditionally Required — accepted decision]: N/A — no approval received
-- **Approval Evidence** [Conditionally Required — accepted decision]: N/A — no exact `Approve` received
+- **Approver** [Conditionally Required — accepted decision]: `@hailingu` — repository owner, self-declared identity in the approval context, distinct from author `@codex`
+- **Approval Time** [Conditionally Required — accepted decision]: 2026-10-13T08:07:03Z
+- **Approval Evidence** [Conditionally Required — accepted decision]: `Approve`
+- **Approval Context Revision** [Optional — informational and non-binding]: `b919326794047e9f91be404a929ff61bb3f4a35a` — immutable revision whose record content equals the content present for approval; the acceptance edits were made after approval within the same change
 - **Rejector / Rejection Time / Rejection Evidence / Rejection Reason** [Conditionally Required — rejected decision]: N/A — not rejected
 - **Retired By / Retirement Time / Retirement Evidence / Retirement Reason** [Conditionally Required — retired decision]: N/A — not retired
 - **Supersedes / Superseded By**: None — first issue-governance proposal
@@ -59,8 +60,9 @@ absent, the repository owner instructed: “直接修复后在本次PR里推送�
 the corrected proposal and its index on the existing PR branch. It is not
 recorded as `Approve` and does not accept this ADR.
 
-The prescribed `docs/adr/template/0000-template.md` and `docs/README.md` are
-absent. This first proposal follows the existing AGENTS.md requirement-level,
+At proposal time the prescribed `docs/adr/template/0000-template.md` and
+`docs/README.md` were absent; both were restored before acceptance (see Open
+Questions and the Change Log). This first proposal follows the existing AGENTS.md requirement-level,
 scope, metadata, subtask, acceptance-check, and index contracts directly.
 It adds no substitute template, validator, dependency, or general workflow
 exception. The configured governance checks cannot run successfully until
@@ -163,7 +165,7 @@ from the constructed inputs.
 
 | ID | Preconditions / input | Deterministic verification method | Exact expected result | Evidence to capture | Result |
 | --- | --- | --- | --- | --- | --- |
-| AC-01 | Eligible approver responds in the context of this exact record | Inspect approval context, metadata, and index row | Decision Status Accepted; Approval Evidence exactly Approve; concrete approver identity distinct from author; ISO 8601 approval time with offset; matching index statuses | Approval context, record and index blobs | Not Run — no approval received |
+| AC-01 | Eligible approver responds in the context of this exact record | Inspect approval context, metadata, and index row | Decision Status Accepted; Approval Evidence exactly Approve; concrete approver identity distinct from author; ISO 8601 approval time with offset; matching index statuses | Approval context, record and index blobs | Pass — recorded in this change: repository owner `@hailingu` (self-declared, distinct from author `@codex`) responded with the exact word `Approve` in a context identifying this record path on 2026-10-13; Decision Status, approval metadata, and the index row were updated together |
 | AC-02 | Final issue route and standard | Resolve local links and inspect activation clauses and first legal comments | Route and standard cite this exact record; no obligations apply while Proposed; authoritative route requires Accepted | Commit and governed-file blobs | Not Run — inactive draft reviewed only |
 | AC-03 | Fixture cases D-OK, D-LABEL, D-MULTI | Apply applicability, Title Format, Severity, Labels, and defect body rules to the fixed D inputs | Outcomes respectively Conforming, Nonconforming, Nonconforming; label mismatch and multiple classification labels rejected | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
 | AC-04 | Fixture cases B-OK, B-OWNER, B-LABEL, B-REOPEN | Apply Labels and Known Boundary Content to the fixed B inputs | Outcomes respectively Conforming, Nonconforming, Nonconforming, Nonconforming; missing owner decision, boundary label, or reopening criterion rejected | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
@@ -201,14 +203,20 @@ terminal status with evidence. Do not label partial active policy Not Applicable
 
 ## Open Questions [Required]
 
-- Before acceptance, restore the prescribed Full ADR template and documentation
-  catalog, or obtain an explicit owner determination covering their absence.
-- Before completing AC-06, supply the configured governance validator or obtain
-  an explicit owner-approved change to that verification requirement. Structured
-  review below is supplementary and does not turn ENOENT into passing validation.
+- Resolved before acceptance (2026-10-13): the repository owner restored the
+  prescribed decision-record templates (`docs/adr/template/0000-template.md`,
+  `0000-lightweight-template.md`, `0000-operational-change-template.md`) and
+  the ADD template (`docs/architecture/template/0000-add-template.md`), and
+  directed that `docs/README.md` be created in this acceptance change. The
+  pre-acceptance restoration prerequisite is satisfied in this change.
+- Open before completion (not acceptance): before completing AC-06, supply the
+  configured governance validator or obtain an explicit owner-approved change
+  to that verification requirement. Structured review below is supplementary
+  and does not turn ENOENT into passing validation.
 
-No uncertainty blocks publication of the inactive proposal. These prerequisites
-remain visible and prevent a false claim of accepted or verified governance.
+The acceptance-blocking question is resolved. The validator prerequisite now
+gates only Implementation Status `Complete` or `Verified`, never the recorded
+acceptance above.
 
 ## Preparation And Verification Evidence [Required]
 
@@ -362,3 +370,4 @@ These checks do not claim passing governance validation or record acceptance.
 | 2026-10-13 | @codex | Restrict known-boundary labeling and retained-boundary closure to P2/P3; preserve P1 resolution and evidence-backed triage gates; add fixed AC-11 inputs without activating governance |
 | 2026-10-13 | @codex | Move label obligations from issue creation to maintainer triage after creation; add fixed permission/stage cases and retain existing P1 restrictions without activating governance |
 | 2026-10-13 | @codex | Scope trailer evidence to named historical revisions; reproduce missing trailers in a PR-title/body squash candidate and repair its footer format without claiming to amend an unavailable commit |
+| 2026-10-13 | @zcode | Record acceptance per repository owner `@hailingu`'s exact `Approve`: Decision Status Proposed→Accepted with approval metadata and an informational approval context revision; resolve the pre-acceptance open question by versioning the owner-restored decision-record and ADD templates and creating `docs/README.md` in this change; update the index row and the standard's displayed status; mark AC-01 Pass. Implementation Status remains Not Started (ST-01 not yet run). |
