@@ -8,7 +8,7 @@
 - **Decision Owner**: `@hailingu`
 - **Required Approver**: Repository owner `@hailingu`; MUST NOT be the author
 - **Decision Status**: Accepted
-- **Implementation Status**: Not Started
+- **Implementation Status**: Blocked
 - **Scope**: Repository-wide issue creation, classification, evidence, and closure
 - **Primary Implementation Boundary**: Repository process governance
 - **Architecture Source**: N/A — process governance, not product-demand implementation
@@ -20,7 +20,10 @@
 - **Rejector / Rejection Time / Rejection Evidence / Rejection Reason** [Conditionally Required — rejected decision]: N/A — not rejected
 - **Retired By / Retirement Time / Retirement Evidence / Retirement Reason** [Conditionally Required — retired decision]: N/A — not retired
 - **Supersedes / Superseded By**: None — first issue-governance proposal
-- **Blocker / Prior Implementation Status / Blocker Owner / Exit Criterion** [Conditionally Required — Implementation Status is Blocked]: N/A — proposal has not entered implementation
+- **Blocked From** [Conditionally Required — Implementation Status is Blocked]: Not Started
+- **Blocker And Evidence** [Conditionally Required — Implementation Status is Blocked]: AC-06 requires the configured governance validator at `tools/governance-validator` whose `npm test` and `npm run validate` both exit 0. The package does not exist; every recorded attempt exits 254 with ENOENT (see Preparation And Verification Evidence). Creating it is source work outside this record's accepted scope — Complete Task And Scope explicitly excludes restoration of the missing governance tooling — and requires a Full ADR, which the repository-wide serialization gate blocks while this record is non-terminal. Blocker-resolution ADR: `docs/adr/ADR-0002-governance-validator-adoption.md`
+- **Blocker Owner** [Conditionally Required — Implementation Status is Blocked]: `@hailingu`
+- **Blocker Exit Or Recheck Criterion** [Conditionally Required — Implementation Status is Blocked]: Re-run `npm test --prefix tools/governance-validator` and `npm run validate --prefix tools/governance-validator` from repository root after `docs/adr/ADR-0002-governance-validator-adoption.md` reaches an accepted, implemented state; both exit 0 with no reported document errors. On satisfaction, Implementation Status returns to the recorded prior status `Not Started` and ST-01 proceeds to record AC-02 through AC-12.
 
 ## Requirement Levels [Required]
 
@@ -371,3 +374,4 @@ These checks do not claim passing governance validation or record acceptance.
 | 2026-10-13 | @codex | Move label obligations from issue creation to maintainer triage after creation; add fixed permission/stage cases and retain existing P1 restrictions without activating governance |
 | 2026-10-13 | @codex | Scope trailer evidence to named historical revisions; reproduce missing trailers in a PR-title/body squash candidate and repair its footer format without claiming to amend an unavailable commit |
 | 2026-10-13 | @zcode | Record acceptance per repository owner `@hailingu`'s exact `Approve`: Decision Status Proposed→Accepted with approval metadata and an informational approval context revision; resolve the pre-acceptance open question by versioning the owner-restored decision-record and ADD templates and creating `docs/README.md` in this change; update the index row and the standard's displayed status; mark AC-01 Pass. Implementation Status remains Not Started (ST-01 not yet run). |
+| 2026-10-13 | @zcode | Enter Blocked from Not Started: AC-06's governance validator does not exist and its creation is source work outside this record's accepted scope, blocked by repository-wide ADR serialization. Record blocker fields and cite the blocker-resolution ADR `docs/adr/ADR-0002-governance-validator-adoption.md` under the AGENTS.md serialization exception; update the index row in the same change. |
