@@ -114,6 +114,11 @@ are not Decision Status acceptance or rejection events.
    user need, expected benefit, and observable acceptance outcomes; they do not
    require a defect trigger or reproduction. Requests remedying an existing
    defect retain its severity and the defect-report structure.
+   Existing non-P1 functional defects and contract inconsistencies use P2
+   regardless of reproducibility or workaround availability. Classification,
+   P3 scheduling, and known-boundary dispositions cannot waive mandatory
+   merge or completion gates, including documentation before a newly added
+   public symbol's implementation body.
 3. A known boundary records the trigger, existing controls, residual impact,
    owner identity, explicit owner decision, rationale, supporting evidence,
    and an observable reopening criterion.
@@ -139,7 +144,7 @@ implementation deliverables.
 All checks own ST-01. Results must be recorded again after acceptance before
 Implementation Status becomes Complete or Verified.
 
-AC-03 through AC-05, AC-07, and AC-08 use only the fixed inputs in
+AC-03 through AC-05 and AC-07 through AC-10 use only the fixed inputs in
 [the fixture corpus](fixtures/orange-issue-governance-cases.md), including its
 stated synthetic premises and exact variant changes. A check passes only if
 every listed case matches its expected Conforming/Nonconforming outcome and
@@ -157,6 +162,8 @@ from the constructed inputs.
 | AC-06 | Configured governance validator is available | Run npm test --prefix tools/governance-validator and npm run validate --prefix tools/governance-validator from repository root | Both exit 0; all configured document checks pass | Commands, exit codes, diagnostics | Not Run — validator package absent; attempted commands fail with exit 254 |
 | AC-07 | Fixture cases T-OK, T-PREFIX | Apply Title Format and Labels only to the exact titles and labels | Outcomes respectively Conforming, Nonconforming; docs permitted in scope and summary, rejected as the classification prefix | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
 | AC-08 | Fixture cases F-OK, F-PRIORITY, R-OK, R-BODY | Apply Severity and Body Structure to the fixed feature and defect-remedy bodies | Outcomes respectively Conforming, Nonconforming, Conforming, Nonconforming; pure feature assigned P3 without reproduction; defect remedy retains P2 and defect structure | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
+| AC-09 | Fixture cases O-OK, O-P3 | Apply Severity to the fixed non-core defect with repeated failures and no workaround | Outcomes respectively Conforming, Nonconforming; non-P1 functional defect assigned P2, not P3 | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
+| AC-10 | Fixture cases M-BLOCK, M-ALLOW, M-DOCUMENTED | Apply the issue standard's mandatory-gate clause and AGENTS.md Core Rules to the fixed P3 task and documentation dispositions | Outcomes respectively Conforming, Nonconforming, Conforming; missing required documentation blocks merge and completion despite P3; supplying it before the implementation body satisfies that gate | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
 
 ## Source And Configuration Contracts [Conditionally Required — source or configuration changes]
 
@@ -239,6 +246,24 @@ remain visible and prevent a false claim of accepted or verified governance.
 | T-OK, T-PREFIX | Conforming, Nonconforming |
 | F-OK, F-PRIORITY, R-OK, R-BODY | Conforming, Nonconforming, Conforming, Nonconforming |
 
+Follow-up preparation review by `@codex` from baseline
+`8f8679e5aca12afa1aadc4e1494b667b802afbdf`: inspected all 24 fixed cases
+against standard blob `4672aa5ca2bed1de8f45eff2cb2b49fda328db3f` and fixture
+blob `96b269909be9e86da8b572094ae358a082e5fb29`. The 19 existing cases retain
+the actual outcomes in the preceding table; the five additional outcomes
+are below. All match their expected clauses. P2 covers ordinary non-core
+failures without workarounds, while mandatory public-symbol documentation
+still gates P3 feature implementation. ADR and index remain Proposed / Not
+Started. This is preparation inspection, not acceptance or automated test
+evidence. `git diff --check` passed. Both configured npm checks were attempted
+again from repository root and exited 254 (ENOENT: missing
+`tools/governance-validator/package.json`); they have not passed.
+
+| Additional preparation cases, in order | Actual outcomes, in order |
+| --- | --- |
+| O-OK, O-P3 | Conforming, Nonconforming |
+| M-BLOCK, M-ALLOW, M-DOCUMENTED | Conforming, Nonconforming, Conforming |
+
 ## Change Log [Required]
 
 | Date | Actor | Change |
@@ -246,3 +271,4 @@ remain visible and prevent a false claim of accepted or verified governance.
 | 2026-10-13 | @codex | Prepare the first Proposed Full ADR and index for PR #4; localize the issue standard and remove unapproved activation under the owner's direct repair-and-push instruction |
 | 2026-10-13 | @codex | Resolve follow-up title-scope and feature-classification findings in the same Proposed ADR; add AC-07 and AC-08 without activating governance |
 | 2026-10-13 | @codex | Replace generic disposition-check inputs with fixed constructed issue/closure fixtures and explicit positive/negative outcomes; use the same corpus for title and feature checks |
+| 2026-10-13 | @codex | Cover reproducible non-core defects without workarounds in P2; preserve mandatory merge/completion documentation gates regardless of classification; add fixed AC-09 and AC-10 inputs without activating governance |

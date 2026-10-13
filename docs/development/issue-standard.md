@@ -63,15 +63,23 @@ This section defines the severity calibration for orange issues:
   reachable through normal use, common dirty data, or known system
   behavior; or a core workflow that is unusable (crash on launch, save
   always failing). Fix before merging any related task.
-- **P2** — defects and contract inconsistencies whose trigger requires
-  rare dirty data, narrow race windows, or extreme values; broken
-  behavior that still has a workaround. Fix or register as a known
-  boundary, at the repository owner's discretion.
-- **P3** — further defense-in-depth layers, defensive validation, missing
-  documentation on public symbols, extreme-value hardening, and quality debt.
+- **P2** — existing functional defects and contract inconsistencies that do
+  not meet P1, whether consistently reproducible or limited to rare dirty
+  data, narrow race windows, or extreme values. A workaround is not required.
+  Fix or register as a known boundary, at the repository owner's discretion.
+- **P3** — further preventive hardening, documentation improvements, and
+  quality debt that do not remedy an existing functional defect or contract
+  inconsistency.
   Also the planning category for requests for new capabilities that do not
   remedy an existing defect; it does not assert a defect or risk severity.
-  Recorded and scheduled at the owner's discretion; never blocks a merge.
+  Recorded and scheduled at the owner's discretion; P3 scheduling alone does
+  not block a merge.
+
+Regardless of issue classification or disposition, mandatory AGENTS.md,
+Accepted ADR, security, and contract requirements continue to gate merge and
+task completion. In particular, intent-bearing documentation for a newly
+added public symbol MUST precede its implementation body. A P3 label or
+known-boundary decision MUST NOT waive that requirement.
 
 For defects and known boundaries, a severity claim MUST be backed by a
 trigger description or reproduction steps in the body. When that severity

@@ -2,7 +2,7 @@
 # Fixed issue-governance review fixtures
 
 These constructed inputs make the Proposed ADR's AC-03 through AC-05,
-AC-07, and AC-08 reproducible. They are not real issues, captured logs,
+AC-07 through AC-10 reproducible. They are not real issues, captured logs,
 owner decisions, commits, or test results, and activate no policy.
 
 Evaluate the exact inputs below against the cited sections of
@@ -37,6 +37,33 @@ defect; it is not a request for a new capability.
 ## 证据 (Evidence)
 证据限于本文件中的构造序列，不是捕获的日志。原因未确认，未检查源代码，
 未运行测试或实时复现。拟议修复验收：按上述顺序送达时忽略 A 并保留 B。
+## 回归来源 (Regression Source)
+未知；fixture-v1 是样例标识，不是引入缺陷的提交。
+```
+
+## O — Reproducible non-core defect without a workaround
+
+Repository: `hailingu/orange`. Title: `P2(graph): 图形 PNG 导出始终失败`.
+Labels: `P2`. Synthetic premise: PNG export is an existing non-core feature;
+graphing, learning, and saving inputs remain usable, and no data is lost,
+corrupted, or exposed. There is no other export route or workaround. These
+are fixed premises, not claims about orange's current implementation.
+
+```markdown
+## 环境 (Environment)
+构造场景：网页图形工作区，版本 fixture-v1。P2：现有 PNG 导出功能每次失败，
+没有替代导出方法；图形显示、学习和输入保存仍可用，用户数据不受影响。
+## 复现步骤 (Steps to Reproduce)
+1. 绘制 sin(x)，视口 [-1, 1]。
+2. 点击已有的“导出 PNG”按钮。
+3. 重复点击一次；两次均未下载文件。这是构造序列，未在线复现。
+## 期望结果 (Expected)
+构造场景的现有导出契约：每次点击下载当前图形的 PNG 文件。
+## 实际结果 (Actual)
+每次点击均显示“导出失败”，没有文件；无其他导出途径，重试不能恢复。
+## 证据 (Evidence)
+证据仅为上述构造输入；没有真实日志、源代码检查或测试结果，原因未确认。
+拟议修复验收：每次点击均下载当前视口的 PNG，并保留输入 sin(x)。
 ## 回归来源 (Regression Source)
 未知；fixture-v1 是样例标识，不是引入缺陷的提交。
 ```
@@ -90,6 +117,20 @@ its entire body with this exact feature-style body:
 ## 验收标准 (Acceptance Criteria)
 按 D 的回复顺序送达后保留 [2, 3] 视口。
 ```
+
+## M — Mandatory documentation gate on a P3 feature task
+
+Issue input: F, with its P3 title, label, and feature body unchanged. Evaluate
+only the merge/completion disposition, not implementation or other gates.
+Within this synthetic world, all other gates are satisfied. The proposed
+implementation adds the new public function `orange::eigenvalues` with an
+implementation body and no intent-bearing documentation before it. This is
+constructed review input, not source code or an actual implementation claim.
+
+Fixed disposition: block merge and task completion until intent-bearing
+documentation is added before the new public function's implementation body.
+The P3 issue may remain scheduled at the owner's discretion; scheduling does
+not waive the documentation gate.
 
 ## C — Code-resolution closure comment
 
@@ -164,3 +205,8 @@ exactly as in the base; no reviewer-selected information is required.
 | F-PRIORITY | AC-08 | F; replace title prefix and sole label with P1 | Nonconforming | Severity: pure new capability must use P3 |
 | R-OK | AC-08 | D as an existing-defect remedy request | Conforming | Severity, Body Structure: retains P2 and defect structure |
 | R-BODY | AC-08 | R unchanged | Nonconforming | Body Structure: defect remedy requires Defect / regression structure |
+| O-OK | AC-09 | O unchanged | Conforming | Severity: existing non-P1 functional defect uses P2 even without a workaround |
+| O-P3 | AC-09 | O; replace title prefix and sole label with P3 | Nonconforming | Severity: reproducible existing functional defect is not discretionary P3 work |
+| M-BLOCK | AC-10 | M unchanged | Conforming | Severity and AGENTS.md Core Rules: required public-symbol documentation gates merge and completion regardless of P3 scheduling |
+| M-ALLOW | AC-10 | M; replace disposition with: allow merge and task completion despite missing documentation because P3 never blocks a merge | Nonconforming | Severity: P3 classification cannot waive mandatory documentation |
+| M-DOCUMENTED | AC-10 | M; add documentation before the body: Returns eigenvalues of the input matrix for linear-transformation study. Replace disposition with: allow merge and task completion; the documentation gate and all other synthetic gates are satisfied | Conforming | Severity and AGENTS.md Core Rules: intent-bearing documentation supplied before implementation body |
