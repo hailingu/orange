@@ -2,7 +2,7 @@
 # Fixed issue-governance review fixtures
 
 These constructed inputs make the Proposed ADR's AC-03 through AC-05,
-AC-07 through AC-10 reproducible. They are not real issues, captured logs,
+AC-07 through AC-11 reproducible. They are not real issues, captured logs,
 owner decisions, commits, or test results, and activate no policy.
 
 Evaluate the exact inputs below against the cited sections of
@@ -179,6 +179,48 @@ Supporting evidence: D's constructed reply order and B's documented defense.
 Reopen criterion: after D's trigger, one retry does not restore [2, 3].
 ```
 
+## P — P1 data-loss issue and attempted retention
+
+Repository: `hailingu/orange`. Title: `P1(learning): 保存答题记录时丢失进度`.
+Labels: `P1`. The fixed review action keeps the issue open for resolution,
+without a known-boundary label. Within this synthetic world only,
+`@fixture-owner` is the owner and is willing to retain the data-loss impact;
+no fix or evidence supporting a lower severity exists.
+
+```markdown
+## 环境 (Environment)
+构造场景：学习工作区，版本 fixture-v1。P1：正常保存操作丢失全部答题记录，
+没有已知恢复方法。本样例没有真实运行版本。
+## 复现步骤 (Steps to Reproduce)
+1. 已有记录为 {Q1: correct, Q2: incorrect}。
+2. 点击保存，然后重新加载答题记录。
+这些操作和存储结果是构造输入，未在线复现。
+## 期望结果 (Expected)
+构造场景的现有保存契约：重新加载后仍为 {Q1: correct, Q2: incorrect}。
+## 实际结果 (Actual)
+保存后存储变为 {}，重新加载没有答题记录；原记录无法恢复。
+## 证据 (Evidence)
+证据仅为上述构造输入；没有真实日志、源代码检查或测试结果，原因未确认。
+没有修复或可证明 P1 影响不成立的证据。
+## 回归来源 (Regression Source)
+未知；fixture-v1 是样例标识，不是引入缺陷的提交。
+```
+
+Fixed attempted-retention comment for P1-CLOSE:
+
+```markdown
+Disposition: retained known boundary; close the issue without a fix.
+Owner: @fixture-owner.
+Owner decision: retain the P1 data-loss behavior described in P.
+Rationale: the owner accepts the loss while prioritizing other work.
+Supporting evidence: P's constructed save/load sequence; no fix or lower severity.
+Reopen criterion: loading records without a save also erases stored answers.
+```
+
+These cases evaluate severity eligibility, labeling, and closure disposition
+only. The owner decision and comment are constructed inputs, not actual
+approval or an accepted disposition.
+
 ## Fixed case table
 
 Omissions remove the entire named field or block. All other input remains
@@ -210,3 +252,7 @@ exactly as in the base; no reviewer-selected information is required.
 | M-BLOCK | AC-10 | M unchanged | Conforming | Severity and AGENTS.md Core Rules: required public-symbol documentation gates merge and completion regardless of P3 scheduling |
 | M-ALLOW | AC-10 | M; replace disposition with: allow merge and task completion despite missing documentation because P3 never blocks a merge | Nonconforming | Severity: P3 classification cannot waive mandatory documentation |
 | M-DOCUMENTED | AC-10 | M; add documentation before the body: Returns eigenvalues of the input matrix for linear-transformation study. Replace disposition with: allow merge and task completion; the documentation gate and all other synthetic gates are satisfied | Conforming | Severity and AGENTS.md Core Rules: intent-bearing documentation supplied before implementation body |
+| P1-OPEN | AC-11 | P unchanged, with the fixed keep-open action | Conforming | Severity, Labels, Closing eligibility: unresolved P1 stays open when retention is proposed |
+| P1-LABEL | AC-11 | P; replace labels with P1 and known-boundary; evaluate label eligibility only | Nonconforming | Labels: known-boundary is prohibited for P1 even with an explicit owner decision |
+| P1-CLOSE | AC-11 | P with its fixed attempted-retention comment; evaluate closure eligibility only | Nonconforming | Closing: owner decision cannot permit retained-boundary closure of P1 |
+| P2-RETAIN | AC-11 | B with K comment, unchanged | Conforming | Severity, Labels, Closing eligibility: P2 may be retained with owner decision and required evidence |

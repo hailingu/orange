@@ -121,7 +121,10 @@ are not Decision Status acceptance or rejection events.
    public symbol's implementation body.
 3. A known boundary records the trigger, existing controls, residual impact,
    owner identity, explicit owner decision, rationale, supporting evidence,
-   and an observable reopening criterion.
+   and an observable reopening criterion. Only P2/P3 issues may receive the
+   known-boundary label or be closed as retained boundaries. Proposed retention
+   of a P1 issue leaves it open until resolution or evidence-backed non-P1
+   reclassification; willingness to retain the impact cannot justify a downgrade.
 4. Closure with code references the resolving commit and verification evidence.
    Closure without code records a named disposition, rationale, evidence, and
    reopening criterion; duplicates link the issue tracking the same problem,
@@ -144,7 +147,7 @@ implementation deliverables.
 All checks own ST-01. Results must be recorded again after acceptance before
 Implementation Status becomes Complete or Verified.
 
-AC-03 through AC-05 and AC-07 through AC-10 use only the fixed inputs in
+AC-03 through AC-05 and AC-07 through AC-11 use only the fixed inputs in
 [the fixture corpus](fixtures/orange-issue-governance-cases.md), including its
 stated synthetic premises and exact variant changes. A check passes only if
 every listed case matches its expected Conforming/Nonconforming outcome and
@@ -164,6 +167,7 @@ from the constructed inputs.
 | AC-08 | Fixture cases F-OK, F-PRIORITY, R-OK, R-BODY | Apply Severity and Body Structure to the fixed feature and defect-remedy bodies | Outcomes respectively Conforming, Nonconforming, Conforming, Nonconforming; pure feature assigned P3 without reproduction; defect remedy retains P2 and defect structure | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
 | AC-09 | Fixture cases O-OK, O-P3 | Apply Severity to the fixed non-core defect with repeated failures and no workaround | Outcomes respectively Conforming, Nonconforming; non-P1 functional defect assigned P2, not P3 | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
 | AC-10 | Fixture cases M-BLOCK, M-ALLOW, M-DOCUMENTED | Apply the issue standard's mandatory-gate clause and AGENTS.md Core Rules to the fixed P3 task and documentation dispositions | Outcomes respectively Conforming, Nonconforming, Conforming; missing required documentation blocks merge and completion despite P3; supplying it before the implementation body satisfies that gate | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
+| AC-11 | Fixture cases P1-OPEN, P1-LABEL, P1-CLOSE, P2-RETAIN | Apply Severity, Labels, and Closing eligibility to the fixed P1 data-loss issue, retention action/comment, and P2 boundary | Outcomes respectively Conforming, Nonconforming, Nonconforming, Conforming; P1 retention cannot add the label or close the issue despite an owner decision; P2 retention remains eligible | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
 
 ## Source And Configuration Contracts [Conditionally Required — source or configuration changes]
 
@@ -264,6 +268,23 @@ again from repository root and exited 254 (ENOENT: missing
 | O-OK, O-P3 | Conforming, Nonconforming |
 | M-BLOCK, M-ALLOW, M-DOCUMENTED | Conforming, Nonconforming, Conforming |
 
+P1-retention preparation review by `@codex` from baseline
+`6df2afdbbc5d489ad077a269bcbdda3737e0f3ec`: inspected all 28 fixed cases
+against standard blob `66ac8714a5b8abd3df68ba2e3abc79e99eddbb93` and fixture
+blob `4c8bc774a5159330b1042d3a09396d9fe4f49f4e`. The 24 existing cases retain
+their previously recorded outcomes; the four additional outcomes are below.
+All match the expected clauses. P1 retention cannot add the label, close the
+issue, waive the fix-before-merge gate, or justify a severity downgrade; P2
+retention remains eligible. ADR and index remain Proposed / Not Started.
+This is preparation inspection, not acceptance or automated test evidence.
+`git diff --check` passed. Both configured npm checks were attempted again
+from repository root and exited 254 (ENOENT: missing
+`tools/governance-validator/package.json`); they have not passed.
+
+| P1-retention preparation cases, in order | Actual outcomes, in order |
+| --- | --- |
+| P1-OPEN, P1-LABEL, P1-CLOSE, P2-RETAIN | Conforming, Nonconforming, Nonconforming, Conforming |
+
 ## Change Log [Required]
 
 | Date | Actor | Change |
@@ -272,3 +293,4 @@ again from repository root and exited 254 (ENOENT: missing
 | 2026-10-13 | @codex | Resolve follow-up title-scope and feature-classification findings in the same Proposed ADR; add AC-07 and AC-08 without activating governance |
 | 2026-10-13 | @codex | Replace generic disposition-check inputs with fixed constructed issue/closure fixtures and explicit positive/negative outcomes; use the same corpus for title and feature checks |
 | 2026-10-13 | @codex | Cover reproducible non-core defects without workarounds in P2; preserve mandatory merge/completion documentation gates regardless of classification; add fixed AC-09 and AC-10 inputs without activating governance |
+| 2026-10-13 | @codex | Restrict known-boundary labeling and retained-boundary closure to P2/P3; preserve P1 resolution and evidence-backed triage gates; add fixed AC-11 inputs without activating governance |

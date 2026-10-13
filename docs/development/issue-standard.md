@@ -62,7 +62,8 @@ This section defines the severity calibration for orange issues:
 - **P1** — user data loss, corruption, or exposure that is realistically
   reachable through normal use, common dirty data, or known system
   behavior; or a core workflow that is unusable (crash on launch, save
-  always failing). Fix before merging any related task.
+  always failing). Fix before merging any related task. Retaining a P1 defect
+  as a known boundary is not permitted.
 - **P2** — existing functional defects and contract inconsistencies that do
   not meet P1, whether consistently reproducible or limited to rare dirty
   data, narrow race windows, or extreme values. A workaround is not required.
@@ -97,8 +98,9 @@ a P1–P3 title tag and matching label.
 
 - Exactly one classification label — `P1`, `P2`, or `P3` — MUST be present and
   MUST match the title tag.
-- `known-boundary` MUST be added when the repository owner explicitly
-  decides to retain a behavior or limitation. Record that decision under
+- `known-boundary` is permitted only for P2/P3 and MUST be added when the
+  repository owner explicitly decides to retain such a behavior or limitation.
+  P1 issues MUST NOT carry this label. Record the retention decision under
   Disposition with the owner identity, rationale, evidence, and reopening
   criterion; a review round alone is not a disposition.
 - Area labels MAY mirror the title scope.
@@ -136,6 +138,9 @@ numbers are supplementary only. `Regression Source` cites the commit that
 introduced the defect when known.
 
 ### Known Boundary Content
+
+Only P2/P3 issues are eligible for this disposition; the P1 fix requirement
+in Severity still applies even when the owner is willing to retain the risk.
 
 Boundary and Trigger MUST identify the retained behavior and the conditions
 that expose it. Existing Defense MUST record the current controls or state
@@ -249,6 +254,9 @@ An issue closed without a code change MUST have a comment naming the
 disposition (for example duplicate, no longer reproducible, or retained
 known boundary), its rationale, supporting evidence, and an observable
 criterion for reopening. A duplicate disposition MUST link the issue that
-tracks the same problem. A retained known boundary MUST also record the
-repository owner decision required by Known Boundary Content. Bulk-closing
-without a disposition record is not permitted.
+tracks the same problem. Retained-boundary closure is permitted only for
+P2/P3 and MUST record the repository owner decision required by Known Boundary
+Content. When retention is proposed for a P1 issue, it MUST remain open until
+resolved or evidence-backed triage establishes a non-P1 classification.
+Willingness to retain P1 impact is not evidence for lowering severity.
+Bulk-closing without a disposition record is not permitted.
