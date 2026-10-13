@@ -106,7 +106,12 @@ are not Decision Status acceptance or rejection events.
 1. Route issues to `hailingu/orange`; use orange scope examples and a local
    defect template instead of another repository's example as a policy input.
 2. Define P1–P3 severity within the issue standard. Remove dependencies on the
-   absent threat model and review-round budget.
+   absent threat model and review-round budget. Restrict Conventional-Commit
+   type-word prohibition to the leading title tag, allowing `docs` as a scope.
+   Pure new-capability requests use P3 as a planning category with an unmet
+   user need, expected benefit, and observable acceptance outcomes; they do not
+   require a defect trigger or reproduction. Requests remedying an existing
+   defect retain its severity and the defect-report structure.
 3. A known boundary records the trigger, existing controls, residual impact,
    owner identity, explicit owner decision, rationale, supporting evidence,
    and an observable reopening criterion.
@@ -140,6 +145,8 @@ Implementation Status becomes Complete or Verified.
 | AC-04 | Owner decides to retain a known behavior | Apply Labels and Known Boundary Content | known-boundary label and all eight elements: trigger, controls, residual impact, owner identity, owner decision, rationale, evidence, reopening criterion | Clause-based review report | Not Run — proposal not active |
 | AC-05 | One code fix, one duplicate, and one retained boundary | Apply Closing to all three cases | Code fix cites commit and verification; duplicate cites disposition, rationale, evidence, reopening criterion, and duplicate issue; retained boundary also cites owner decision | Clause-based review report | Not Run — proposal not active |
 | AC-06 | Configured governance validator is available | Run npm test --prefix tools/governance-validator and npm run validate --prefix tools/governance-validator from repository root | Both exit 0; all configured document checks pass | Commands, exit codes, diagnostics | Not Run — validator package absent; attempted commands fail with exit 254 |
+| AC-07 | Titles P3(docs): a documentation gap and docs(graph): a documentation gap | Apply Title Format to both titles | First title permitted with P3 label; second rejected because its leading tag is a commit type; type words in scope or summary do not violate the prefix prohibition | Clause-based review report | Not Run — proposal not active |
+| AC-08 | A new matrix capability without an existing failure; a feature request remedying an existing P2 defect | Apply Severity and Body Structure to each request | New capability uses P3 title and label plus Goal, Draft Approach, and observable Acceptance Criteria without reproduction; defect remedy uses P2 and the defect structure with trigger or reproduction evidence | Clause-based review report | Not Run — proposal not active |
 
 ## Source And Configuration Contracts [Conditionally Required — source or configuration changes]
 
@@ -190,15 +197,25 @@ remain visible and prevent a false claim of accepted or verified governance.
   have explicit evidence; referenced AGENTS sections exist; index metadata and
   local links agree; conditional fields have specific N/A reasons; no approval
   metadata is fabricated; no source or configuration changes are included.
-- `git diff --check` passed for the preparation changes. Reviewed Git blobs:
+- `git diff --check` passed for the initial preparation changes. Historical
+  preparation blobs from repair commit `9496b5f0c82ae6516ed24314c5983b55efec195d`:
   `AGENTS.md` at `53676b2d74f84df6c5316f2ce6aaf8bbbf950bba`,
   `docs/development/issue-standard.md` at
   `5bd97a193a039f3868520be15905930ccba322f2`, and `docs/adr/INDEX.md` at
   `9a168874a920ad33604198162990d50a7ebf9c9d`. These are preparation evidence,
   not accepted implementation evidence.
+- Follow-up preparation from baseline `9496b5f0c82ae6516ed24314c5983b55efec195d`:
+  type-word exclusion is confined to the title prefix; `docs` remains a valid
+  scope; pure feature requests have a P3 planning category and require goals,
+  benefits, and observable outcomes instead of defect reproduction; defect
+  remedies retain their defect classification. Reviewed standard blob:
+  `d1f0dcafbc798de38620beed92a5a23fc6d16218`. `git diff --check` passes; both
+  configured npm checks were attempted again and exit 254 with the same missing
+  validator package.json. No approval status changes.
 
 ## Change Log [Required]
 
 | Date | Actor | Change |
 | --- | --- | --- |
 | 2026-10-13 | @codex | Prepare the first Proposed Full ADR and index for PR #4; localize the issue standard and remove unapproved activation under the owner's direct repair-and-push instruction |
+| 2026-10-13 | @codex | Resolve follow-up title-scope and feature-classification findings in the same Proposed ADR; add AC-07 and AC-08 without activating governance |

@@ -25,22 +25,26 @@ documentation language (Chinese).
 ## Title Format
 
 Every issue title MUST use exactly this shape, mirroring the Conventional
-Commits format used for commits in this repository, with the severity tag
+Commits format used for commits in this repository, with the P1–P3 tag
 replacing the type word:
 
     P<1|2|3>(<scope>): <summary>
 
-- `P<1|2|3>` — severity, defined below. Severity is carried only by this
-  tag and its matching label; urgency words (紧急, 严重, blocker) MUST NOT
+- `P<1|2|3>` — defect severity, or the P3 planning category for new features,
+  defined below. This classification is carried only by the tag and its
+  matching label; urgency words (紧急, 严重, blocker) MUST NOT
   appear in the summary.
 - `<scope>` — one area token identifying the affected orange capability
   or repository area (for example `graph`, `matrix`, `learning`, or `docs`).
   Reuse an existing commit scope when applicable; do not bundle unrelated areas.
 - `<summary>` — one line in the issue's natural language, no trailing
-  period. It states the problem or boundary, not the fix.
+  period. It states the problem, boundary, or requested capability rather
+  than an implementation plan.
 
 Conventional-Commit type words (`feat`, `fix`, `refactor`, `docs`, …)
-MUST NOT appear in issue titles; they classify commits, not problems.
+MUST NOT replace the leading `P<1|2|3>` tag. This prohibition applies only
+to that prefix position; these words MAY appear as scope tokens or in the
+summary. For example, `P3(docs): ...` conforms and `docs(graph): ...` does not.
 Free-form prefixes without a scope (for example `P3 已知边界：…`) do not
 conform either.
 
@@ -49,6 +53,7 @@ Examples:
     P1(learning): 答题记录保存失败导致学习进度丢失
     P2(graph): 不连续点附近偶发显示跨越间断的连线
     P3(docs): 矩阵运算错误说明缺少示例
+    P3(matrix): 希望支持矩阵特征值计算
 
 ## Severity
 
@@ -64,15 +69,25 @@ This section defines the severity calibration for orange issues:
   boundary, at the repository owner's discretion.
 - **P3** — further defense-in-depth layers, defensive validation, missing
   documentation on public symbols, extreme-value hardening, and quality debt.
+  Also the planning category for requests for new capabilities that do not
+  remedy an existing defect; it does not assert a defect or risk severity.
   Recorded and scheduled at the owner's discretion; never blocks a merge.
 
-A severity claim MUST be backed by a trigger description or reproduction
-steps in the body. When the severity is uncertain, open at the higher
-severity and let triage lower it; severity-less issues do not conform.
+For defects and known boundaries, a severity claim MUST be backed by a
+trigger description or reproduction steps in the body. When that severity
+is uncertain, open at the higher severity and let triage lower it.
+
+A feature or improvement that introduces a new capability without remedying
+an existing defect MUST use P3 and the Feature / improvement body structure.
+Its Goal MUST state the unmet user need and expected benefit, and Acceptance
+Criteria MUST state observable outcomes. Reproduction steps are not required.
+A request that remedies an existing defect MUST instead use that defect's
+severity and the Defect / regression structure. Every issue still requires
+a P1–P3 title tag and matching label.
 
 ## Labels
 
-- Exactly one severity label — `P1`, `P2`, or `P3` — MUST be present and
+- Exactly one classification label — `P1`, `P2`, or `P3` — MUST be present and
   MUST match the title tag.
 - `known-boundary` MUST be added when the repository owner explicitly
   decides to retain a behavior or limitation. Record that decision under
