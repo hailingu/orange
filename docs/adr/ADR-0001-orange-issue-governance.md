@@ -310,14 +310,46 @@ from repository root and exited 254 (ENOENT: missing
 | --- | --- |
 | L-CREATE, L-REJECT, L-TRIAGE-MISSING, L-TRIAGED, L-PROVISION | Conforming, Nonconforming, Nonconforming, Conforming, Conforming |
 
-Commit-trailer review: the GitHub PR commit collection contains only
-`5ec976c`, `9496b5f`, `4cae5d9`, `8f8679e`, `6df2afd`, and `8de32ca` at this
-baseline. For each exact commit, its `git show -s --format=%B` output was
+Historical commit-trailer review at baseline
+`8de32ca9e89225d7dda89dea0f82c86dd7035ef2`: the GitHub PR commit collection
+then contained `5ec976c`, `9496b5f`, `4cae5d9`, `8f8679e`, `6df2afd`, and
+`8de32ca`. For each exact commit, its `git show -s --format=%B` output was
 passed to `git interpret-trailers --parse`; all six yield one nonempty ADR
-and one nonempty OCR trailer. The reviewed `12c6e2f` is not in that collection,
-is not a local object, and GitHub's commit lookup returns no such commit.
-No current PR commit requires message rewriting for the reported missing
-trailers. The existing P1-retention repair in `8de32ca` remains effective.
+and one nonempty OCR trailer. The reviewed `12c6e2f` was not in that collection
+and could not be resolved locally or through GitHub at that inspection.
+These results cover only the named immutable commits, not the current PR
+commit set or any later squash or rebase message.
+
+Squash-message preparation review by `@codex` from baseline
+`7528b622c580d37134a1e72623544bf6aeab7ce1`: `git ls-remote` independently
+confirmed this live PR branch head, and the GitHub PR commit collection had
+the six historical commits above plus `7528b62`. Each actual message was
+passed to `git interpret-trailers --parse`; all seven contain one ADR and one
+OCR trailer. The reported squash `d9f1da89f34e4308e73c35048f594ee65fe3dd5a`
+could not be resolved by local `git cat-file` or GitHub's commit lookup.
+This inspection does not claim to have amended that unavailable object.
+
+The PR description's ADR/OCR references were still prose bullets. A candidate
+message constructed from the PR title, a blank line, and that description
+produced no output from `git interpret-trailers --parse`. The repaired
+candidate description ends with separate, unbulleted footer lines:
+
+```text
+ADR: docs/adr/ADR-0001-orange-issue-governance.md
+OCR: N/A — documentation proposal repair; no governed build or operation
+```
+
+Parsing the repaired candidate returns exactly those two trailers. This
+checks the prepared message, not an already-created squash commit; the exact
+final commit message must still be checked after any squash or rebase under
+AGENTS.md's existing commit policy. ADR and index remain Proposed / Not Started.
+
+For this evidence repair, `git diff --check` passed. Both configured npm
+commands were attempted again from repository root and exited 254 (ENOENT:
+missing `tools/governance-validator/package.json`). Structured review confirms
+that historical and candidate-message results are distinguished, approval and
+index metadata are unchanged, and no issue-policy or fixture behavior changes.
+These checks do not claim passing governance validation or record acceptance.
 
 ## Change Log [Required]
 
@@ -329,3 +361,4 @@ trailers. The existing P1-retention repair in `8de32ca` remains effective.
 | 2026-10-13 | @codex | Cover reproducible non-core defects without workarounds in P2; preserve mandatory merge/completion documentation gates regardless of classification; add fixed AC-09 and AC-10 inputs without activating governance |
 | 2026-10-13 | @codex | Restrict known-boundary labeling and retained-boundary closure to P2/P3; preserve P1 resolution and evidence-backed triage gates; add fixed AC-11 inputs without activating governance |
 | 2026-10-13 | @codex | Move label obligations from issue creation to maintainer triage after creation; add fixed permission/stage cases and retain existing P1 restrictions without activating governance |
+| 2026-10-13 | @codex | Scope trailer evidence to named historical revisions; reproduce missing trailers in a PR-title/body squash candidate and repair its footer format without claiming to amend an unavailable commit |
