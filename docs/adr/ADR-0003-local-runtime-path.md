@@ -2,24 +2,24 @@
 
 ## Metadata [Required]
 
-- **Decision Status**: Proposed
-- **Implementation Status**: Not Started
+- **Decision Status**: Accepted
+- **Implementation Status**: In Progress
 - **Date**: 2026-10-13
 - **Author**: @zcode
 - **Decision Owner**: @hailingu
 - **Required Approver**: @hailingu
 - **Record Scope**: Project
-- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — replace with the concrete `@<actor-id>`
-- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — replace with an ISO 8601 date-time containing `Z` or an explicit `±HH:MM` offset
-- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — replace with exactly `Approve`
-- **Approval Context Revision [Optional — informational and non-binding]**: remove — no immutable revision contains the approved content yet
-- **Rejector [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with the concrete `@<actor-id>`
-- **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with an ISO 8601 date-time containing `Z` or an explicit `±HH:MM` offset
-- **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: Pending — replace with exactly `Reject`
+- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: @hailingu
+- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: 2026-10-13T17:02:57Z
+- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Approve
+- **Approval Context Revision [Optional — informational and non-binding]**: 82a585e556c648ceacfbd86a73e107dbb422427e — immutable revision whose record content equals the content present for approval; the acceptance edits were made after approval within the same change
+- **Rejector [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
 - **Rejection Reason [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
-- **Retired By [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: Pending — replace with the concrete `@<actor-id>`
-- **Retirement Time [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: Pending — replace with an ISO 8601 date-time containing `Z` or an explicit `±HH:MM` offset
-- **Retirement Evidence [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: Pending — replace with exactly `Deprecate` or `Supersede`
+- **Retired By [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Time [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Evidence [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
 - **Retirement Reason [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
 - **Blocked From [Conditionally Required — Implementation Status is `Blocked`]**: N/A — Implementation Status is not Blocked
 - **Blocker And Evidence [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
@@ -390,6 +390,7 @@ implementation completion. When triggered:
 | --- | --- | --- |
 | 2026-10-13 | Initial Proposed draft selecting CAND-0001 from the Current ADD-0001; records the cpp-httplib-with-vcpkg and fixed-origin decisions and the full test-first implementation plan | @zcode |
 | 2026-10-13 | Revise per repository owner direction: the transport becomes a hand-written POSIX socket HTTP server within a declared minimal HTTP/1.1 subset (learning purpose, D-03), with cpp-httplib kept as the exactly pinned fallback under a binary trigger (owner direction, or the T-1 suite needing protocol machinery beyond the declared subset); scope, touchpoints, AC-1, and the resource-bounds risk row updated accordingly | @zcode |
+| 2026-10-13 | Record acceptance per repository owner @hailingu's exact Approve in the session context identifying this record (after five owner-directed revisions); Decision Status Proposed→Accepted with approval metadata and an informational context revision; enter In Progress and begin T-1 | @zcode |
 | 2026-10-13 | Fifth owner-directed revision: the connection model becomes a single-threaded `poll()` event loop multiplexing all sockets through readiness-driven read/write state machines, so multiple connections (multiple browser tabs, anticipated by ADD-0001 INV-16 and GO-02) are served concurrently without threads or head-of-line blocking; the one-client one-stable-connection standard remains the exercised and tested model, and the 5-second idle timeout now bounds descriptor accumulation. Consequences trade-off updated from bounded waiting to state-machine complexity | @zcode |
 | 2026-10-13 | Fourth owner-directed revision, applied wholesale to the one-client one-stable-connection standard: the connection model becomes a single-threaded iterative loop serving one keep-alive connection at a time with backlog queueing and a 5-second idle timeout; the thread-per-connection model, the max-16 bound, and every multi-client test (including the two-connection head-of-line check) are removed; consequences, risk rows, and AC-1 now describe exactly one persistent client as the exercised model | @zcode |
 | 2026-10-13 | Third owner-directed revision: the concurrency scenario shrinks to one persistent client performing multiple request-response cycles on a single connection (single-user origin, D-06), and the connection-bound check becomes a two-connection no-head-of-line-blocking case (one held idle, one active); the max-16 connection bound stays a declared construction guard rather than a storm-tested guarantee | @zcode |
