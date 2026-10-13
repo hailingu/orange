@@ -2,17 +2,18 @@
 
 ## Metadata [Required]
 
-- **Design Status**: Draft
+- **Design Status**: Current
 - **Date**: 2026-10-12
 - **Author**: @zcode
 - **Architecture Owner**: @hailingu
 - **Required Approver**: @hailingu
-- **Approver [Conditionally Required — Design Status is or has been `Current`]**: Pending — replace with the concrete `@<actor-id>`
-- **Approval Time [Conditionally Required — Design Status is or has been `Current`]**: Pending — replace with an ISO 8601 date-time containing `Z` or an explicit `±HH:MM` offset
-- **Approval Evidence [Conditionally Required — Design Status is or has been `Current`]**: Pending — replace with exactly `Approve`
-- **Retired By [Conditionally Required — Design Status is `Deprecated` or `Superseded`]**: Pending — replace with the concrete `@<actor-id>`
-- **Retirement Time [Conditionally Required — Design Status is `Deprecated` or `Superseded`]**: Pending — replace with an ISO 8601 date-time containing `Z` or an explicit `±HH:MM` offset
-- **Retirement Evidence [Conditionally Required — Design Status is `Deprecated` or `Superseded`]**: Pending — replace with exactly `Deprecate` or `Supersede`
+- **Approver [Conditionally Required — Design Status is or has been `Current`]**: @hailingu
+- **Approval Time [Conditionally Required — Design Status is or has been `Current`]**: 2026-10-13T09:23:35Z
+- **Approval Evidence [Conditionally Required — Design Status is or has been `Current`]**: Approve
+- **Approval Context Revision [Optional — informational and non-binding]**: 35406302b574502eebf7a17a1fd8efb402b82e4e — immutable revision whose document content equals the content present for approval; the approval edits were made after approval within the same change
+- **Retired By [Conditionally Required — Design Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Time [Conditionally Required — Design Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Evidence [Conditionally Required — Design Status is `Deprecated` or `Superseded`]**: N/A — not retired
 - **Retirement Reason [Conditionally Required — Design Status is `Deprecated` or `Superseded`]**: N/A — not retired
 - **Scope Level**: Repository / Cross-project
 - **Scope**: Locally deployed orange V1 — C++20 compute service, TypeScript web client, and repository-versioned mathematics content (advanced mathematics, mathematical analysis, matrix computation)
@@ -623,23 +624,23 @@ supply the corresponding system behavior.
 
 | ID | Actor and entry state | Actions | System feedback and transitions | Exit state | Figma reference |
 | --- | --- | --- | --- | --- | --- |
-| IF-01 | Student entering the mathematics map | Browse three areas; freely open a topic; explicitly confirm individual units read; open a workspace | Six-topic baseline, separate read/mastery/coverage indicators, version-aware read confirmation and next topics; navigating away cancels obsolete loads | A topic studied, units confirmed, or a workspace opened | N/A — no Figma source exists |
-| IF-02 | Student in the graph workspace | Edit expression, pan, zoom, reset | Current curve with axes/grid/gaps or coded error; prior curve labelled with its original context; clear or navigate away | An explored function or an empty workspace | N/A — no Figma source exists |
-| IF-03 | Student in the matrix playground | Define matrices; choose operation; reuse matrix result | Finite result or coded diagnostic; inputs retained on failure; clear or navigate away | A computed result chain or cleared sheet | N/A — no Figma source exists |
-| IF-04 | Student on a practice item | Open exercise; optionally request ordered hints; submit once; retry pending save; start fresh attempt | Fresh problem, assistance label, completed feedback and explanation only after commitment; leaving reports pending unsaved state; existing commits retained | A completed, durably recorded attempt | N/A — no Figma source exists |
-| IF-05 | Student starting a self-test | Start the six-question topic test; answer/skip; finish or abandon | Progress, per-question committed feedback, score out of six and correct/incorrect/unanswered review; abandon/refresh ends the session without a final score | A finished test with score and review, or an abandoned test retaining commits | N/A — no Figma source exists |
-| IF-06 | Student configuring tutoring | Set local endpoint/model/key; request method hints before answering or free-form help after completed grading | Compatible configuration status, ordered authored hints or current-instance dialogue, mode-specific fallback; close tutor; new instance isolates conversation | A configured tutor used safely, or fallback guidance | N/A — no Figma source exists |
+| IX-01 | Student entering the mathematics map | Browse three areas; freely open a topic; explicitly confirm individual units read; open a workspace | Six-topic baseline, separate read/mastery/coverage indicators, version-aware read confirmation and next topics; navigating away cancels obsolete loads | A topic studied, units confirmed, or a workspace opened | N/A — no Figma source exists |
+| IX-02 | Student in the graph workspace | Edit expression, pan, zoom, reset | Current curve with axes/grid/gaps or coded error; prior curve labelled with its original context; clear or navigate away | An explored function or an empty workspace | N/A — no Figma source exists |
+| IX-03 | Student in the matrix playground | Define matrices; choose operation; reuse matrix result | Finite result or coded diagnostic; inputs retained on failure; clear or navigate away | A computed result chain or cleared sheet | N/A — no Figma source exists |
+| IX-04 | Student on a practice item | Open exercise; optionally request ordered hints; submit once; retry pending save; start fresh attempt | Fresh problem, assistance label, completed feedback and explanation only after commitment; leaving reports pending unsaved state; existing commits retained | A completed, durably recorded attempt | N/A — no Figma source exists |
+| IX-05 | Student starting a self-test | Start the six-question topic test; answer/skip; finish or abandon | Progress, per-question committed feedback, score out of six and correct/incorrect/unanswered review; abandon/refresh ends the session without a final score | A finished test with score and review, or an abandoned test retaining commits | N/A — no Figma source exists |
+| IX-06 | Student configuring tutoring | Set local endpoint/model/key; request method hints before answering or free-form help after completed grading | Compatible configuration status, ordered authored hints or current-instance dialogue, mode-specific fallback; close tutor; new instance isolates conversation | A configured tutor used safely, or fallback guidance | N/A — no Figma source exists |
 
 ### Mermaid Interaction Flow [Conditionally Required — Interaction Flow Design is triggered]
 
-IF-01 — Study and explicit read confirmation:
+IX-01 — Study and explicit read confirmation:
 
 ```mermaid
 sequenceDiagram
     participant Student
     participant C01 as C-01 Web Client Shell
     participant C09 as C-09 Progress Store
-    Note over Student,C01: IF-01 interaction
+    Note over Student,C01: IX-01 interaction
     Student->>C01: Browse mathematics map and open any topic
     alt Valid current content
         C01-->>Student: Topic, next recommendation and separate progress dimensions
@@ -661,13 +662,13 @@ sequenceDiagram
     C01->>C01: Cancel obsolete loads#59; no automatic read event
 ```
 
-IF-02 — Graph exploration:
+IX-02 — Graph exploration:
 
 ```mermaid
 sequenceDiagram
     participant Student
     participant C02 as C-02 Graph Workspace
-    Note over Student,C02: IF-02 interaction
+    Note over Student,C02: IX-02 interaction
     Student->>C02: Enter expression, pan, zoom or reset
     C02->>C02: Request current samples under CF-01 or CF-02
     alt Current successful response
@@ -681,13 +682,13 @@ sequenceDiagram
     C02-->>Student: Empty workspace or destination view
 ```
 
-IF-03 — Matrix computation:
+IX-03 — Matrix computation:
 
 ```mermaid
 sequenceDiagram
     participant Student
     participant C03 as C-03 Matrix Playground
-    Note over Student,C03: IF-03 interaction
+    Note over Student,C03: IX-03 interaction
     Student->>C03: Define operands and choose operation
     C03->>C03: Invoke CF-03
     alt Current defined result
@@ -700,14 +701,14 @@ sequenceDiagram
     C03->>C03: Cancel ownership#59; ignore late result
 ```
 
-IF-04 — Practice and recording:
+IX-04 — Practice and recording:
 
 ```mermaid
 sequenceDiagram
     participant Student
     participant C08 as C-08 Practice View
     participant C09 as C-09 Progress Store
-    Note over Student,C08: IF-04 interaction
+    Note over Student,C08: IX-04 interaction
     Student->>C08: Open fresh exercise
     alt Eligible instance available
         C08-->>Student: Fresh stem and answer input
@@ -738,13 +739,13 @@ sequenceDiagram
     C08->>C08: Report pending unsaved state#59; cancel old callbacks
 ```
 
-IF-05 — Six-question self-test:
+IX-05 — Six-question self-test:
 
 ```mermaid
 sequenceDiagram
     participant Student
     participant C08 as C-08 Self-Test View
-    Note over Student,C08: IF-05 interaction
+    Note over Student,C08: IX-05 interaction
     Student->>C08: Start topic self-test
     alt Coverage, storage and six fresh instances available
         C08-->>Student: Six-question progress view
@@ -771,13 +772,13 @@ sequenceDiagram
     end
 ```
 
-IF-06 — Tutor settings and disclosure modes:
+IX-06 — Tutor settings and disclosure modes:
 
 ```mermaid
 sequenceDiagram
     participant Student
     participant C10 as C-10 AI Tutor Client
-    Note over Student,C10: IF-06 interaction
+    Note over Student,C10: IX-06 interaction
     Student->>C10: Configure local endpoint, model and key
     C10-->>Student: Supported configuration status#59; secret never echoed
     Student->>C10: Request a hint or current completed-instance help
@@ -870,21 +871,21 @@ ADR path remains unassigned until reciprocal selection is made atomically.
 
 | Requirement | Capabilities | Data entities | Components | Control / interaction flows | ADR task candidates |
 | --- | --- | --- | --- | --- | --- |
-| D-01, D-16 | CAP-01, MC-01 through MC-06 | E-01 through E-06 | C-01, C-07, C-12 | CF-04, IF-01 | CAND-0002, CAND-0012, CAND-0016, CAND-0018 |
-| D-02 | CAP-02, CAP-03, CAP-04, GO-09 | E-09, E-10 | C-02, C-04, C-05 | CF-01, CF-02, IF-02 | CAND-0003, CAND-0004 |
-| D-01 (matrix study) | CAP-05, MC-05, MC-06 | E-11, E-12 | C-03, C-04, C-06, C-07 | CF-03, IF-03 | CAND-0005, CAND-0013, CAND-0018 |
-| D-03, D-04, D-15 | CAP-06, AO-03 | E-01 through E-20 | C-01, C-04, C-07 | CF-04, IF-01 | CAND-0001 |
-| D-05 | CAP-01, CAP-09, CAP-10 | E-02, E-16, E-17 | C-01, C-07, C-09 | CF-04, IF-01 | CAND-0002, CAND-0012, CAND-0014, CAND-0018 |
-| D-06 | CAP-06, INV-04, CON-02 | E-13, E-14, E-18 | C-01, C-04, C-09, C-10 | CF-04, CF-07, IF-01 | CAND-0001, CAND-0006, CAND-0011 |
-| D-07 | CAP-07, CAP-08, CAP-09, ST-01 through ST-06, GO-02, GO-08 | E-07, E-08, E-13, E-15, E-16 | C-04, C-08, C-09, C-11 | CF-05, CF-06, IF-04, IF-05 | CAND-0006, CAND-0007, CAND-0008, CAND-0009, CAND-0015 |
+| D-01, D-16 | CAP-01, MC-01 through MC-06 | E-01 through E-06 | C-01, C-07, C-12 | CF-04, IX-01 | CAND-0002, CAND-0012, CAND-0016, CAND-0018 |
+| D-02 | CAP-02, CAP-03, CAP-04, GO-09 | E-09, E-10 | C-02, C-04, C-05 | CF-01, CF-02, IX-02 | CAND-0003, CAND-0004 |
+| D-01 (matrix study) | CAP-05, MC-05, MC-06 | E-11, E-12 | C-03, C-04, C-06, C-07 | CF-03, IX-03 | CAND-0005, CAND-0013, CAND-0018 |
+| D-03, D-04, D-15 | CAP-06, AO-03 | E-01 through E-20 | C-01, C-04, C-07 | CF-04, IX-01 | CAND-0001 |
+| D-05 | CAP-01, CAP-09, CAP-10 | E-02, E-16, E-17 | C-01, C-07, C-09 | CF-04, IX-01 | CAND-0002, CAND-0012, CAND-0014, CAND-0018 |
+| D-06 | CAP-06, INV-04, CON-02 | E-13, E-14, E-18 | C-01, C-04, C-09, C-10 | CF-04, CF-07, IX-01 | CAND-0001, CAND-0006, CAND-0011 |
+| D-07 | CAP-07, CAP-08, CAP-09, ST-01 through ST-06, GO-02, GO-08 | E-07, E-08, E-13, E-15, E-16 | C-04, C-08, C-09, C-11 | CF-05, CF-06, IX-04, IX-05 | CAND-0006, CAND-0007, CAND-0008, CAND-0009, CAND-0015 |
 | D-08 | INV-17, CF-08, GO-06 | E-07, E-20 | C-07, C-11, C-12 | CF-08 | CAND-0002, CAND-0016, CAND-0018 |
 | D-09 | CAP-07, CAP-08, PR-05, PR-06, GO-05 | E-07, E-08, E-13 | C-08, C-09, C-11, C-12 | CF-05, CF-06, CF-08 | CAND-0006, CAND-0009, CAND-0015, CAND-0016 |
-| D-10 | CAP-09, CAP-10, PR-01 through PR-04, GO-01 | E-04, E-05, E-13, E-14, E-16, E-17 | C-01, C-07, C-09 | CF-04, IF-01 | CAND-0002, CAND-0006, CAND-0014, CAND-0018 |
+| D-10 | CAP-09, CAP-10, PR-01 through PR-04, GO-01 | E-04, E-05, E-13, E-14, E-16, E-17 | C-01, C-07, C-09 | CF-04, IX-01 | CAND-0002, CAND-0006, CAND-0014, CAND-0018 |
 | D-11 | INV-12, PR-03, GO-03 | E-13, E-16 | C-09 | CF-05 | CAND-0006, CAND-0014 |
 | D-12 | CAP-07, MC-02, MC-04 | E-07, E-09, E-10 | C-04, C-05, C-08, C-12 | CF-05, CF-06, CF-08 | CAND-0003, CAND-0010, CAND-0016, CAND-0018 |
 | D-13 | CAP-01, CAP-07, CON-10, GO-06 | E-06 | C-01, C-07, C-08, C-12 | CF-04, CF-05, CF-08 | CAND-0002, CAND-0012, CAND-0015, CAND-0016, CAND-0018 |
-| D-14 | CAP-11, CF-07, IF-06, GO-07 | E-18, E-19 | C-08, C-10 | CF-07, IF-06 | CAND-0011, CAND-0017 |
-| D-17 | AO-05, GO-01 through GO-10, PR-01 through PR-12, CON-12 through CON-16 | E-01 through E-20 as applicable | C-01 through C-12 as applicable | CF-01 through CF-08, IF-01 through IF-06 as applicable | CAND-0002 through CAND-0018 as applicable |
+| D-14 | CAP-11, CF-07, IX-06, GO-07 | E-18, E-19 | C-08, C-10 | CF-07, IX-06 | CAND-0011, CAND-0017 |
+| D-17 | AO-05, GO-01 through GO-10, PR-01 through PR-12, CON-12 through CON-16 | E-01 through E-20 as applicable | C-01 through C-12 as applicable | CF-01 through CF-08, IX-01 through IX-06 as applicable | CAND-0002 through CAND-0018 as applicable |
 
 ## Supporting Material [Optional]
 
@@ -931,20 +932,20 @@ that V1 is implemented.
 
 ## Approval And Review Checklist [Required]
 
-- [ ] Scope routing, filename, number, metadata, and central index row are correct.
-- [ ] Every demand source has a captured baseline, acceptance outcome, and last-checked date.
-- [ ] Every functional capability cites captured requirement IDs, and every stated behavior traces to those cited baselines.
-- [ ] Data Model Design ownership, lifecycle, sensitivity, relationships, and invariants are populated (trigger applies).
-- [ ] Every architecture component has a responsibility, conceptual inputs and outputs, dependencies, and cited accepted constraints; the required Mermaid architecture diagram covers every component ID, boundary, dependency, and applicable conceptual flow and agrees with the table.
-- [ ] Every triggered control or interaction section includes its required Mermaid diagram and structured table; the diagram covers every declared flow ID plus applicable ordering or transitions, branches, feedback, failure, and recovery, and agrees with the table. Each untriggered section records `N/A — <reason>`.
-- [ ] UI scope cites exact accessible design context or records its N/A reason and does not override it.
-- [ ] Cross-cutting concerns, risks, and assumptions are documented with their treatment, and every material question is resolved.
-- [ ] Traceability connects every requirement to capabilities and ADR task candidates.
-- [ ] Task candidates contain outcomes and boundaries but no implementation details; every source or configuration candidate fits one independently reviewable implementation pull request, with larger work split into dependency-ordered candidates.
-- [ ] Every `Selected` or `Complete` candidate has an exact ADR path, and that ADR's `Architecture Source` points back to this ADD path and candidate ID.
-- [ ] Every required section is complete; every conditional trigger is assessed and completed or marked `N/A — <reason>`; optional sections are complete or removed.
-- [ ] `npm run validate --prefix tools/governance-validator` passes, including template-field, status, index, reciprocal-link, Mermaid syntax, and diagram/table ID checks.
-- [ ] An eligible non-author approver, approval time, and exact `Approval Evidence: Approve` are recorded before `Current`; any optional Approval Context Revision is informational, non-binding, and exactly represents the approved document.
+- [x] Scope routing, filename, number, metadata, and central index row are correct.
+- [x] Every demand source has a captured baseline, acceptance outcome, and last-checked date.
+- [x] Every functional capability cites captured requirement IDs, and every stated behavior traces to those cited baselines.
+- [x] Data Model Design ownership, lifecycle, sensitivity, relationships, and invariants are populated (trigger applies).
+- [x] Every architecture component has a responsibility, conceptual inputs and outputs, dependencies, and cited accepted constraints; the required Mermaid architecture diagram covers every component ID, boundary, dependency, and applicable conceptual flow and agrees with the table.
+- [x] Every triggered control or interaction section includes its required Mermaid diagram and structured table; the diagram covers every declared flow ID plus applicable ordering or transitions, branches, feedback, failure, and recovery, and agrees with the table. Each untriggered section records `N/A — <reason>`.
+- [x] UI scope cites exact accessible design context or records its N/A reason and does not override it.
+- [x] Cross-cutting concerns, risks, and assumptions are documented with their treatment, and every material question is resolved.
+- [x] Traceability connects every requirement to capabilities and ADR task candidates.
+- [x] Task candidates contain outcomes and boundaries but no implementation details; every source or configuration candidate fits one independently reviewable implementation pull request, with larger work split into dependency-ordered candidates.
+- [x] Every `Selected` or `Complete` candidate has an exact ADR path, and that ADR's `Architecture Source` points back to this ADD path and candidate ID.
+- [x] Every required section is complete; every conditional trigger is assessed and completed or marked `N/A — <reason>`; optional sections are complete or removed.
+- [x] `npm run validate --prefix tools/governance-validator` passes, including template-field, status, index, reciprocal-link, Mermaid syntax, and diagram/table ID checks.
+- [x] An eligible non-author approver, approval time, and exact `Approval Evidence: Approve` are recorded before `Current`; any optional Approval Context Revision is informational, non-binding, and exactly represents the approved document.
 
 ## Archival [Conditionally Required — Design Status is `Deprecated` or `Superseded`]
 
@@ -967,12 +968,14 @@ triggered:
 | 2026-10-12 | Initial Draft created on branch `docs/add-0001-orange-v1-baseline` from local `dev` | @zcode |
 | 2026-10-12 | Added learning-path knowledge ordering per repository owner feedback: each subject area manages its learning order as a directed acyclic learning-path graph presented as a flowchart knowledge map (advisory order, deterministic validation, INV-07/INV-08) | @zcode |
 | 2026-10-12 | Raised the personal-tool boundary from a V1 non-goal to a product-level exclusion (D-06, NG-01, INV-04): no accounts, authentication, authorization, or multi-user capability in any version | @zcode |
-| 2026-10-12 | Added practice, self-testing, and mastery assessment (D-07, CAP-07 through CAP-09, CF-05/CF-06, IF-04/IF-05, CAND-0006 through CAND-0008, INV-09/INV-10); INV-03 permits a client-side append-only answer history with incremental per-question recording | @zcode |
+| 2026-10-12 | Added practice, self-testing, and mastery assessment (D-07, CAP-07 through CAP-09, CF-05/CF-06, IX-04/IX-05, CAND-0006 through CAND-0008, INV-09/INV-10); INV-03 permits a client-side append-only answer history with incremental per-question recording | @zcode |
 | 2026-10-12 | Fixed the exercise content stance and anti-memorization design (D-08, D-09, NG-08): the repository-versioned bank is the sole runtime content source with AI assisting only at authoring time, and exercises are parameterized templates presenting freshly drawn seeded instances per attempt (INV-11, CAND-0009, DD-07) | @zcode |
 | 2026-10-12 | Fixed the authoring venue and resolved the self-review paradox (D-08): tiered no-exposure review — deterministic machine validation with independent numeric cross-verification is the binding gate, AI review is advisory, human review is structural-metadata only | @zcode |
 | 2026-10-12 | Closed the progress-management gaps (D-10 through D-12, CAP-10, INV-12/INV-13): knowledge-point granularity with coverage views, streak-based mastery, client-side read tracking with two-dimension progress, and graph-choice options rendered as 2D mini-curves (CAND-0010) with 3D deferred (NG-09) | @zcode |
 | 2026-10-12 | Formalized question-bank entry and image handling (D-13, CON-10, NG-10, NG-11): entry exclusively via the repository authoring workflow, ContentAsset static images machine-validated, parameter-agnostic rule for images in parameterized templates | @zcode |
-| 2026-10-12 | Added runtime AI tutoring with authored fallback (D-14, CAP-11, C-10, CF-07, IF-06, CAND-0011, INV-14/INV-15, CON-09/CON-11): learner-local AI configuration never enters the repository, hint mode excludes the expected answer from request context, and grading and mastery remain offline and deterministic | @zcode |
+| 2026-10-12 | Added runtime AI tutoring with authored fallback (D-14, CAP-11, C-10, CF-07, IX-06, CAND-0011, INV-14/INV-15, CON-09/CON-11): learner-local AI configuration never enters the repository, hint mode excludes the expected answer from request context, and grading and mastery remain offline and deterministic | @zcode |
 | 2026-10-12 | Applied owner clarification and authorized gap-review revision: local-only deployment (D-15), initial mathematics-only scope (D-16), and Draft gap-closure choices (D-17). Added six-topic coverage, six-question self-test rules, explicit point-level reading/assessment, independent fixed-three mastery, assisted-answer treatment, version-bound durable history, idempotent commits and storage recovery, bounded freshness and request lifecycles, independent bank validation and safe mode-specific tutoring. Added C-11/C-12, synchronized flow tables/diagrams, narrowed CAND-0001 through CAND-0011 and added CAND-0012 through CAND-0018. Closed DD-09 and removed bulk import from V1; remained Draft with no approval or implementation authorization | @codex |
-| 2026-10-12 | Reproduced Mermaid 10.8.0 parse failures in IF-01 through IF-06 and escaped literal message semicolons with Mermaid character entities. All fourteen diagrams then passed parsing and SVG rendering with Mermaid 10.8.0. Diagram labels, IDs, actors, branches, ordering and Draft status were preserved | @codex |
+| 2026-10-12 | Reproduced Mermaid 10.8.0 parse failures in IX-01 through IX-06 and escaped literal message semicolons with Mermaid character entities. All fourteen diagrams then passed parsing and SVG rendering with Mermaid 10.8.0. Diagram labels, IDs, actors, branches, ordering and Draft status were preserved | @codex |
 | 2026-10-13 | Aligned this document to the restored ADD template structure as part of ADR-0002's adoption change: template section set, Metadata field syntax, entity IDs E-01 through E-20, and index-identity fields change form only; Design Status remains Draft, every capability, rule, invariant, diagram, candidate, and traceability row preserves its meaning, and the index row is unchanged in substance | @zcode |
+| 2026-10-13 | Rename interaction-flow IDs IF-01 through IF-06 to IX-01 through IX-06 to satisfy the restored template's interaction-ID contract (table and diagram labels unchanged in meaning) | @zcode |
+| 2026-10-13 | Record approval per repository owner @hailingu's exact Approve: Design Status Draft→Current with approval metadata and an informational approval context revision; resolve open question A-4; check the approval and review checklist; update the architecture index row in the same change. The eighteen ADR task candidates become eligible for selection | @zcode |
