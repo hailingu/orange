@@ -1,3 +1,4 @@
+<!-- Issue Tracking proposal: docs/adr/ADR-0001-orange-issue-governance.md -->
 # orange Agent Guide
 
 > Language: English
@@ -775,11 +776,18 @@ implementation or operation continues.
 
 ## Issue Tracking
 
+The [issue standard](docs/development/issue-standard.md) is a proposal governed
+by [its Full ADR](docs/adr/ADR-0001-orange-issue-governance.md). It imposes no
+issue creation, classification, or closure requirements while that ADR is
+`Proposed`. Activate this route only after the ADR is `Accepted` under the
+Approval and Status contract above.
+
+Once the ADR is `Accepted`:
+
 Before creating an issue for orange, read and follow
 [the issue standard](docs/development/issue-standard.md) for title format,
 severity, labels, body structure, evidence, and closure. Use the
-`hailingu/orange` tracker. References in that standard to another repository
-or to a policy absent from this guide do not override this guide.
+`hailingu/orange` tracker.
 An issue records work; it does not replace an Accepted ADR or OCR when one
 is required for implementation or operation.
 
