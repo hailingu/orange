@@ -2,7 +2,7 @@
 # Fixed issue-governance review fixtures
 
 These constructed inputs make the Proposed ADR's AC-03 through AC-05,
-AC-07 through AC-11 reproducible. They are not real issues, captured logs,
+AC-07 through AC-12 reproducible. They are not real issues, captured logs,
 owner decisions, commits, or test results, and activate no policy.
 
 Evaluate the exact inputs below against the cited sections of
@@ -14,6 +14,11 @@ evaluated clauses; a check passes only when every outcome and reason agrees
 with the final case table. Record each case ID, actual outcome, clause, and
 the standard and fixture Git blobs. This is structured document inspection,
 not a replacement for the configured governance validator.
+
+Unless a case specifies another stage, issue-label checks evaluate completed
+maintainer triage with the named labels available; closure actions are by a
+maintainer on behalf of the repository. A newly submitted external report
+awaiting triage is evaluated separately in the L cases.
 
 ## D — Defect issue
 
@@ -221,6 +226,24 @@ These cases evaluate severity eligibility, labeling, and closure disposition
 only. The owner decision and comment are constructed inputs, not actual
 approval or an accepted disposition.
 
+## L — External creation and maintainer triage
+
+Issue input: D's repository, title, and entire body, with no labels. Synthetic
+actor `@fixture-reporter` can open issues but cannot apply or create labels.
+Actor `@fixture-triager` has triage access, can apply existing labels, and
+cannot create them. Actor `@fixture-maintainer` has write access and can
+create and apply labels. Initially, the P1, P2, P3, and known-boundary labels
+exist. Evaluate label ownership and stage rules only.
+
+Fixed creation action: accept the reporter's unlabeled issue and leave it
+open awaiting triage. The reporter has supplied D's P2 title and defect body;
+triage has not been declared complete and no closure has occurred.
+
+Fixed provisioning variant: P2 does not exist. The triager keeps the issue
+open awaiting triage and asks the write-access maintainer to provision P2;
+triage is not declared complete. This request is a constructed action, not
+an actual message or live label change.
+
 ## Fixed case table
 
 Omissions remove the entire named field or block. All other input remains
@@ -256,3 +279,8 @@ exactly as in the base; no reviewer-selected information is required.
 | P1-LABEL | AC-11 | P; replace labels with P1 and known-boundary; evaluate label eligibility only | Nonconforming | Labels: known-boundary is prohibited for P1 even with an explicit owner decision |
 | P1-CLOSE | AC-11 | P with its fixed attempted-retention comment; evaluate closure eligibility only | Nonconforming | Closing: owner decision cannot permit retained-boundary closure of P1 |
 | P2-RETAIN | AC-11 | B with K comment, unchanged | Conforming | Severity, Labels, Closing eligibility: P2 may be retained with owner decision and required evidence |
+| L-CREATE | AC-12 | L with its fixed creation action, unchanged | Conforming | Labels: reporter may open an unlabeled issue awaiting maintainer triage |
+| L-REJECT | AC-12 | L; replace creation action with: reject the issue solely because the reporter supplied no label | Nonconforming | Labels: missing reporter permissions cannot prevent issue creation |
+| L-TRIAGE-MISSING | AC-12 | L; triager declares triage complete without adding any label | Nonconforming | Labels: completed maintainer triage requires one matching classification label |
+| L-TRIAGED | AC-12 | L; triager applies only P2 and then declares triage complete | Conforming | Labels: triager supplies the matching label after creation |
+| L-PROVISION | AC-12 | L with the fixed missing-P2 provisioning variant | Conforming | Labels: issue waits for write-access provisioning; reporter is not responsible and triage cannot complete yet |

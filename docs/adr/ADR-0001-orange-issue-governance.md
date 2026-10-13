@@ -83,9 +83,9 @@ Included paths and stable anchors:
 - `docs/adr/fixtures/orange-issue-governance-cases.md` — fixed constructed
   issue bodies, closure comments, and positive/negative cases for review.
 
-Excluded: source and configuration, ADD-0001, GitHub label creation, issue
-creation or closure, review-round limits, threat-model changes, and restoration
-of the missing governance tooling. An issue still cannot authorize source,
+Excluded: source and configuration, ADD-0001, live GitHub label creation or
+application, issue creation or closure, review-round limits, threat-model
+changes, and restoration of the missing governance tooling. An issue still cannot authorize source,
 configuration, builds, or operations requiring an Accepted ADR or OCR.
 
 ## Decision Drivers And Options [Required]
@@ -119,7 +119,13 @@ are not Decision Status acceptance or rejection events.
    P3 scheduling, and known-boundary dispositions cannot waive mandatory
    merge or completion gates, including documentation before a newly added
    public symbol's implementation body.
-3. A known boundary records the trigger, existing controls, residual impact,
+3. Reporters supply title and body at creation; a reporter without label
+   permissions may open an unlabeled issue awaiting triage. Maintainers with
+   triage access own label application and correction before completing triage
+   or closing an issue on behalf of the repository. Missing labels await
+   provisioning by a maintainer with write access, not action by the reporter.
+   This proposal does not create or apply live labels. A known boundary records
+   the trigger, existing controls, residual impact,
    owner identity, explicit owner decision, rationale, supporting evidence,
    and an observable reopening criterion. Only P2/P3 issues may receive the
    known-boundary label or be closed as retained boundaries. Proposed retention
@@ -147,7 +153,7 @@ implementation deliverables.
 All checks own ST-01. Results must be recorded again after acceptance before
 Implementation Status becomes Complete or Verified.
 
-AC-03 through AC-05 and AC-07 through AC-11 use only the fixed inputs in
+AC-03 through AC-05 and AC-07 through AC-12 use only the fixed inputs in
 [the fixture corpus](fixtures/orange-issue-governance-cases.md), including its
 stated synthetic premises and exact variant changes. A check passes only if
 every listed case matches its expected Conforming/Nonconforming outcome and
@@ -168,6 +174,7 @@ from the constructed inputs.
 | AC-09 | Fixture cases O-OK, O-P3 | Apply Severity to the fixed non-core defect with repeated failures and no workaround | Outcomes respectively Conforming, Nonconforming; non-P1 functional defect assigned P2, not P3 | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
 | AC-10 | Fixture cases M-BLOCK, M-ALLOW, M-DOCUMENTED | Apply the issue standard's mandatory-gate clause and AGENTS.md Core Rules to the fixed P3 task and documentation dispositions | Outcomes respectively Conforming, Nonconforming, Conforming; missing required documentation blocks merge and completion despite P3; supplying it before the implementation body satisfies that gate | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
 | AC-11 | Fixture cases P1-OPEN, P1-LABEL, P1-CLOSE, P2-RETAIN | Apply Severity, Labels, and Closing eligibility to the fixed P1 data-loss issue, retention action/comment, and P2 boundary | Outcomes respectively Conforming, Nonconforming, Nonconforming, Conforming; P1 retention cannot add the label or close the issue despite an owner decision; P2 retention remains eligible | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
+| AC-12 | Fixture cases L-CREATE, L-REJECT, L-TRIAGE-MISSING, L-TRIAGED, L-PROVISION | Apply the fixed permission, triage-stage, label-availability, and action inputs to Labels | Outcomes respectively Conforming, Nonconforming, Nonconforming, Conforming, Conforming; unlabeled external creation allowed; maintainers must apply labels before completing triage, and missing labels wait for write-access provisioning | Case IDs, actual outcomes, clauses, standard and fixture blobs | Not Run — proposal not active |
 
 ## Source And Configuration Contracts [Conditionally Required — source or configuration changes]
 
@@ -285,6 +292,33 @@ from repository root and exited 254 (ENOENT: missing
 | --- | --- |
 | P1-OPEN, P1-LABEL, P1-CLOSE, P2-RETAIN | Conforming, Nonconforming, Nonconforming, Conforming |
 
+External-reporter preparation review by `@codex` from baseline
+`8de32ca9e89225d7dda89dea0f82c86dd7035ef2`: inspected all 33 fixed cases
+against standard blob `27d68f32af54195be20e42c9e4c2d3c940ef2985` and fixture
+blob `bf045196a395785f51f2d4ad6a2913760886ab21`. The 28 existing cases retain
+their recorded outcomes at the now-explicit completed-triage stage; the five
+additional outcomes are below. All match the expected clauses. External
+reporters can open unlabeled issues; maintainers own labeling and missing-label
+provisioning before triage completion or repository closure. The P1 retention
+prohibition applies at every stage. ADR and index remain Proposed / Not Started.
+This is preparation inspection, not acceptance or automated test evidence.
+`git diff --check` passed. Both configured npm checks were attempted again
+from repository root and exited 254 (ENOENT: missing
+`tools/governance-validator/package.json`); they have not passed.
+
+| External-reporter preparation cases, in order | Actual outcomes, in order |
+| --- | --- |
+| L-CREATE, L-REJECT, L-TRIAGE-MISSING, L-TRIAGED, L-PROVISION | Conforming, Nonconforming, Nonconforming, Conforming, Conforming |
+
+Commit-trailer review: the GitHub PR commit collection contains only
+`5ec976c`, `9496b5f`, `4cae5d9`, `8f8679e`, `6df2afd`, and `8de32ca` at this
+baseline. For each exact commit, its `git show -s --format=%B` output was
+passed to `git interpret-trailers --parse`; all six yield one nonempty ADR
+and one nonempty OCR trailer. The reviewed `12c6e2f` is not in that collection,
+is not a local object, and GitHub's commit lookup returns no such commit.
+No current PR commit requires message rewriting for the reported missing
+trailers. The existing P1-retention repair in `8de32ca` remains effective.
+
 ## Change Log [Required]
 
 | Date | Actor | Change |
@@ -294,3 +328,4 @@ from repository root and exited 254 (ENOENT: missing
 | 2026-10-13 | @codex | Replace generic disposition-check inputs with fixed constructed issue/closure fixtures and explicit positive/negative outcomes; use the same corpus for title and feature checks |
 | 2026-10-13 | @codex | Cover reproducible non-core defects without workarounds in P2; preserve mandatory merge/completion documentation gates regardless of classification; add fixed AC-09 and AC-10 inputs without activating governance |
 | 2026-10-13 | @codex | Restrict known-boundary labeling and retained-boundary closure to P2/P3; preserve P1 resolution and evidence-backed triage gates; add fixed AC-11 inputs without activating governance |
+| 2026-10-13 | @codex | Move label obligations from issue creation to maintainer triage after creation; add fixed permission/stage cases and retain existing P1 restrictions without activating governance |

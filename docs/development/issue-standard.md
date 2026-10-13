@@ -32,7 +32,8 @@ replacing the type word:
 
 - `P<1|2|3>` — defect severity, or the P3 planning category for new features,
   defined below. This classification is carried only by the tag and its
-  matching label; urgency words (紧急, 严重, blocker) MUST NOT
+  matching label added during maintainer triage (see Labels); urgency words
+  (紧急, 严重, blocker) MUST NOT
   appear in the summary.
 - `<scope>` — one area token identifying the affected orange capability
   or repository area (for example `graph`, `matrix`, `learning`, or `docs`).
@@ -91,10 +92,25 @@ an existing defect MUST use P3 and the Feature / improvement body structure.
 Its Goal MUST state the unmet user need and expected benefit, and Acceptance
 Criteria MUST state observable outcomes. Reproduction steps are not required.
 A request that remedies an existing defect MUST instead use that defect's
-severity and the Defect / regression structure. Every issue still requires
-a P1–P3 title tag and matching label.
+severity and the Defect / regression structure. Every issue requires a
+P1–P3 title tag at creation; matching labels are a maintainer triage requirement
+after creation, as defined below.
 
 ## Labels
+
+Reporters MUST supply the required title and body, but labels are not a
+prerequisite for opening an issue. A reporter without label permissions MAY
+submit an unlabeled issue. Maintainers MUST NOT reject it solely for missing
+labels; it awaits triage.
+
+Label maintenance belongs to a maintainer with at least triage access. Before
+recording triage as complete or closing an issue on behalf of the repository,
+that maintainer MUST ensure the rules below are satisfied. If required labels
+do not exist, a maintainer with write access MUST provision them before triage
+can complete; the issue remains open awaiting triage. Pending label work does
+not waive P1 or other mandatory requirements. The prohibition on assigning
+`known-boundary` to P1 applies at every stage. These permission boundaries
+follow [GitHub's label management rules](https://docs.github.com/en/issues/using-labels-and-milestones-to-track-work/managing-labels).
 
 - Exactly one classification label — `P1`, `P2`, or `P3` — MUST be present and
   MUST match the title tag.
