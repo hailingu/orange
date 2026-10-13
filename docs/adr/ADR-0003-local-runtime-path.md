@@ -71,26 +71,56 @@ pinned library available only as a bounded fallback.
 In scope:
 
 - `service/` — a C++20 CMake project building one executable that binds
-  127.0.0.1 on a fixed documented port, implements the declared minimal
-  HTTP/1.1 server subset by hand over POSIX sockets, serves
-  `GET /api/health` returning HTTP 200 with body `{"status":"ok"}`, serves
-  the built client files from `web/dist/` at `/` with a small MIME map,
-  answers unsupported methods with HTTP 405 and unknown paths with HTTP 404,
-  and rejects requests whose header block exceeds 8 KiB with HTTP 431.
-- The declared minimal HTTP/1.1 subset: request-line and header parsing for
-  `GET` only, per-request `Connection: close`, `Content-Length`-delimited
-  responses with `Content-Type`, and an iterative single-threaded accept
-  loop. No keep-alive, chunking, ranges, TLS, or body parsing.
+  127.0.0.1 on two documented fixed ports, implements the declared HTTP/1.1
+  feature set by hand over POSIX sockets, and serves the client and the
+  declared diagnostic routes.
+- The declared HTTP/1.1 feature set (owner-directed 2026-10-13 for the
+  learning purpose): persistent connections (HTTP/1.1 keep-alive with
+  `Connection: close` honored, idle connections closed after a declared
+  timeout); request parsing of the request line, headers, and bodies
+  (`Content-Length` and chunked transfer decoding); response framing with
+  `Content-Length` and a chunked encoder; single byte-range requests on
+  static files (HTTP 206 and 416); request-body support through a declared
+  `POST /api/echo` diagnostic route that returns the received body using
+  chunked framing; `GET /api/health` returning HTTP 200 with body
+  `{"status":"ok"}`; static file serving from `web/dist/` at `/` with a
+  small MIME map; HTTP 405 for unsupported methods and 404 for unknown
+  paths; an 8 KiB header-block cap answering 431 and a 1 MiB body cap
+  answering 413; a bounded thread-per-connection model (at most 16
+  concurrent connections, excess clients queued by the listen backlog).
+- TLS: an `https://127.0.0.1:8443` listener terminated through OpenSSL
+  (exactly pinned; crypto primitives are never hand-rolled — only the
+  protocol layer is), with a self-signed certificate generated on first run
+  into a gitignored location and reused across restarts.
 - `web/` — a minimal TypeScript client: one page and a `status` module that
   fetches `/api/health` and renders the result, compiled by a pinned `tsc`
   toolchain to `web/dist/`.
-- `scripts/dev.sh` — the one documented local path: build both sides and start
-  the service, printing the origin URL.
-- Root `README.md` — the documented run instructions, including the dependency
-  bootstrap (compiler toolchain and npm) and the fixed origin.
-- The authorized fallback, `cpp-httplib` exactly pinned through a `vcpkg.json`
-  manifest, is added only when the fallback trigger recorded in Decision fires;
-  it is not part of the default build.
+- `vcpkg.json` — manifest pinning the OpenSSL dependency.
+- `scripts/dev.sh` — the one documented local path: generate the certificate
+  if absent, build both sides, start both listeners, and print the stable
+  origin URL.
+- Root `README.md` — the documented run instructions, including the toolchain
+  bootstrap, the fixed origins, and the one-time browser acceptance of the
+  self-signed certificate.
+
+Out of scope:
+
+- Any domain capability: expression evaluation, matrix computation, content,
+  exercises, progress, or tutoring.
+- Compute endpoints beyond the health and echo diagnostic routes,
+  domain-payload limits, or overload-rejection policy (owned by the domain
+  candidates).
+- HTTP/2 and later, WebSockets, response compression, conditional requests
+  (`ETag`, `If-Modified-Since`, `If-Range`), and multi-range multipart
+  responses — each requires an explicit revision of this ADR's declared
+  feature set.
+- Client tooling beyond `tsc` (bundler, dev server, framework choices belong
+  to the presentation candidates).
+- CI, packaging, deployment tooling, and any remote or LAN exposure.
+
+The authorized fallback, `cpp-httplib` exactly pinned, is added only when the
+fallback trigger recorded in Decision fires; it is not part of the default
+build.
 
 Out of scope:
 
@@ -123,8 +153,9 @@ Out of scope:
 
 | ID | Question | Owner | Due | Status | Resolution and Evidence |
 | --- | --- | --- | --- | --- | --- |
-| Q-1 | Which HTTP layer serves the loopback service? | @hailingu | 2026-10-13 | Resolved | Owner direction 2026-10-13: hand-written POSIX socket HTTP server within the declared minimal HTTP/1.1 subset, because learning the platform is a stated product purpose (D-03); cpp-httplib stays the exactly pinned fallback under Decision's recorded trigger |
-| Q-2 | Which port is the stable origin? | @hailingu | 2026-10-13 | Resolved | Default 8080 on 127.0.0.1, documented in README.md; a port conflict produces a coded startup error rather than a silent alternative port |
+| Q-1 | Which HTTP layer serves the loopback service? | @hailingu | 2026-10-13 | Resolved | Owner direction 2026-10-13: hand-written POSIX socket HTTP server, because learning the platform is a stated product purpose (D-03); cpp-httplib stays the exactly pinned fallback under Decision's recorded trigger |
+| Q-2 | Which ports are the stable origins? | @hailingu | 2026-10-13 | Resolved | `https://127.0.0.1:8443` is the documented stable origin (self-signed certificate, accepted once per browser profile); `http://127.0.0.1:8080` remains as the plain comparison endpoint used by the test suite; a port conflict produces a coded startup error rather than a silent alternative port |
+| Q-3 | Which HTTP features belong to the learning subset? | @hailingu | 2026-10-13 | Resolved | Owner direction 2026-10-13: keep-alive, chunked transfer (both directions), single-range requests, TLS, and request-body parsing are all in; HTTP/2, WebSockets, compression, conditional requests, and multi-range responses stay out until this ADR is revised |
 
 ## Decision Drivers [Required]
 
@@ -182,49 +213,60 @@ Cons:
 
 **Rationale**: learning the platform is a stated product purpose of orange
 (D-03), and the repository owner directed on 2026-10-13 that the transport
-layer be hand-written for that purpose. The declared minimal HTTP/1.1 subset
-bounds the protocol surface to what this slice needs, the test-first plan
-catches protocol defects at the smallest scale, and the exactly pinned
-cpp-httplib fallback keeps the slice deliverable even if the hand-written path
-hits its recorded trigger.
+layer be hand-written for that purpose, covering keep-alive, chunked
+transfer, range requests, request bodies, and a TLS listener, with the
+crypto primitives themselves taken from the approved OpenSSL library rather
+than hand-rolled. The declared feature set bounds the protocol surface to
+what this slice and its tests exercise, the test-first plan catches protocol
+defects at the smallest scale, and the exactly pinned cpp-httplib fallback
+keeps the slice deliverable even if the hand-written path hits its recorded
+trigger.
 
 **Fallback trigger**: adopt the cpp-httplib fallback within this ADR's
 accepted scope — recording the evidence in the Change Log and touching no
 other decision content — when either (a) the repository owner directs the
-fallback, or (b) the hand-written server cannot make its T-1 suite green
-without protocol machinery beyond the declared minimal subset. The default
-outcome remains the hand-written server.
+fallback, or (b) the hand-written server cannot make its T-1 or T-2 suite
+green without protocol machinery beyond the declared feature set. The
+default outcome remains the hand-written server.
 
 ### Consequences [Required]
 
 Positive:
 
 - The transport layer is fully readable and modifiable by the learner, and
-  the HTTP wire protocol is studied directly (the owner's stated purpose).
+  the HTTP wire protocol — persistent connections, chunked transfer, range
+  serving, and TLS termination — is studied directly (the owner's stated
+  purpose).
 - A clean checkout reaches a running local origin through one documented path
-  with zero runtime library dependencies.
+  with the only runtime library dependency being the approved crypto library.
 
 Negative:
 
-- Hand-written HTTP carries protocol-defect risk a vetted library would not,
-  and the declared subset must grow deliberately in later slices.
+- Hand-written HTTP over a broad feature set carries real protocol-defect
+  risk a vetted library would not, and the declared feature set must grow
+  deliberately in later slices.
 
 Mitigations:
 
-- The minimal subset is declared in this ADR; anything beyond it requires an
+- The feature set is declared in this ADR; anything beyond it (HTTP/2,
+  WebSockets, compression, conditional requests, multi-range) requires an
   explicit revision here rather than quiet scope creep.
-- The T-1 suite covers health, static files, 405/404, the 8 KiB cap,
-  loopback bind, and 8 concurrent requests before the server is trusted.
+- The test-first suites cover parsing, keep-alive cycles, chunked decode and
+  encode, range responses, both caps, the idle timeout, loopback binding on
+  both listeners, the TLS handshake, and 8 concurrent persistent clients
+  before the server is trusted.
 - The exactly pinned cpp-httplib fallback is pre-authorized with a binary
   trigger, so adopting it does not reopen the decision.
 
 ## Implementation Plan [Required]
 
 **Complete task outcome**: One documented local path builds and starts the
-TypeScript client and the loopback C++20 health service at the stable origin
-`http://127.0.0.1:8080`, where the page renders and `/api/health` answers
-`{"status":"ok"}`, restart preserves the origin, and no non-loopback listener
-exists.
+TypeScript client and the loopback C++20 service implementing the declared
+HTTP/1.1 feature set at the stable origin `https://127.0.0.1:8443` (with the
+plain `http://127.0.0.1:8080` comparison endpoint), where the page renders,
+`/api/health` answers `{"status":"ok"}` over both listeners, keep-alive,
+chunked, range, and echo-body behaviors work as declared, restart preserves
+the origins, and no non-loopback listener exists.
 
 **Primary implementation boundary**: Runtime assembly.
 
@@ -233,22 +275,24 @@ or `N/A — <specific reason>`.
 
 | ID | Objective or deliverable | Included scope | Status | Actual implementation evidence |
 | --- | --- | --- | --- | --- |
-| T-1 | Loopback C++20 service with a hand-written minimal HTTP/1.1 subset, developed test-first | `service/` CMake project and POSIX socket code, CTest suite covering the health response, static file serving, 405 and 404 behavior, the 8 KiB header cap with HTTP 431, loopback bind assertion, and 8 concurrent health requests | Not Started | Pending |
-| T-2 | Minimal TypeScript client page reporting service health, developed test-first | `web/` npm project with pinned `typescript`, `src/status.ts`, a `node --test` suite for the status module, and a `tsc` build to `web/dist/` | Not Started | Pending |
-| T-3 | One documented run path and verification evidence | `scripts/dev.sh`, root `README.md` run section, repository-root verification runs of the acceptance checks | Not Started | Pending |
+| T-1 | Hand-written HTTP/1.1 transport core, developed test-first | `service/` CMake project and POSIX socket code: bounded thread-per-connection accept loop (max 16), keep-alive connection lifecycle with a declared idle timeout, request-line/header/body parsing (Content-Length and chunked decode), response framing (Content-Length and chunked encode), the 8 KiB header cap (431) and 1 MiB body cap (413); CTest unit suite for every behavior including 8 concurrent persistent clients | Not Started | Pending |
+| T-2 | Serving features and TLS listener, developed test-first | Route dispatch, `GET /api/health`, `POST /api/echo` with chunked responses, static serving with MIME map and single-range 206/416, 405/404, loopback bind on both listeners, and the OpenSSL-terminated `https://127.0.0.1:8443` listener with first-run self-signed certificate; CTest integration suite plus `curl`-based end-to-end checks over both plaintext and TLS | Not Started | Pending |
+| T-3 | TypeScript status page, one documented run path, and verification evidence | `web/` npm project with pinned `typescript`, `src/status.ts` and its `node --test` suite, `tsc` build to `web/dist/`, `scripts/dev.sh` with first-run certificate generation, root `README.md` run section, repository-root verification runs of the acceptance checks | Not Started | Pending |
 
-**Affected paths**: `service/**`, `web/**`, `scripts/dev.sh`, `README.md`
-(`vcpkg.json` is added only if the fallback trigger fires)
+**Affected paths**: `service/**`, `web/**`, `vcpkg.json`, `scripts/dev.sh`,
+`README.md` (certificate material is generated into a gitignored location and
+never committed)
 
 ### Stable Implementation Touchpoints [Conditionally Required — source or configuration implementation]
 
 | Path | Stable symbol or contract anchor | Key code excerpt, when needed | Purpose | Source revision |
 | --- | --- | --- | --- | --- |
-| `service/src/http_server.cpp` | `serve_loopback(port, handler)` | N/A — stable symbol or anchor is sufficient | Owns the hand-written POSIX transport: 127.0.0.1 bind, iterative accept loop, request-line and header parsing capped at 8 KiB, and the minimal HTTP/1.1 response framing declared in Scope | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
-| `service/src/main.cpp` | `int main` | N/A — stable symbol or anchor is sufficient | Assembles the server, mounts the health route and static directory, and fails with a coded error when the port is occupied | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
-| `service/src/health.cpp` | `health_response()` | N/A — stable symbol or anchor is sufficient | Returns the exact `GET /api/health` response contract: HTTP 200, body `{"status":"ok"}` | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
+| `service/src/http_server.cpp` | `serve_loopback(port, handler)` | N/A — stable symbol or anchor is sufficient | Owns the accept loop, the bounded thread-per-connection model, and the keep-alive connection lifecycle with idle timeout | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
+| `service/src/http_messages.cpp` | `parse_request()` and `write_response()` | N/A — stable symbol or anchor is sufficient | Own the wire format: request-line/header/body parsing with Content-Length and chunked decoding, the 8 KiB and 1 MiB caps, and response framing with the chunked encoder | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
+| `service/src/tls.cpp` | `serve_tls()` | N/A — stable symbol or anchor is sufficient | Terminates TLS through the pinned OpenSSL library on the https listener using the generated self-signed certificate; crypto primitives are never hand-rolled | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
+| `service/src/routes.cpp` | `handle_request()` | N/A — stable symbol or anchor is sufficient | Dispatches health, echo, static-with-single-range (206/416), and 405/404 outcomes | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
 | `web/src/status.ts` | `renderServiceStatus()` | N/A — stable symbol or anchor is sufficient | Fetches `/api/health` and renders the observed status with a fail-fast connection-error state | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
-| `scripts/dev.sh` | the script's documented command contract | N/A — stable symbol or anchor is sufficient | The single documented path: builds service and web, starts the loopback service, prints the stable origin | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
+| `scripts/dev.sh` | the script's documented command contract | N/A — stable symbol or anchor is sufficient | The single documented path: generates the certificate if absent, builds service and web, starts both listeners, prints the stable origin | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
 
 **Migration and rollback strategy [Conditionally Required — this replaces or
 changes existing behavior]**: N/A — greenfield slice; nothing existing is
@@ -273,21 +317,22 @@ replaced. Rollback is deleting the added paths.
 
 | Risk dimension | Applicability and scenario, or specific N/A reason | Owning boundary | Deterministic verification method | Exact expected result | Acceptance check IDs | Status | Actual evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| concurrency and ordering | Applicable: parallel health requests from the same page load or repeated reloads must not interleave into errors | Runtime assembly (service) | CTest case issuing 8 concurrent `GET /api/health` requests | Every response is HTTP 200 with body `{"status":"ok"}` | AC-1 | Not Started | Not run — implementation not started |
-| timeout and deadline | N/A — this slice ships no interactive compute request and no loading-deadline UI; its single health fetch fails fast on connection error | Runtime assembly | N/A | N/A | N/A | N/A — no deadline-bound behavior exists in this slice | N/A — not run |
-| cancellation and interruption | N/A — the endpoints are stateless with no session or persisted state; the interruption outcome is the documented restart path | Runtime assembly | AC-4 restart procedure | The same origin serves the page and health after restart | AC-4 | N/A — stateless endpoints; restart is the recovery path and is covered by AC-4 | N/A — not run |
-| resource bounds and backpressure | Applicable: a hand-written parser must not accept unbounded request headers | Runtime assembly (service) | CTest case sending a request whose header block exceeds 8 KiB | The server answers HTTP 431 and closes the connection without crashing; normal requests continue to succeed | AC-1 | Not Started | Not run — implementation not started |
-| framework or trust-boundary rejection | Applicable: the listener must bind loopback only and no other interface may expose the service | Runtime assembly (service) | CTest bind assertion plus a live `lsof` inspection and a LAN-address connection attempt while the service runs | Listener list contains only `127.0.0.1:8080`; connection to the machine's LAN address on the port fails | AC-1, AC-5 | Not Started | Not run — implementation not started |
+| concurrency and ordering | Applicable: keep-alive connections held open by multiple clients must not serialize or corrupt each other under the thread-per-connection model | Runtime assembly (service) | CTest case running 8 concurrent persistent clients, each performing 3 request-response cycles on one connection | All 24 responses are correct with no cross-connection corruption and no response interleaving | AC-1 | Not Started | Not run — implementation not started |
+| timeout and deadline | Applicable: an idle keep-alive connection must not hold a thread indefinitely | Runtime assembly (service) | CTest case with the idle timeout configured to 1 second, sending a request and then holding the connection idle | The server closes the idle connection after the timeout while other clients continue to be served | AC-1 | Not Started | Not run — implementation not started |
+| cancellation and interruption | N/A — the endpoints are stateless with no session or persisted state; the interruption outcome is the documented restart path | Runtime assembly | AC-5 restart procedure | The same origins serve the page and health after restart | AC-5 | N/A — stateless endpoints; restart is the recovery path and is covered by AC-5 | N/A — not run |
+| resource bounds and backpressure | Applicable: a hand-written parser and connection model must not accept unbounded input or threads | Runtime assembly (service) | CTest cases sending a header block over 8 KiB (expect 431), a body over 1 MiB (expect 413), and opening more than 16 concurrent connections (excess queued, none dropped) | Each over-limit input receives its coded rejection without crashing; the 17th and later clients still complete once earlier connections close | AC-1 | Not Started | Not run — implementation not started |
+| framework or trust-boundary rejection | Applicable: both listeners must bind loopback only, and the TLS listener must present the generated self-signed certificate | Runtime assembly (service) | CTest bind assertions for both listeners plus a live `lsof` inspection, a LAN-address connection attempt on both ports, and a `curl -k` TLS handshake check | Listener list shows only `127.0.0.1:8080` and `127.0.0.1:8443`; LAN connections fail; the TLS handshake succeeds and serves the health body | AC-1, AC-2, AC-6 | Not Started | Not run — implementation not started |
 
 ## Acceptance Checks [Required]
 
 | Check ID | Subtask | Binary acceptance point | Preconditions or input | Verification method | Exact expected result | Expected evidence | Status | Actual result and evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AC-1 | T-1 | The service test suite passes, including the loopback-bind, header-cap, and concurrency cases | Service built after toolchain bootstrap | `ctest` in the service build directory | Exit code 0 with the health-response, static-file, 405, 404, 8-KiB-cap (HTTP 431), loopback-bind, and 8-concurrent-request tests all passing | Test output with named passing tests and exit code | Not Started | Pending |
-| AC-2 | T-2 | The web suite and build pass and the page wires the health status | `web/` npm project installed | `npm test --prefix web` then `npm run build --prefix web` | Both exit 0; the compiled page references the status script that fetches `/api/health` | Command outputs and the served HTML/JS reference | Not Started | Pending |
-| AC-3 | T-3 | The one documented path starts the assembled runtime on a clean checkout | Clean checkout after documented dependency bootstrap | `scripts/dev.sh`, then `curl -fsS http://127.0.0.1:8080/api/health` | The script prints the origin; curl exits 0 and prints exactly `{"status":"ok"}` | Script and curl transcript with exit codes | Not Started | Pending |
-| AC-4 | T-3 | An ordinary stop and restart preserves the browser origin | Running service from AC-3 | Stop the service, start it again through the same path, then `curl -fsS` the same page and health URLs | Both requests exit 0 at the identical `http://127.0.0.1:8080` origin | Restart transcript with both curl exit codes | Not Started | Pending |
-| AC-5 | T-3 | No non-loopback listener exposes the service | Running service from AC-3 | `lsof -nP -iTCP:8080 -sTCP:LISTEN`, then connect to the machine's LAN IPv4 address on port 8080 | The listener list shows only `127.0.0.1:8080`; the LAN connection fails | Command outputs | Not Started | Pending |
+| AC-1 | T-1 | The transport-core suite passes every declared protocol behavior | Service built after toolchain bootstrap | `ctest` in the service build directory | Exit code 0 with tests covering request-line/header/body parsing (Content-Length and chunked), chunked response encoding, keep-alive cycles, the idle timeout, 431 and 413 caps, and 8 concurrent persistent clients all passing | Test output with named passing tests and exit code | Not Started | Pending |
+| AC-2 | T-2 | The serving and TLS integration checks pass over both listeners | Service built and running from the test harness | The T-2 CTest integration suite plus `curl` checks against `http://127.0.0.1:8080` and `curl -k` against `https://127.0.0.1:8443` | `GET /api/health` returns HTTP 200 with exactly `{"status":"ok"}` on both listeners; `POST /api/echo` returns the sent body with chunked framing; a single-range static request returns 206 with the correct slice and an unsatisfiable range returns 416; 405 and 404 behave as declared | Test and curl transcripts | Not Started | Pending |
+| AC-3 | T-3 | The web suite and build pass and the page wires the health status | `web/` npm project installed | `npm test --prefix web` then `npm run build --prefix web` | Both exit 0; the compiled page references the status script that fetches `/api/health` | Command outputs and the served HTML/JS reference | Not Started | Pending |
+| AC-4 | T-3 | The one documented path starts the assembled runtime on a clean checkout | Clean checkout after documented toolchain bootstrap and first-run certificate generation | `scripts/dev.sh`, then `curl -kfsS https://127.0.0.1:8443/api/health` | The script prints the stable origin; curl exits 0 and prints exactly `{"status":"ok"}` | Script and curl transcript with exit codes | Not Started | Pending |
+| AC-5 | T-3 | An ordinary stop and restart preserves the browser origins | Running service from AC-4 | Stop the service, start it again through the same path, then `curl -kfsS` the same page and health URLs on both listeners | All requests exit 0 at the identical `https://127.0.0.1:8443` and `http://127.0.0.1:8080` origins with the same certificate | Restart transcript with curl exit codes | Not Started | Pending |
+| AC-6 | T-3 | No non-loopback listener exposes the service | Running service from AC-4 | `lsof -nP -iTCP:8080 -iTCP:8443 -sTCP:LISTEN`, then connect to the machine's LAN IPv4 address on both ports | The listener list shows only `127.0.0.1:8080` and `127.0.0.1:8443`; both LAN connections fail | Command outputs | Not Started | Pending |
 
 Allowed final check statuses are `Pass`, `Fail`, or `N/A — <specific reason>`.
 `Fail` blocks completion. `N/A` is valid only when the check's stated trigger or
@@ -333,3 +378,4 @@ implementation completion. When triggered:
 | --- | --- | --- |
 | 2026-10-13 | Initial Proposed draft selecting CAND-0001 from the Current ADD-0001; records the cpp-httplib-with-vcpkg and fixed-origin decisions and the full test-first implementation plan | @zcode |
 | 2026-10-13 | Revise per repository owner direction: the transport becomes a hand-written POSIX socket HTTP server within a declared minimal HTTP/1.1 subset (learning purpose, D-03), with cpp-httplib kept as the exactly pinned fallback under a binary trigger (owner direction, or the T-1 suite needing protocol machinery beyond the declared subset); scope, touchpoints, AC-1, and the resource-bounds risk row updated accordingly | @zcode |
+| 2026-10-13 | Second owner-directed revision: expand the declared feature set to keep-alive, chunked transfer in both directions, single-range requests, request-body parsing via a `POST /api/echo` diagnostic route, and a TLS listener through pinned OpenSSL with a first-run self-signed certificate; the stable origin becomes `https://127.0.0.1:8443` with `http://127.0.0.1:8080` kept as the comparison endpoint; the connection model becomes bounded thread-per-connection (max 16) with a declared idle timeout; subtasks, touchpoints, risk matrix (timeout now applicable), and acceptance checks restructured accordingly | @zcode |
