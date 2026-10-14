@@ -177,14 +177,56 @@ ParseError classify_unterminated(std::string_view partial) {
                                          : ParseError::target_too_long;
 }
 
-// Removes the optional whitespace (OWS: SP or HTAB, RFC 9110 5.6.3) that
-// may surround a field value. Trimming is all the grammar allows: the
-// surrounding OWS is never part of the value.
-std::string_view trim_ows(std::string_view value) {
-    while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) {
+// RFC 9110 5.6.3 permits exactly SP and HTAB in optional whitespace.
+constexpr bool is_ows(char c) { return c == ' ' || c == '\t'; }
+
+constexpr std::size_t ows_group_size = 16;
+
+// Skips only full, all-OWS groups at either edge; scalar checks locate
+// the first non-OWS byte and handle the remainder without out-of-range reads.
+std::string_view trim_ows_groups(std::string_view value) {
+    while (value.size() >= ows_group_size) {
+        unsigned int non_ows = 0;
+        for (std::size_t i = 0; i < ows_group_size; ++i) {
+            non_ows |= !is_ows(value[i]);
+        }
+        if (non_ows != 0) {
+            break;
+        }
+        value.remove_prefix(ows_group_size);
+    }
+    while (!value.empty() && is_ows(value.front())) {
         value.remove_prefix(1);
     }
-    while (!value.empty() && (value.back() == ' ' || value.back() == '\t')) {
+    while (value.size() >= ows_group_size) {
+        unsigned int non_ows = 0;
+        const std::size_t begin = value.size() - ows_group_size;
+        for (std::size_t i = 0; i < ows_group_size; ++i) {
+            non_ows |= !is_ows(value[begin + i]);
+        }
+        if (non_ows != 0) {
+            break;
+        }
+        value.remove_suffix(ows_group_size);
+    }
+    while (!value.empty() && is_ows(value.back())) {
+        value.remove_suffix(1);
+    }
+    return value;
+}
+
+// Removes surrounding OWS without touching interior whitespace. Short
+// values and the common single-space edge keep the scalar, inlinable path.
+std::string_view trim_ows(std::string_view value) {
+    if (value.size() >= 2 * ows_group_size &&
+        ((is_ows(value.front()) && is_ows(value[1])) ||
+         (is_ows(value.back()) && is_ows(value[value.size() - 2])))) {
+        return trim_ows_groups(value);
+    }
+    while (!value.empty() && is_ows(value.front())) {
+        value.remove_prefix(1);
+    }
+    while (!value.empty() && is_ows(value.back())) {
         value.remove_suffix(1);
     }
     return value;

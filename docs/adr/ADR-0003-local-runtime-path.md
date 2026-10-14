@@ -468,6 +468,90 @@ refactor. No acceptance check, risk-matrix requirement, approved scope, or
 status is changed; the full transport task remains unfinished. Disposable
 compiler/test outputs are cleaned, preserving existing build metadata.
 
+### Grouped OWS Trimming Evidence [Optional]
+
+The third 2026-10-14 T-1 optimization preserves the existing OWS-trimming
+contract. `orange::http`'s private `trim_ows_groups` skips a complete
+16-octet group only when every byte is SP or HTAB, then locates each edge
+with scalar checks. `trim_ows` selects this path only for views of at least
+32 bytes with at least two adjacent OWS bytes at an edge; short values and
+single-space edges retain the scalar path. Interior whitespace, owned
+copies, error classification, consumed bytes, and the shared cap are
+unchanged. This is a refactor within the existing T-1 implementation, not
+a new parser contract or acceptance check.
+
+- Baseline: commit `467257bb948d863bd4c21ad2fe63789b3e4ed3bf`, parser blob
+  `8112d3a0cf3a0f71ddc76a2a520808514bca5a79`.
+- Characterization tests landed first in commit `a8a9502`, test blob
+  `a2f2c65d3e6c191b3a5c356224da3fe191713bb8`: `check_ows_trimming` covers
+  SP, HTAB, and alternating padding around an owned value with interior
+  whitespace and obs-text, empty values, body boundaries, allocations,
+  and an exactly 8 KiB head; `check_ows_edge_octets` covers all 256 octets
+  at nine trimming widths. Both pass against the unchanged baseline.
+- Final parser blob: `1d037e05790ee0f56024466b4032bb5ed0d12465`; stable
+  implementation symbols: private `is_ows`, `trim_ows_groups`, and `trim_ows`.
+- Apple clang 21.0.0 (`clang-2100.3.34.2`), arm64-apple-darwin27.0.0,
+  `-std=c++20 -O2 -Wall -Wextra`, separate compilation without LTO.
+  Assembly inspection confirms full 16-byte loads, vector equality checks,
+  and reductions guarded by the remaining view length at both edges.
+- A disposable A/B benchmark alternates baseline/candidate order across
+  seven rounds and reports medians. Fixtures and diagnostics are outside
+  the timing; returned owned values are destroyed inside it. Its
+  predeclared experimental budget requires each of five 8 KiB OWS cases
+  to take at most 50% of baseline time, and each of the other 13 cases to
+  take at most 110%. Comparing the unchanged implementation with itself
+  first fails exactly the five OWS budgets (ratios 0.994 through 1.006,
+  process exit 1). The final source passes all 18 budgets (exit 0).
+  These budgets are local experimental criteria, not CI timing assertions
+  or public latency guarantees.
+
+| Synthetic fixture / delivery | Baseline | Final |
+| --- | --- | --- |
+| 18-byte head without fields | 22.0 ns | 22.3 ns |
+| 63-byte POST echo head | 72.2 ns | 73.0 ns |
+| One ordinary value making the head exactly 8 KiB | 513.0 ns | 526.1 ns |
+| Same size, leading OWS around a one-byte value | 2,198.5 ns | 372.4 ns |
+| Same size, trailing OWS around a one-byte value | 2,165.8 ns | 374.2 ns |
+| Same size, all SP | 2,143.8 ns | 386.5 ns |
+| Same size, all HTAB | 2,162.6 ns | 372.4 ns |
+| Same size, alternating SP and HTAB | 2,159.3 ns | 379.2 ns |
+| 16 short fields | 239.9 ns | 242.7 ns |
+| 128 short fields | 1,634.1 ns | 1,609.4 ns |
+| Same short fields, accumulated 64-byte prefixes | 10,864.4 ns | 10,975.0 ns |
+| 16 fields with 128-byte values | 558.9 ns | 558.3 ns |
+| Same long fields without the terminating empty line | 230.3 ns | 236.2 ns |
+| 2,043 empty fields fitting 8 KiB | 20,525.9 ns | 20,847.4 ns |
+| Same empty fields, accumulated 64-byte prefixes | 836,133.3 ns | 868,134.4 ns |
+| One short OWS-padded value | 46.7 ns | 46.9 ns |
+| One value with 64 SP before and 64 HTAB after | 92.4 ns | 51.9 ns |
+| 8 KiB head with DEL after long OWS | 2,142.3 ns | 346.3 ns |
+
+Long OWS cases decrease by 82% through 83%; other scenarios remain within
+the experimental 10% budget. These are local synthetic parser results,
+not end-to-end service measurements. The stateless parser still repeats
+scans across fragmented deliveries.
+
+Verification: the configured CMake/CTest commands, direct `-O2` suite, and
+direct ASan/UBSan suite pass without warnings or sanitizer findings.
+Optimized and sanitizer differential harnesses independently compare all
+returned fields, error values, and consumed counts for 150,861 cases
+(seed `0x4F575333`, every prefix of the 18 fixtures, 50,000 seeded
+mutations/truncations/body suffixes, and 20,000 arbitrary byte strings),
+with zero mismatches. A disposable mutation that removes one extra byte
+after a full trailing-OWS group triggers 512 behavioral failures (exit 1).
+The allocation regression checks, clang-format check mode, and
+`git diff --check` pass; both configured governance-validator commands pass.
+
+Structured review confirms that no group reads beyond its view, all-OWS
+values retain a valid empty slice, and scalar checks preserve each first
+non-OWS octet. New executable units remain below the 60-line review
+threshold; production and test files remain below their review thresholds.
+The existing test-main decomposition debt remains outside this refactor.
+No dependency, public API, accepted scope, contract traceability, risk-matrix
+requirement, acceptance check, or status changes. The full transport task
+remains unfinished. Disposable verification outputs are deleted, preserving
+existing build metadata; no reusable artifact is retained or promoted.
+
 ## Contract-To-Check Traceability [Conditionally Required — source or configuration implementation]
 
 | Clause ID | Authoritative contract path and heading | Exact normative requirement | Acceptance check or deterministic test IDs | Explicit coverage method |
@@ -560,3 +644,4 @@ implementation completion. When triggered:
 | 2026-10-14 | Land the header-block T-1 contract red-green through commit f9e6364 and the implementing change: `parse_request` now completes a whole head — request line, field lines, terminating empty line — with field lines following `field-name: OWS field-value OWS` (RFC 9112 5) into owned `Request::headers` entries that preserve order, duplicates, and case; values are OWS-trimmed field-content with obs-text allowed (RFC 9110 5.5) and obs-fold is rejected (RFC 9112 5.2); the block spends only the head budget remaining after the request line and owns the 431 `headers_too_long` classification (RFC 6585 5), discharging the recorded later-task item (1); body parsing (Content-Length and chunked) is the next T-1 rung | @zcode |
 | 2026-10-14 | Optimize the existing T-1 request-head parser without changing its interface or protocol outcomes: red allocation tests committed first in `ba7da00`, then defer owned construction, reserve the validated field count once, record bounded field offsets, and short-circuit invalid method/version checks before target validation. Request-Head Optimization Evidence records immutable source/test blobs, A/B timings and allocation counts, configured verification, sanitizer and differential results, and the bounded stack trade-off; acceptance checks, scope, approval metadata, and lifecycle status are unchanged | @codex |
 | 2026-10-14 | Refactor existing T-1 field-value and overflowing-tail validation into bounded groups with a short-value/scalar-remainder path after characterization tests in `39c5bc9`. Grouped Field-Value Validation Evidence records immutable blobs, measured long-value improvements and short-input costs, mutation coverage, sanitizer/differential results, and unchanged allocations. Approval metadata, accepted scope, acceptance checks, and lifecycle status remain unchanged | @codex |
+| 2026-10-14 | Refactor existing T-1 OWS trimming into bounded all-whitespace groups after characterization tests in `a8a9502`. Grouped OWS Trimming Evidence records immutable blobs, predeclared experimental performance budgets observed failing then passing, short-input costs, mutation coverage, and sanitizer/differential results. Approval metadata, accepted scope, contract traceability, risk-matrix requirements, acceptance checks, and lifecycle status remain unchanged | @codex |
