@@ -10,6 +10,7 @@
 
 #include "http_messages.hpp"
 
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <format>
@@ -204,6 +205,60 @@ void check_deferred_field_copies(CheckReporter &reporter) {
                        full->request.headers.back().name == "a" &&
                        full->request.headers.back().value.empty() && fitted.allocations <= 1,
                    "shortest field lines fitting the head budget use bounded scratch offsets");
+}
+
+// Catches signed-byte classification, accepted CTLs/DEL, and unchecked
+// interior octets. The accepted ranges come from RFC 9110 5.5: HTAB,
+// SP/VCHAR, and obs-text; internal OWS must survive the owned copy.
+void check_field_value_octets(CheckReporter &reporter) {
+    constexpr std::array<std::size_t, 8> positions{1, 7, 15, 16, 31, 32, 47, 62};
+    for (unsigned int byte = 0; byte < 256; ++byte) {
+        const bool accepted = byte == 0x09 || (byte >= 0x20 && byte <= 0x7E) || byte >= 0x80;
+        for (const std::size_t position : positions) {
+            std::string value(64, 'a');
+            value[position] = static_cast<char>(byte);
+            const std::string raw = "GET / HTTP/1.1\r\nX-Value: " + value + "\r\n\r\n";
+            const auto outcome = orange::http::parse_request(raw);
+            const auto *parsed = std::get_if<orange::http::ParsedRequest>(&outcome);
+            if (accepted) {
+                reporter.check(parsed && parsed->consumed == raw.size() &&
+                                   parsed->request.headers.size() == 1 &&
+                                   parsed->request.headers[0].value == value,
+                               "every allowed interior field octet is preserved");
+            } else {
+                reporter.check(is_error(outcome, orange::http::ParseError::malformed),
+                               "every forbidden interior field octet is rejected");
+            }
+        }
+    }
+}
+
+// Catches skipped short tails, out-of-range reads, and OWS or body bytes
+// entering a value when validation changes its processing width.
+void check_field_value_boundaries(CheckReporter &reporter) {
+    constexpr std::array<std::size_t, 16> lengths{0,  1,  7,  8,  15, 16,  17,  31,
+                                                  32, 33, 63, 64, 65, 127, 128, 129};
+    for (const std::size_t length : lengths) {
+        for (std::size_t padding = 0; padding < 16; ++padding) {
+            const std::string prefix = "GET / HTTP/1.1\r\nX-Value:" + std::string(padding, '\t');
+            const std::string value(length, '\xFF');
+            const std::string raw = prefix + value + " \t\r\n\r\nbody";
+            const auto outcome = orange::http::parse_request(raw);
+            const auto *parsed = std::get_if<orange::http::ParsedRequest>(&outcome);
+            reporter.check(parsed && parsed->consumed == raw.size() - 4 &&
+                               parsed->request.headers.size() == 1 &&
+                               parsed->request.headers[0].value == value,
+                           "short and long obs-text values trim OWS and leave the body unread");
+        }
+        for (std::size_t position = 0; position < length; ++position) {
+            std::string value(length, 'a');
+            value[position] = '\x7F';
+            reporter.check(is_error(orange::http::parse_request(
+                                        "GET / HTTP/1.1\r\nX-Value: " + value + "\r\n\r\n"),
+                                    orange::http::ParseError::malformed),
+                           "DEL is rejected at every position including the last partial span");
+        }
+    }
 }
 
 } // namespace
@@ -531,5 +586,7 @@ int main() {
 
     check_parse_allocations(reporter);
     check_deferred_field_copies(reporter);
+    check_field_value_octets(reporter);
+    check_field_value_boundaries(reporter);
     return reporter.exit_status();
 }
