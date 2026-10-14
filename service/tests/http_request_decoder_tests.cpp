@@ -2,9 +2,28 @@
 // Behavior tests for complete request bodies, distinct from head-only parsing.
 #include "http_request_decoder.hpp"
 #include <cstdio>
+#include <cstdlib>
+#include <new>
 #include <string>
 #include <string_view>
 #include <variant>
+namespace {
+bool fail_next_allocation = false;
+}
+// Injects one ordinary allocation failure at the public decoder boundary;
+// this is fault injection, not a count of all allocation forms.
+void *operator new(std::size_t size) {
+    if (fail_next_allocation) {
+        fail_next_allocation = false;
+        throw std::bad_alloc{};
+    }
+    if (void *memory = std::malloc(size == 0 ? 1 : size)) {
+        return memory;
+    }
+    throw std::bad_alloc{};
+}
+// Releases allocations made by this executable's fault-injection replacement.
+void operator delete(void *memory) noexcept { std::free(memory); }
 namespace {
 int failures = 0;
 // Checks public results and gives CTest a failing process exit status.
@@ -189,6 +208,42 @@ void check_decoder_lifecycle() {
               std::get<ParseError>(sticky.outcome) == ParseError::body_too_long,
           "error never treats later bytes as another request");
 }
+// BWS belongs before a following delimiter, not by itself at the line end
+// (RFC 9112 7.1.1 chunk-ext ABNF).
+void check_extension_whitespace() {
+    using orange::http::ParseError;
+    for (const auto line : {"0;foo \r\n\r\n", "0;foo=x \r\n\r\n", "0;foo=\"x\" \r\n\r\n"}) {
+        expect_error(message("Transfer-Encoding: chunked\r\n", line), ParseError::malformed,
+                     "unattached trailing BWS is rejected");
+    }
+    check_fragments(message("Transfer-Encoding: chunked\r\n",
+                            "5 \t; \tfoo \t = \t\"abc\" \t;bar=token\r\nhello\r\n0\r\n\r\n"));
+}
+// Allocation failure is a coded sticky error, not an exception across the API.
+void check_allocation_failure() {
+    using orange::http::ParseError;
+    orange::http::RequestDecoder decoder;
+    bool threw = false;
+    bool reported = false;
+    fail_next_allocation = true;
+    try {
+        const auto result = decoder.feed("GET / HTTP/1.1\r\nX: y\r\n\r\n");
+        reported = std::get_if<ParseError>(&result.outcome) &&
+                   std::get<ParseError>(result.outcome) == ParseError::resource_exhausted;
+    } catch (const std::bad_alloc &) {
+        threw = true;
+    }
+    fail_next_allocation = false;
+    check(!threw && reported, "allocation failure is returned as a diagnostic");
+    const auto sticky = decoder.feed("GET / HTTP/1.1\r\n\r\n");
+    check(sticky.consumed == 0 && std::get_if<ParseError>(&sticky.outcome) &&
+              std::get<ParseError>(sticky.outcome) == ParseError::resource_exhausted,
+          "allocation failure is terminal until reset");
+    decoder.reset();
+    check(std::holds_alternative<orange::http::ParsedMessage>(
+              decoder.feed("GET / HTTP/1.1\r\n\r\n").outcome),
+          "reset recovers a decoder after allocation failure");
+}
 } // namespace
 int main() {
     check_content_length();
@@ -199,5 +254,7 @@ int main() {
     check_fragments(
         message("Transfer-Encoding: chunked\r\n", "2\r\nhe\r\n3; x=y\r\nllo\r\n0\r\nX: y\r\n\r\n"));
     check_decoder_lifecycle();
+    check_extension_whitespace();
+    check_allocation_failure();
     return failures ? 1 : 0;
 }

@@ -8,8 +8,6 @@
 #include <string_view>
 #include <variant>
 namespace orange::http {
-// ADR-0003 bounds decoded request content, not chunk framing, to 1 MiB.
-inline constexpr std::size_t request_body_cap = 1024 * 1024;
 // One complete message with owned head fields and binary-safe decoded content.
 struct ParsedMessage {
     Request request;
@@ -28,7 +26,7 @@ struct DecodeResult {
 class RequestDecoder {
   public:
     // Creates an idle decoder with no borrowed input or body allocation.
-    RequestDecoder();
+    RequestDecoder() noexcept;
     // Releases all buffered request data and parsing state.
     ~RequestDecoder();
     RequestDecoder(const RequestDecoder &) = delete;
@@ -42,6 +40,7 @@ class RequestDecoder {
   private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
+    bool allocation_failed_ = false;
 };
 // Parses one complete message. Missing framing bytes return incomplete;
 // trailing pipelined input is excluded from the consumed count.

@@ -25,6 +25,8 @@ namespace orange::http {
 // cannot finish inside the budget that remains after the request line
 // answers 431 (ParseError::headers_too_long).
 inline constexpr std::size_t header_block_cap = 8192;
+// ADR-0003 bounds decoded request content, excluding chunk metadata, to 1 MiB.
+inline constexpr std::size_t request_body_cap = 1024 * 1024;
 
 // Why a parse stopped without a request. The event loop must treat the
 // outcomes differently: read more bytes, or answer the noted status.
@@ -50,6 +52,8 @@ enum class ParseError {
     body_too_long,
     // A valid transfer coding preceding chunked is not supported (HTTP 501).
     unsupported_transfer_coding,
+    // An owned decoder buffer could not be allocated (HTTP 500).
+    resource_exhausted,
 };
 
 // One header field line as received: `name: value`. The name is a token
