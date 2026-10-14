@@ -212,7 +212,7 @@ std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw) {
     }
 
     return ParsedRequest{
-        Request{std::string(method), std::string(target), std::string(version)},
+        Request{std::string(method), std::string(target), std::string(version), {}},
         skipped + line_feed + 1,
     };
 }

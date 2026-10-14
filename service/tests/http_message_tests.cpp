@@ -106,9 +106,10 @@ int main() {
         "budget exhausted in the version blames the longer field: the method");
 
     const std::string line_at_cap = "GET /" + std::string(cap - 16, 'a') + " HTTP/1.1\r\n";
-    const auto at_cap = parsed_of(orange::http::parse_request(line_at_cap));
-    reporter.check(at_cap && at_cap->consumed == cap,
-                   "a request line ending on the budget's last byte parses");
+    reporter.check(is_error(orange::http::parse_request(line_at_cap),
+                            orange::http::ParseError::headers_too_long),
+                   "a request line ending on the budget's last byte leaves no room for the "
+                   "terminating empty line: headers_too_long");
     reporter.check(is_error(orange::http::parse_request("GET /" + std::string(cap - 15, 'a') +
                                                         " HTTP/1.1\r\n"),
                             orange::http::ParseError::target_too_long),
@@ -134,7 +135,9 @@ int main() {
         "empty lines exhausting the budget are malformed, not a header overflow");
 
     // --- parses: fields, validation breadth, consumed bytes --------------
-    const auto posted = orange::http::parse_request("POST /api/echo HTTP/1.1\r\n");
+    // The head is the request line AND its header block through the one
+    // terminating empty line; a request line alone never completes a parse.
+    const auto posted = orange::http::parse_request("POST /api/echo HTTP/1.1\r\n\r\n");
     reporter.check(parsed_of(posted).has_value(), "well-formed request line parses");
     reporter.check(parsed_of(posted) && parsed_of(posted)->request.method == "POST",
                    "request-line method parses into its field");
@@ -142,21 +145,24 @@ int main() {
                    "request-line target parses into its field");
     reporter.check(parsed_of(posted) && parsed_of(posted)->request.version == "HTTP/1.1",
                    "request-line version parses into its field");
-    reporter.check(parsed_of(posted) && parsed_of(posted)->consumed == 25,
-                   "consumed spans the request line and its CRLF");
+    reporter.check(parsed_of(posted) && parsed_of(posted)->consumed == 27,
+                   "consumed spans the request line and the terminating empty line");
+    reporter.check(parsed_of(posted) && parsed_of(posted)->request.headers.empty(),
+                   "a head with no field lines collects an empty header list");
 
-    const auto future = parsed_of(orange::http::parse_request("GET / HTTP/2.0\r\n"));
+    const auto future = parsed_of(orange::http::parse_request("GET / HTTP/2.0\r\n\r\n"));
     reporter.check(future && future->request.version == "HTTP/2.0",
                    "grammar-valid future version parses; serving policy is a later layer");
 
-    const auto custom = parsed_of(orange::http::parse_request("!CUSTOM! /a%20b?q=1 HTTP/1.1\r\n"));
+    const auto custom =
+        parsed_of(orange::http::parse_request("!CUSTOM! /a%20b?q=1 HTTP/1.1\r\n\r\n"));
     reporter.check(custom && custom->request.method == "!CUSTOM!",
                    "tchar-only custom method parses");
 
-    const auto skipped = parsed_of(orange::http::parse_request("\r\nGET / HTTP/1.1\r\n"));
+    const auto skipped = parsed_of(orange::http::parse_request("\r\nGET / HTTP/1.1\r\n\r\n"));
     reporter.check(skipped && skipped->request.method == "GET",
                    "a leading empty line is ignored (RFC 9112 2.2)");
-    reporter.check(skipped && skipped->consumed == 18,
+    reporter.check(skipped && skipped->consumed == 20,
                    "consumed includes the skipped leading empty line");
 
     // --- malformed: the bytes cannot be a request line --------------------
@@ -230,16 +236,156 @@ int main() {
                             orange::http::ParseError::malformed),
                    "a truncated percent-encoding in a complete line is malformed");
 
-    const auto asterisk = parsed_of(orange::http::parse_request("OPTIONS * HTTP/1.1\r\n"));
+    const auto asterisk = parsed_of(orange::http::parse_request("OPTIONS * HTTP/1.1\r\n\r\n"));
     reporter.check(asterisk && asterisk->request.target == "*", "asterisk-form target parses");
-    const auto absolute =
-        parsed_of(orange::http::parse_request("GET http://example.com:8080/a?b=c HTTP/1.1\r\n"));
+    const auto absolute = parsed_of(
+        orange::http::parse_request("GET http://example.com:8080/a?b=c HTTP/1.1\r\n\r\n"));
     reporter.check(absolute && absolute->request.target == "http://example.com:8080/a?b=c",
                    "absolute-form target parses");
     const auto authority =
-        parsed_of(orange::http::parse_request("CONNECT example.com:443 HTTP/1.1\r\n"));
+        parsed_of(orange::http::parse_request("CONNECT example.com:443 HTTP/1.1\r\n\r\n"));
     reporter.check(authority && authority->request.target == "example.com:443",
                    "authority-form target parses");
+
+    // --- the header block: fields, order, trimming, consumed -------------
+    const auto with_fields = parsed_of(orange::http::parse_request(
+        "POST /api/echo HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nContent-Length: 5\r\n\r\n"));
+    reporter.check(with_fields.has_value(), "a head with field lines parses");
+    reporter.check(with_fields && with_fields->request.headers.size() == 2,
+                   "every field line is collected");
+    reporter.check(with_fields && with_fields->request.headers.size() == 2 &&
+                       with_fields->request.headers[0].name == "Host" &&
+                       with_fields->request.headers[0].value == "127.0.0.1:8080",
+                   "field name and value parse into their owned copies");
+    reporter.check(with_fields && with_fields->request.headers.size() == 2 &&
+                       with_fields->request.headers[1].name == "Content-Length" &&
+                       with_fields->request.headers[1].value == "5",
+                   "a second field line parses");
+    reporter.check(with_fields && with_fields->consumed == 68,
+                   "consumed spans the request line, both field lines, and the terminator");
+
+    // Optional whitespace around a value is not part of it (RFC 9110 5.5).
+    const auto trimmed = parsed_of(orange::http::parse_request(
+        "GET / HTTP/1.1\r\nX-Pad:  spaced  \r\nX-Tab:\tvalue\t\r\nEmpty:\r\nOnly-OWS:   "
+        "\r\n\r\n"));
+    reporter.check(trimmed && trimmed->request.headers.size() == 4,
+                   "four field lines collect before the terminator");
+    reporter.check(trimmed && trimmed->request.headers.size() == 4 &&
+                       trimmed->request.headers[0].value == "spaced",
+                   "OWS around a value is trimmed");
+    reporter.check(trimmed && trimmed->request.headers.size() == 4 &&
+                       trimmed->request.headers[1].value == "value",
+                   "HTAB around a value is trimmed");
+    reporter.check(trimmed && trimmed->request.headers.size() == 4 &&
+                       trimmed->request.headers[2].value.empty() &&
+                       trimmed->request.headers[3].value.empty(),
+                   "a value of only OWS trims to the empty value");
+
+    const auto repeated = parsed_of(
+        orange::http::parse_request("GET / HTTP/1.1\r\nx-a: 1\r\nX-B: 2\r\nx-a: 3\r\n\r\n"));
+    reporter.check(repeated && repeated->request.headers.size() == 3,
+                   "duplicate field names stay separate entries in received order");
+    reporter.check(repeated && repeated->request.headers.size() == 3 &&
+                       repeated->request.headers[0].name == "x-a" &&
+                       repeated->request.headers[2].value == "3",
+                   "field-name case is preserved as received");
+    reporter.check(repeated && repeated->request.headers.size() == 3 &&
+                       repeated->request.headers[1].name == "X-B" &&
+                       repeated->request.headers[1].value == "2",
+                   "the middle field keeps its position and value");
+    reporter.check(repeated && repeated->request.headers.size() == 3 &&
+                       repeated->request.headers[2].name == "x-a",
+                   "the repeated name is preserved verbatim, not combined");
+
+    const auto agent = parsed_of(orange::http::parse_request(
+        "GET / HTTP/1.1\r\nUser-Agent: orange study (loopback)\r\n\r\n"));
+    reporter.check(agent && !agent->request.headers.empty() &&
+                       agent->request.headers[0].value == "orange study (loopback)",
+                   "internal spaces inside a value are kept");
+
+    constexpr std::string_view noted_line = "GET / HTTP/1.1\r\nX-Note: caf\xC3\xA9\r\n\r\n"sv;
+    const auto noted = parsed_of(orange::http::parse_request(noted_line));
+    reporter.check(noted && !noted->request.headers.empty() &&
+                       noted->request.headers[0].value == "caf\xC3\xA9"sv,
+                   "obs-text octets are allowed in a field value (RFC 9110 5.5)");
+
+    // --- the header block overflows the remaining head budget (431) ------
+    reporter.check(
+        is_error(orange::http::parse_request("GET / HTTP/1.1\r\nX-Pad: " + std::string(cap, 'a')),
+                 orange::http::ParseError::headers_too_long),
+        "a header block that cannot end inside the budget is headers_too_long (431)");
+    reporter.check(is_error(orange::http::parse_request("GET /" + std::string(cap - 17, 'a') +
+                                                        " HTTP/1.1\r\n\r\n"),
+                            orange::http::ParseError::headers_too_long),
+                   "a head one byte past the budget is headers_too_long");
+    const auto fitted = parsed_of(
+        orange::http::parse_request("GET /" + std::string(cap - 18, 'a') + " HTTP/1.1\r\n\r\n"));
+    reporter.check(fitted && fitted->consumed == cap,
+                   "a head ending exactly on the budget's last byte parses");
+    reporter.check(is_error(orange::http::parse_request(
+                                "GET / HTTP/1.1\r\nX-Pad: " + std::string(cap, 'a') + "\r"),
+                            orange::http::ParseError::headers_too_long),
+                   "a CR on the budget's last byte is half of a CRLF, not a malformed tail");
+
+    // An overflowing tail that already breaks the field-line grammar stays
+    // malformed (400), like the request-line classifier.
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\nX-Pad: a\x7F" +
+                                                        std::string(cap, 'a')),
+                            orange::http::ParseError::malformed),
+                   "DEL in an overflowing field tail is malformed");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\nX-Pad: a\rb" +
+                                                        std::string(cap, 'a')),
+                            orange::http::ParseError::malformed),
+                   "a bare CR in an overflowing field tail is malformed");
+
+    // --- the header block so far is incomplete ---------------------------
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\n"),
+                            orange::http::ParseError::incomplete),
+                   "a request line without its terminating empty line is incomplete");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\nHost: x"),
+                            orange::http::ParseError::incomplete),
+                   "a partial field line inside the budget is incomplete");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\nHost: x\r\n"),
+                            orange::http::ParseError::incomplete),
+                   "a field block without its terminating empty line is incomplete");
+
+    // --- malformed: the bytes cannot be a field line ---------------------
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\nNoColonHere\r\n\r\n"),
+                            orange::http::ParseError::malformed),
+                   "a field line without a colon is malformed");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\n: v\r\n\r\n"),
+                            orange::http::ParseError::malformed),
+                   "an empty field name is malformed");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\nBad Name: v\r\n\r\n"),
+                            orange::http::ParseError::malformed),
+                   "whitespace between field name and colon is rejected (RFC 9112 5.1)");
+    reporter.check(
+        is_error(orange::http::parse_request("GET / HTTP/1.1\r\nX-A: 1\r\n continued\r\n\r\n"),
+                 orange::http::ParseError::malformed),
+        "obs-fold continued by a space is rejected (RFC 9112 5.2)");
+    reporter.check(
+        is_error(orange::http::parse_request("GET / HTTP/1.1\r\nX-A: 1\r\n\tcontinued\r\n\r\n"),
+                 orange::http::ParseError::malformed),
+        "obs-fold continued by a tab is rejected (RFC 9112 5.2)");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\nX-A: v\n\r\n"),
+                            orange::http::ParseError::malformed),
+                   "LF without CR does not terminate a field line");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\nX-A: a\rb\r\n\r\n"),
+                            orange::http::ParseError::malformed),
+                   "a bare CR inside a value is rejected (RFC 9112 2.2)");
+    constexpr std::string_view nul_value = "GET / HTTP/1.1\r\nX-A: a\0b\r\n\r\n"sv;
+    reporter.check(nul_value.size() == 28 && nul_value[22] == '\0',
+                   "NUL fixture carries its NUL byte inside the value");
+    reporter.check(
+        is_error(orange::http::parse_request(nul_value), orange::http::ParseError::malformed),
+        "NUL in a field value is rejected");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\nX-A: a\vb\r\n\r\n"),
+                            orange::http::ParseError::malformed),
+                   "VT in a field value is rejected");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\nX-A: a\x7F"
+                                                        "b\r\n\r\n"),
+                            orange::http::ParseError::malformed),
+                   "DEL in a field value is rejected");
 
     return reporter.exit_status();
 }
