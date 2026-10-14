@@ -3,24 +3,65 @@
 #include "http_messages.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
 namespace orange::http {
 namespace {
 
-constexpr bool is_digit(char c) { return c >= '0' && c <= '9'; }
+// Byte-classification table for the request-line grammar: one 256-entry
+// bitmask built at compile time, so every classifier below is a single
+// table load encoding the same byte sets the grammar names (RFC 9110
+// 5.6.2, RFC 3986 2.1-2.3, RFC 9112 3.2).
+struct ByteClassTable {
+    enum Mask : std::uint8_t {
+        digit = 1 << 0,
+        hexdig = 1 << 1,
+        tchar = 1 << 2,
+        target_char = 1 << 3,
+    };
 
-constexpr bool is_alpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+    std::uint8_t masks[256] = {};
+
+    constexpr ByteClassTable() {
+        constexpr std::string_view tchar_specials = "!#$%&'*+-.^_`|~";
+        constexpr std::string_view target_specials = "-._~!$&'()*+,;=:@/?[]";
+        for (int i = 0; i < 256; ++i) {
+            const char c = static_cast<char>(i);
+            std::uint8_t mask = 0;
+            const bool dig = c >= '0' && c <= '9';
+            const bool alp = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+            if (dig) {
+                mask |= digit;
+            }
+            if (dig || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+                mask |= hexdig;
+            }
+            if (dig || alp || tchar_specials.find(c) != std::string_view::npos) {
+                mask |= tchar;
+            }
+            if (dig || alp || target_specials.find(c) != std::string_view::npos) {
+                mask |= target_char;
+            }
+            masks[i] = mask;
+        }
+    }
+};
+
+constexpr ByteClassTable byte_classes{};
+
+constexpr bool is_digit(char c) {
+    return (byte_classes.masks[static_cast<unsigned char>(c)] & ByteClassTable::digit) != 0;
+}
 
 constexpr bool is_hexdig(char c) {
-    return is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    return (byte_classes.masks[static_cast<unsigned char>(c)] & ByteClassTable::hexdig) != 0;
 }
 
 // RFC 9110 5.6.2 token characters: the only bytes a method may contain.
 constexpr bool is_tchar(char c) {
-    return is_digit(c) || is_alpha(c) ||
-           std::string_view("!#$%&'*+-.^_`|~").find(c) != std::string_view::npos;
+    return (byte_classes.masks[static_cast<unsigned char>(c)] & ByteClassTable::tchar) != 0;
 }
 
 // A URI character a request-target may carry outside a percent-encoding:
@@ -29,8 +70,7 @@ constexpr bool is_tchar(char c) {
 // fragment; every other byte, including SP, controls, DEL, and non-ASCII,
 // must arrive percent-encoded.
 constexpr bool is_target_char(char c) {
-    return is_digit(c) || is_alpha(c) ||
-           std::string_view("-._~!$&'()*+,;=:@/?[]").find(c) != std::string_view::npos;
+    return (byte_classes.masks[static_cast<unsigned char>(c)] & ByteClassTable::target_char) != 0;
 }
 
 bool is_valid_method(std::string_view method) {
@@ -38,24 +78,30 @@ bool is_valid_method(std::string_view method) {
 }
 
 // Checks target octets against the URI character set with well-formed
-// `%` HEXDIG HEXDIG encodings. A `truncated` target is a prefix cut off by
-// the head budget, so a percent-encoding cut at its end is acceptable.
+// `%` HEXDIG HEXDIG encodings, indexing directly instead of slicing a view
+// per escape. A `truncated` target is a prefix cut off by the head budget,
+// so a percent-encoding cut at its end is acceptable.
 bool is_valid_target_octets(std::string_view target, bool truncated) {
-    for (std::size_t i = 0; i < target.size(); ++i) {
-        if (target[i] != '%') {
-            if (!is_target_char(target[i])) {
+    const std::size_t size = target.size();
+    for (std::size_t i = 0; i < size; ++i) {
+        const char c = target[i];
+        if (c != '%') {
+            if (!is_target_char(c)) {
                 return false;
             }
             continue;
         }
-        const std::string_view encoded = target.substr(i + 1, 2);
-        if (!std::all_of(encoded.begin(), encoded.end(), is_hexdig)) {
-            return false;
-        }
-        if (encoded.size() < 2) {
+        if (i + 2 < size) {
+            if (!is_hexdig(target[i + 1]) || !is_hexdig(target[i + 2])) {
+                return false;
+            }
+            i += 2;
+        } else {
+            if (i + 1 < size && !is_hexdig(target[i + 1])) {
+                return false;
+            }
             return truncated;
         }
-        i += 2;
     }
     return true;
 }
