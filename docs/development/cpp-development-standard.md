@@ -57,7 +57,9 @@ interoperability.
 - Every public header and every public symbol receive intent-bearing
   documentation before the implementation body (AGENTS.md Core Rules);
   translation units include their own header first, then project headers,
-  then the standard library, then system headers.
+  then the standard library, then system headers — the LLVM convention
+  direction, with project headers before system headers (owner-directed
+  choice, 2026-10-14; see Rule Provenance).
 
 ## Error Handling And Contracts
 
@@ -151,6 +153,9 @@ labeled honestly as a governance choice rather than an industry norm.
 | Descriptor-owning types; leak-on-error-path is a defect | Direct corollary of R.1 (destructor release) |
 | A `.cpp` includes its own header first; headers are self-contained | C++ Core Guidelines **SF.5** (A .cpp file must include the header file(s) that defines its interface), **SF.11** (Header files should be self-contained); file naming follows the SF section |
 | Naming follows the NL section conventions | C++ Core Guidelines **NL** (Naming and Layout) section; descriptive names as in Google/LLVM conventions |
+| `.cpp` / `.hpp` suffixes | C++ Core Guidelines **SF.1** (Use a `.cpp` suffix for code files and `.h` for interface files *if your project doesn't already follow another convention*) — the qualifier sanctions a project-wide `.hpp` convention for a C++-only codebase; Guidelines issues #1408 and #2265 document the community push toward `.hpp`; lowercase-with-underscores file names per the Google C++ Style Guide |
+| `src/` + `tests/` layout with a root `CMakeLists.txt` | Aligns with the Pitchfork convention (both split and merged test placements are sanctioned; Beman's template follows the same `src`/`tests` tree). See the Pitchfork alignment record below |
+| Include order: own header, then project, then standard library, then system | Own-header-first is the universal core (SF.5 exposes hidden header dependencies at compile time). The tail order follows the **LLVM Coding Standards** direction (main header, local/project headers, then system headers); the Google C++ Style Guide orders project headers last — two recognized conventions with the same goal. Owner-directed LLVM choice, 2026-10-14 |
 | `<chrono>` end to end; no integer wall-clock arithmetic | C++ Core Guidelines **I.4** (Make interfaces precisely and strongly typed) — the guideline's own example types time units with `std::chrono` durations |
 | Concurrency rules (data races, locks, sharing) | C++ Core Guidelines **CP.1** (Assume that your code will run as part of a multi-threaded program), **CP.2** (Avoid data races), CP.3, CP.20 (Use RAII locks only), CP.21 |
 | Assertions only for local invariants; external input gets coded diagnostics | C++ Core Guidelines E-section layering — assertions express unreachable states, error handling expresses expected failures; boundary validation per `AGENTS.md` Security |
@@ -189,6 +194,26 @@ test-first development (`AGENTS.md` Core Rules), and the numeric guardrails
 inherited from the PlotWeave-calibrated baseline (ADR-0004 Q-1 owner
 determination) are orange governance decisions. They are recorded here as
 choices, not as external best practice.
+
+### Pitchfork alignment record
+
+The `src/` + `tests/` + root `CMakeLists.txt` shape of Project Layout
+aligns with the Pitchfork convention, but **Pitchfork is not adopted as a
+governing standard of this repository** — the standard's layout rules are
+self-contained, and this alignment is recorded as evidence, not as a
+dependency. Consequences of not adopting Pitchfork, recorded deliberately
+(the omission itself is a decision, owner-directed 2026-10-14):
+
+- The `include/<project>/` public-header split is not prescribed. Headers
+  live beside sources (Pitchfork's merged layout, sanctioned for
+  internal/non-installed targets); introducing an installed public library
+  would revisit this.
+- `CMakePresets.json` is not required. It remains an optional future
+  addition; adopting it, or adopting Pitchfork formally, is a governed
+  revision of this standard rather than a convenience change.
+- Pitchfork's data-layout rules were verified against the spec on
+  2026-10-14; the two sanctioned test placements (separate `tests/`, or
+  merged under `src/`) both cover orange's choice.
 
 Sources verified 2026-10-14:
 
