@@ -6,20 +6,22 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace orange::http {
 namespace {
 
-// Byte-classification table for the request-line grammar: one 256-entry
+// Byte-classification table for the request-head grammar: one 256-entry
 // bitmask built at compile time, so every classifier below is a single
 // table load encoding the same byte sets the grammar names (RFC 9110
-// 5.6.2, RFC 3986 2.1-2.3, RFC 9112 3.2).
+// 5.6.2, RFC 3986 2.1-2.3, RFC 9112 3.2, RFC 9110 5.5).
 struct ByteClassTable {
     enum Mask : std::uint8_t {
         digit = 1 << 0,
         hexdig = 1 << 1,
         tchar = 1 << 2,
         target_char = 1 << 3,
+        field_octet = 1 << 4,
     };
 
     std::uint8_t masks[256] = {};
@@ -43,6 +45,12 @@ struct ByteClassTable {
             }
             if (dig || alp || target_specials.find(c) != std::string_view::npos) {
                 mask |= target_char;
+            }
+            // VCHAR, SP, and HTAB (field-content plus its optional
+            // whitespace) and obs-text in a value (RFC 9110 5.5): every
+            // octet a field line may carry outside its CRLF.
+            if ((i >= 0x21 && i <= 0x7E) || i == 0x20 || i == 0x09 || i >= 0x80) {
+                mask |= field_octet;
             }
             masks[i] = mask;
         }
@@ -73,8 +81,19 @@ constexpr bool is_target_char(char c) {
     return (byte_classes.masks[static_cast<unsigned char>(c)] & ByteClassTable::target_char) != 0;
 }
 
-bool is_valid_method(std::string_view method) {
-    return !method.empty() && std::all_of(method.begin(), method.end(), is_tchar);
+// An octet a field line may carry outside its CRLF: field-content octets
+// (VCHAR or obs-text, RFC 9110 5.5) plus the SP/HTAB of optional
+// whitespace. A CTL — including CR and LF, which appear only as the line
+// end — DEL, or any other byte cannot be part of a field name, colon, or
+// value.
+constexpr bool is_field_octet(char c) {
+    return (byte_classes.masks[static_cast<unsigned char>(c)] & ByteClassTable::field_octet) != 0;
+}
+
+// RFC 9110 5.6.2 token: one or more tchar characters — the grammar of a
+// method and of a field-name alike.
+constexpr bool is_token(std::string_view token) {
+    return !token.empty() && std::all_of(token.begin(), token.end(), is_tchar);
 }
 
 // Checks target octets against the URI character set with well-formed
@@ -136,7 +155,7 @@ ParseError classify_unterminated(std::string_view partial) {
     }
     const std::size_t first_space = partial.find(' ');
     const std::string_view method = partial.substr(0, first_space);
-    if (!is_valid_method(method)) {
+    if (!is_token(method)) {
         return ParseError::malformed;
     }
     if (first_space == std::string_view::npos) {
@@ -156,6 +175,85 @@ ParseError classify_unterminated(std::string_view partial) {
                                          : ParseError::target_too_long;
 }
 
+// Removes the optional whitespace (OWS: SP or HTAB, RFC 9110 5.6.3) that
+// may surround a field value. Trimming is all the grammar allows: the
+// surrounding OWS is never part of the value.
+std::string_view trim_ows(std::string_view value) {
+    while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) {
+        value.remove_prefix(1);
+    }
+    while (!value.empty() && (value.back() == ' ' || value.back() == '\t')) {
+        value.remove_suffix(1);
+    }
+    return value;
+}
+
+// Field-content after OWS trimming: every remaining octet must be one a
+// value may carry; a CTL or DEL anywhere in the value is malformed.
+bool is_valid_field_value(std::string_view value) {
+    return std::all_of(value.begin(), value.end(), is_field_octet);
+}
+
+// Classifies a header block whose terminating empty line did not arrive
+// inside the remaining head budget. A tail octet that cannot appear
+// anywhere in a field line — after allowing one trailing '\r' that may be
+// the first half of a CRLF — already breaks the grammar: malformed.
+// Otherwise the head can never finish under the cap and the outcome is the
+// header-fields 431 (RFC 6585 5).
+ParseError classify_unterminated_header(std::string_view tail) {
+    if (tail.ends_with('\r')) {
+        tail.remove_suffix(1);
+    }
+    return std::all_of(tail.begin(), tail.end(), is_field_octet) ? ParseError::headers_too_long
+                                                                 : ParseError::malformed;
+}
+
+// Parses the header block that follows an already-validated request line:
+// zero or more CRLF-terminated field lines, ended by one empty line, all
+// inside the head budget left after the request line. Field names are
+// tokens (RFC 9112 5.1 rejects whitespace before the colon), values are
+// OWS-trimmed field-content, and obsolete line folding — a line opening
+// with SP or HTAB — is rejected (RFC 9112 5.2). The block spends only that
+// remaining budget: exhausted before the terminating empty line arrives,
+// classify_unterminated_header answers 431 or malformed, never a rescan of
+// unbounded input. Each line end is located by the first '\n' plus
+// one-byte look-back (see parse_request for the equivalence argument).
+std::variant<ParsedRequest, ParseError> parse_header_block(std::string_view raw,
+                                                           std::size_t head_end, Request request) {
+    std::size_t consumed = head_end;
+    while (true) {
+        const std::string_view window =
+            raw.substr(consumed, std::min(raw.size() - consumed, header_block_cap - consumed));
+        const std::size_t line_feed = window.find('\n');
+        if (line_feed == std::string_view::npos) {
+            return raw.size() >= header_block_cap ? classify_unterminated_header(window)
+                                                  : ParseError::incomplete;
+        }
+        if (line_feed == 0 || window[line_feed - 1] != '\r') {
+            return ParseError::malformed;
+        }
+        if (line_feed == 1) {
+            return ParsedRequest{std::move(request), consumed + line_feed + 1};
+        }
+        const std::string_view line = window.substr(0, line_feed - 1);
+        if (line.front() == ' ' || line.front() == '\t') {
+            // Obsolete line folding: a continuation line (RFC 9112 5.2).
+            return ParseError::malformed;
+        }
+        const std::size_t colon = line.find(':');
+        const std::string_view name = line.substr(0, colon);
+        if (colon == std::string_view::npos || !is_token(name)) {
+            return ParseError::malformed;
+        }
+        const std::string_view value = trim_ows(line.substr(colon + 1));
+        if (!is_valid_field_value(value)) {
+            return ParseError::malformed;
+        }
+        request.headers.push_back(HeaderField{std::string(name), std::string(value)});
+        consumed += line_feed + 1;
+    }
+}
+
 } // namespace
 
 // Parses the CRLF-terminated request line `method SP request-target SP
@@ -169,8 +267,8 @@ ParseError classify_unterminated(std::string_view partial) {
 // classified by classify_unterminated (never a rescan of unbounded input),
 // and while the budget lasts it is incomplete. A bare CR inside the line is
 // rejected (RFC 9112 2.2), and each field must pass its grammar (see the
-// header). Bytes after the request line are not consumed yet — header and
-// body parsing are later tasks of the T-1 ladder.
+// header). The header block after the request line is parsed by
+// parse_header_block; the body is a later task of the T-1 ladder.
 std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw) {
     const std::size_t limit = std::min(raw.size(), header_block_cap);
 
@@ -207,14 +305,13 @@ std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw) {
 
     const bool target_valid = !target.empty() && is_valid_target_octets(target, false);
     const bool version_valid = version.size() == 8 && is_version_prefix(version);
-    if (!is_valid_method(method) || !target_valid || !version_valid) {
+    if (!is_token(method) || !target_valid || !version_valid) {
         return ParseError::malformed;
     }
 
-    return ParsedRequest{
-        Request{std::string(method), std::string(target), std::string(version), {}},
-        skipped + line_feed + 1,
-    };
+    return parse_header_block(
+        raw, skipped + line_feed + 1,
+        Request{std::string(method), std::string(target), std::string(version), {}});
 }
 
 } // namespace orange::http
