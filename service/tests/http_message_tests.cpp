@@ -56,9 +56,14 @@ int main() {
 
     // Library wiring: proves the header include resolves and the
     // orange_http symbol links into this executable. No behavior is
-    // asserted yet — the first contract lands failing-first in the next
-    // task of the T-1 ladder.
+    // asserted here — behavioral contracts follow below, failing-first.
     (void)orange::http::parse_request("GET");
+
+    // First behavioral contract of the T-1 ladder: empty raw input cannot
+    // be an HTTP/1.1 request at all, so the parser must reject it with
+    // std::nullopt (http_messages.hpp, parse_request).
+    reporter.check(!orange::http::parse_request("").has_value(),
+                   "parse_request rejects empty input");
 
     return reporter.exit_status();
 }
