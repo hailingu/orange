@@ -12,6 +12,7 @@
 
 #include <cstdio>
 #include <format>
+#include <optional>
 #include <source_location>
 #include <string>
 #include <string_view>
@@ -53,14 +54,20 @@ bool is_error(const ParseOutcome &outcome, orange::http::ParseError expected) {
     return error != nullptr && *error == expected;
 }
 
-// The parsed request when the outcome holds one, else nullptr.
-const orange::http::ParsedRequest *parsed_of(const ParseOutcome &outcome) {
-    return std::get_if<orange::http::ParsedRequest>(&outcome);
+// A copy of the parsed request when the outcome holds one. Returning by
+// value keeps the result valid when `outcome` is a temporary; a pointer into
+// a temporary variant would dangle once the full-expression ends.
+std::optional<orange::http::ParsedRequest> parsed_of(const ParseOutcome &outcome) {
+    if (const auto *const parsed = std::get_if<orange::http::ParsedRequest>(&outcome)) {
+        return *parsed;
+    }
+    return std::nullopt;
 }
 
 } // namespace
 
 int main() {
+    using namespace std::string_view_literals;
     CheckReporter reporter;
 
     // --- incomplete: no line end yet, head budget not exhausted ----------
@@ -79,15 +86,56 @@ int main() {
         is_error(orange::http::parse_request("\r\n"), orange::http::ParseError::incomplete),
         "only empty lines so far is incomplete");
 
-    // --- too_large: head budget exhausted without a line end -------------
-    const std::string cap_filled(orange::http::header_block_cap, 'A');
+    // --- the request line overflows the head budget (RFC 9112 3) ---------
+    // A grammar-valid prefix is too long rather than malformed: 501 for an
+    // overlong method, 414 (MUST) for an overlong target, attributed to the
+    // longer of the two once both have started.
+    constexpr std::size_t cap = orange::http::header_block_cap;
+    reporter.check(is_error(orange::http::parse_request(std::string(cap, 'A')),
+                            orange::http::ParseError::method_too_long),
+                   "budget exhausted inside the method is method_too_long (501)");
+    reporter.check(is_error(orange::http::parse_request("GET /" + std::string(cap - 5, 'a')),
+                            orange::http::ParseError::target_too_long),
+                   "budget exhausted inside the target is target_too_long (414)");
+    reporter.check(is_error(orange::http::parse_request("GET /" + std::string(cap - 7, 'a') + "%2"),
+                            orange::http::ParseError::target_too_long),
+                   "a percent-encoding cut by the budget keeps the target too long");
     reporter.check(
-        is_error(orange::http::parse_request(cap_filled), orange::http::ParseError::too_large),
-        "cap-sized input without a line end is too_large");
+        is_error(orange::http::parse_request(std::string(cap - 12, 'A') + " / HTTP/1.1\r\n"),
+                 orange::http::ParseError::method_too_long),
+        "budget exhausted in the version blames the longer field: the method");
+
+    const std::string line_at_cap = "GET /" + std::string(cap - 16, 'a') + " HTTP/1.1\r\n";
+    const auto at_cap = parsed_of(orange::http::parse_request(line_at_cap));
+    reporter.check(at_cap && at_cap->consumed == cap,
+                   "a request line ending on the budget's last byte parses");
+    reporter.check(is_error(orange::http::parse_request("GET /" + std::string(cap - 15, 'a') +
+                                                        " HTTP/1.1\r\n"),
+                            orange::http::ParseError::target_too_long),
+                   "a request line ending one byte past the budget is target_too_long");
+
+    // An overflowing prefix that already breaks the grammar stays malformed.
+    reporter.check(is_error(orange::http::parse_request("GE(T /" + std::string(cap, 'a')),
+                            orange::http::ParseError::malformed),
+                   "overflow after an invalid method byte is malformed");
+    reporter.check(is_error(orange::http::parse_request("GET /a\rb" + std::string(cap, 'a')),
+                            orange::http::ParseError::malformed),
+                   "overflow after a bare CR is malformed");
+    reporter.check(is_error(orange::http::parse_request("GET /" + std::string(cap - 20, 'a') +
+                                                        " banana-banana-banana"),
+                            orange::http::ParseError::malformed),
+                   "overflow inside an invalid version is malformed");
+    std::string empty_lines;
+    while (empty_lines.size() < cap) {
+        empty_lines += "\r\n";
+    }
+    reporter.check(
+        is_error(orange::http::parse_request(empty_lines), orange::http::ParseError::malformed),
+        "empty lines exhausting the budget are malformed, not a header overflow");
 
     // --- parses: fields, validation breadth, consumed bytes --------------
     const auto posted = orange::http::parse_request("POST /api/echo HTTP/1.1\r\n");
-    reporter.check(parsed_of(posted) != nullptr, "well-formed request line parses");
+    reporter.check(parsed_of(posted).has_value(), "well-formed request line parses");
     reporter.check(parsed_of(posted) && parsed_of(posted)->request.method == "POST",
                    "request-line method parses into its field");
     reporter.check(parsed_of(posted) && parsed_of(posted)->request.target == "/api/echo",
@@ -97,19 +145,18 @@ int main() {
     reporter.check(parsed_of(posted) && parsed_of(posted)->consumed == 25,
                    "consumed spans the request line and its CRLF");
 
-    const auto *const future = parsed_of(orange::http::parse_request("GET / HTTP/2.0\r\n"));
-    reporter.check(future != nullptr && future->request.version == "HTTP/2.0",
+    const auto future = parsed_of(orange::http::parse_request("GET / HTTP/2.0\r\n"));
+    reporter.check(future && future->request.version == "HTTP/2.0",
                    "grammar-valid future version parses; serving policy is a later layer");
 
-    const auto *const custom =
-        parsed_of(orange::http::parse_request("!CUSTOM! /a%20b?q=1 HTTP/1.1\r\n"));
-    reporter.check(custom != nullptr && custom->request.method == "!CUSTOM!",
+    const auto custom = parsed_of(orange::http::parse_request("!CUSTOM! /a%20b?q=1 HTTP/1.1\r\n"));
+    reporter.check(custom && custom->request.method == "!CUSTOM!",
                    "tchar-only custom method parses");
 
-    const auto *const skipped = parsed_of(orange::http::parse_request("\r\nGET / HTTP/1.1\r\n"));
-    reporter.check(skipped != nullptr && skipped->request.method == "GET",
+    const auto skipped = parsed_of(orange::http::parse_request("\r\nGET / HTTP/1.1\r\n"));
+    reporter.check(skipped && skipped->request.method == "GET",
                    "a leading empty line is ignored (RFC 9112 2.2)");
-    reporter.check(skipped != nullptr && skipped->consumed == 18,
+    reporter.check(skipped && skipped->consumed == 18,
                    "consumed includes the skipped leading empty line");
 
     // --- malformed: the bytes cannot be a request line --------------------
@@ -146,12 +193,53 @@ int main() {
     reporter.check(is_error(orange::http::parse_request("GET / http/1.1\r\n"),
                             orange::http::ParseError::malformed),
                    "HTTP-name is case-sensitive");
-    reporter.check(is_error(orange::http::parse_request("GET /a\x00b HTTP/1.1\r\n"),
+    // The fixture is a string_view literal with an explicit NUL byte: a
+    // `\x00b` escape would swallow the 'b' as a hex digit (yielding VT), and
+    // a plain const char* would be truncated at the NUL by strlen.
+    constexpr std::string_view nul_line = "GET /a\0b HTTP/1.1\r\n"sv;
+    reporter.check(nul_line.size() == 19 && nul_line[6] == '\0',
+                   "NUL fixture carries its NUL byte inside the target");
+    reporter.check(
+        is_error(orange::http::parse_request(nul_line), orange::http::ParseError::malformed),
+        "NUL in the target is rejected");
+    reporter.check(is_error(orange::http::parse_request("GET /a\vb HTTP/1.1\r\n"),
                             orange::http::ParseError::malformed),
-                   "NUL in the target is rejected");
+                   "VT in the target is rejected");
     reporter.check(is_error(orange::http::parse_request("GET /a\tb HTTP/1.1\r\n"),
                             orange::http::ParseError::malformed),
                    "TAB in the target is rejected");
+
+    // Target octets follow the URI character set every request-target form
+    // is built from (RFC 9112 3.2, RFC 3986 2.1-2.3).
+    reporter.check(is_error(orange::http::parse_request("GET /a\x7F HTTP/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "DEL in the target is rejected");
+    reporter.check(is_error(orange::http::parse_request("GET /caf\xC3\xA9 HTTP/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "raw non-ASCII bytes in the target are rejected");
+    reporter.check(is_error(orange::http::parse_request("GET /a#frag HTTP/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "a fragment is not part of any request-target form");
+    reporter.check(is_error(orange::http::parse_request("GET /a<b> HTTP/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "characters outside the URI set are rejected");
+    reporter.check(is_error(orange::http::parse_request("GET /a%G1 HTTP/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "percent-encoding requires two hex digits");
+    reporter.check(is_error(orange::http::parse_request("GET /a%2 HTTP/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "a truncated percent-encoding in a complete line is malformed");
+
+    const auto asterisk = parsed_of(orange::http::parse_request("OPTIONS * HTTP/1.1\r\n"));
+    reporter.check(asterisk && asterisk->request.target == "*", "asterisk-form target parses");
+    const auto absolute =
+        parsed_of(orange::http::parse_request("GET http://example.com:8080/a?b=c HTTP/1.1\r\n"));
+    reporter.check(absolute && absolute->request.target == "http://example.com:8080/a?b=c",
+                   "absolute-form target parses");
+    const auto authority =
+        parsed_of(orange::http::parse_request("CONNECT example.com:443 HTTP/1.1\r\n"));
+    reporter.check(authority && authority->request.target == "example.com:443",
+                   "authority-form target parses");
 
     return reporter.exit_status();
 }

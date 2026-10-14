@@ -52,7 +52,7 @@ std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw) {
     const std::string_view window = raw.substr(skipped, limit - skipped);
     const std::size_t line_feed = window.find('\n');
     if (line_feed == std::string_view::npos) {
-        return raw.size() >= header_block_cap ? ParseError::too_large : ParseError::incomplete;
+        return ParseError::incomplete;
     }
     if (line_feed == 0 || window[line_feed - 1] != '\r') {
         return ParseError::malformed;

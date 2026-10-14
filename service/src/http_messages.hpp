@@ -17,23 +17,29 @@
 namespace orange::http {
 
 // The whole head — request line and header block — shares this budget:
-// ADR-0003's 8 KiB header cap, answered with HTTP 431 when exceeded. Every
-// line search is bounded by it, so a client that never completes a line
-// cannot make the caller rescan unbounded input.
+// ADR-0003's 8 KiB header cap. Every line search is bounded by it, so a
+// client that never completes a line cannot make the caller rescan
+// unbounded input. A request line that cannot end inside the budget is
+// classified per RFC 9112 section 3 (see ParseError); the header-field
+// overflow outcome (431) arrives with header parsing, a later T-1 task.
 inline constexpr std::size_t header_block_cap = 8192;
 
 // Why a parse stopped without a request. The event loop must treat the
-// outcomes differently: read more bytes, answer 400, or answer 431.
+// outcomes differently: read more bytes, or answer the noted status.
 enum class ParseError {
     // No line end within the received bytes and the head budget is not yet
     // exhausted: the client may still be sending.
     incomplete,
-    // The bytes cannot be a request line: token structure, a bare CR or LF,
-    // or a field failing its RFC 9112 grammar (sections 2.2 and 3).
+    // The bytes cannot be a request line (HTTP 400, RFC 9112 2.2): token
+    // structure, a bare CR or LF, a field failing its grammar, or empty
+    // lines alone exhausting the head budget.
     malformed,
-    // No line end within the head budget, so further bytes cannot fit the
-    // declared cap (HTTP 431).
-    too_large,
+    // The request line cannot end inside the head budget and the method is
+    // the longer of method and target (HTTP 501, RFC 9112 3 SHOULD).
+    method_too_long,
+    // The request line cannot end inside the head budget and the target is
+    // at least as long as the method (HTTP 414, RFC 9112 3 MUST).
+    target_too_long,
 };
 
 // One parsed HTTP/1.1 request. The request-line fields are owned copies of
@@ -43,8 +49,9 @@ enum class ParseError {
 struct Request {
     // The request method token, containing only RFC 9110 tchar characters.
     std::string method;
-    // The request target as received, containing no space or ASCII control
-    // byte; validating the full origin-form grammar is a later task.
+    // The request target as received, built only from URI characters with
+    // well-formed percent-encoding (RFC 9112 3.2, RFC 3986 2.1-2.3).
+    // Distinguishing the four request-target forms belongs to dispatch.
     std::string target;
     // The HTTP version token, matching `HTTP/DIGIT.DIGIT` (RFC 9112 2.5).
     // Serving-policy for unsupported versions belongs to a later layer.
@@ -64,12 +71,12 @@ struct ParsedRequest {
 // be `method SP request-target SP HTTP-version CRLF` with three non-empty
 // tokens, each passing its field validation (see Request). Returns
 // ParseError::incomplete when no line end has arrived within the budget,
-// ParseError::too_large when the budget is exhausted without one, and
-// ParseError::malformed for every grammar or field violation, including a
-// bare CR inside the line and an LF not preceded by CR. Bytes after the
-// request line are not consumed yet — header and body parsing are later
-// tasks of the ADR-0003 T-1 ladder.
-std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw);
+// ParseError::method_too_long or ParseError::target_too_long when the budget
+// is exhausted by a grammar-valid line prefix, and ParseError::malformed for
+// every grammar or field violation, including a bare CR inside the line and
+// an LF not preceded by CR. Bytes after the request line are not consumed
+// yet — header and body parsing are later tasks of the ADR-0003 T-1 ladder.
+[[nodiscard]] std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw);
 
 } // namespace orange::http
 
