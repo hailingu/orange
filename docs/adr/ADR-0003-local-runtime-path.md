@@ -2,17 +2,16 @@
 
 ## Metadata [Required]
 
-- **Decision Status**: Accepted
-- **Implementation Status**: In Progress
+- **Decision Status**: Proposed
+- **Implementation Status**: Not Started
 - **Date**: 2026-10-13
 - **Author**: @zcode
 - **Decision Owner**: @hailingu
 - **Required Approver**: @hailingu
 - **Record Scope**: Project
-- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: @hailingu
-- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: 2026-10-13T17:02:57Z
-- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Approve
-- **Approval Context Revision [Optional — informational and non-binding]**: 82a585e556c648ceacfbd86a73e107dbb422427e — immutable revision whose record content equals the content present for approval; the acceptance edits were made after approval within the same change
+- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — reapproval required
+- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — reapproval required
+- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — reapproval required
 - **Rejector [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
 - **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
 - **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
@@ -86,12 +85,17 @@ In scope:
   `{"status":"ok"}`; static file serving from `web/dist/` at `/` with a
   small MIME map; HTTP 405 for unsupported methods and 404 for unknown
   paths; an 8 KiB header-block cap answering 431 and a 1 MiB body cap
-  answering 413; and a single-threaded `poll()` event-loop connection model:
+  answering 413. Each 431/413 response includes `Connection: close`; the
+  server completes that rejection response and closes the connection without
+  processing a following request on it. The client reconnects for subsequent
+  requests. Ordinary valid requests retain keep-alive. A single-threaded `poll()`
+  event-loop connection model:
   one thread multiplexes every open socket through readiness-driven reads
   and writes, so several connections (for example, multiple browser tabs)
   are served concurrently without threads or head-of-line blocking, while
   the exercised and tested client model remains one persistent client on
-  one stable connection. Idle connections are closed after the declared
+  one stable connection for valid keep-alive cycles, with reconnection after
+  a 431/413 rejection. Idle connections are closed after the declared
   5-second timeout to bound descriptor use.
 - TLS: an `https://127.0.0.1:8443` listener terminated through OpenSSL
   (exactly pinned; crypto primitives are never hand-rolled — only the
@@ -127,16 +131,6 @@ The authorized fallback, `cpp-httplib` exactly pinned, is added only when the
 fallback trigger recorded in Decision fires; it is not part of the default
 build.
 
-Out of scope:
-
-- Any domain capability: expression evaluation, matrix computation, content,
-  exercises, progress, or tutoring.
-- Compute endpoints beyond the health route, request-payload limits, or
-  overload-rejection behavior (owned by the domain candidates).
-- Client tooling beyond `tsc` (bundler, dev server, framework choices belong
-  to the presentation candidates).
-- CI, packaging, deployment tooling, and any remote or LAN exposure.
-
 ## Tensions, Constraints, And Open Questions [Required]
 
 ### Identified Tensions [Conditionally Required — competing goals or trade-offs exist]
@@ -161,6 +155,7 @@ Out of scope:
 | Q-1 | Which HTTP layer serves the loopback service? | @hailingu | 2026-10-13 | Resolved | Owner direction 2026-10-13: hand-written POSIX socket HTTP server, because learning the platform is a stated product purpose (D-03); cpp-httplib stays the exactly pinned fallback under Decision's recorded trigger |
 | Q-2 | Which ports are the stable origins? | @hailingu | 2026-10-13 | Resolved | `https://127.0.0.1:8443` is the documented stable origin (self-signed certificate, accepted once per browser profile); `http://127.0.0.1:8080` remains as the plain comparison endpoint used by the test suite; a port conflict produces a coded startup error rather than a silent alternative port |
 | Q-3 | Which HTTP features belong to the learning subset? | @hailingu | 2026-10-13 | Resolved | Owner direction 2026-10-13: keep-alive, chunked transfer (both directions), single-range requests, TLS, and request-body parsing are all in; HTTP/2, WebSockets, compression, conditional requests, and multi-range responses stay out until this ADR is revised |
+| Q-4 | After a 413/431 rejection, reuse the connection or reconnect? | @hailingu | 2026-10-15 | Resolved | Owner answer in this session: respond and close the connection; subsequent requests use a new connection. This changes the previous resource-risk acceptance and requires reapproval |
 
 ## Decision Drivers [Required]
 
@@ -287,7 +282,7 @@ or `N/A — <specific reason>`.
 
 | ID | Objective or deliverable | Included scope | Status | Actual implementation evidence |
 | --- | --- | --- | --- | --- |
-| T-1 | Hand-written HTTP/1.1 transport core, developed test-first | `service/` CMake project and POSIX socket code: single-threaded `poll()` event loop with readiness-driven read/write state machines, keep-alive connection lifecycle with the declared 5-second idle timeout, request-line/header/body parsing (Content-Length and chunked decode), response framing (Content-Length and chunked encode), the 8 KiB header cap (431) and 1 MiB body cap (413); CTest unit suite for every behavior, with one persistent client completing multiple request-response cycles on a single stable connection as the exercised client model | In Progress | Task 1 scaffold landed 2026-10-14 in this change: `service/CMakeLists.txt`, `service/tests/http_message_tests.cpp` (in-tree `CheckReporter` harness), and root `.clang-format`; harness wiring observed deliberately failing then passing through the verification trio (Apple clang 21.0.0, CMake 4.2.3); task 2 scaffold 2026-10-14: the `orange_http` library (namespace `orange::http`, `parse_request` declaration with a placeholder body) is linked into the suite wiring-only, asserting no behavior; first behavioral contract 2026-10-14: empty-input rejection landed failing-first in commit 12b0e43 (`parse_request("")` must yield `std::nullopt`, observed red at `http_message_tests.cpp:65` with ctest exit 8) and turned green with the minimal rejection implementation in the same change as this evidence update — suite 1/1 passing (ctest exit 0), clang-format clean, no build warnings; request-line contract 2026-10-14: commit 3faf3d9 asserts `method SP request-target SP HTTP-version CRLF` with three non-empty tokens parsed into owned `Request::method/target/version` fields plus seven malformed-line rejections (observed red: 10 of 11 new checks failing, ctest exit 8), turned green by the request-line parser in the same change as this evidence update (suite 1/1 passing, clang-format clean, no build warnings; bytes after the request line remain unconsumed pending the header task); terminator-search swap 2026-10-14: characterization checks landed first in commit 211c62b pinning that tokens cannot cross the first CRLF and that a bare '\r' stays inside its token, then the line-end location became `find('\n')` plus one-byte look-back in the following commit — behavior-equivalent by a 13-input cross-check (0 mismatches, this session) and the 15-check suite green throughout; rationale: a single-char search has no restart loop, eliminating the measured ~23 µs memchr-restart degradation on CR-dense input at the 8 KiB cap; error-classifying contract 2026-10-14: commit e739c68 lands the `std::variant<ParsedRequest, ParseError>` suite (incomplete/malformed/to_large plus consumed bytes, RFC 9112 2.2/3 expectations; observed red 23 of 28) and the implementing commit delivers it — every line search bounded by `header_block_cap` so an unfinished line can never force unbounded rescans, leading empty lines ignored, bare CR rejected, method validated as tchar, version as `HTTP/DIGIT.DIGIT` with case-sensitive HTTP-name, target free of SP/CTL bytes; suite 28/28 green, clang-format clean, no build warnings; owner-review RFC 9112 conformance 2026-10-14: commit db2856f lands the red suite (observed red 14 of 48 checks, ctest exit 8) and the implementing commit turns it green — a request line that cannot end inside `header_block_cap` is classified per RFC 9112 3 as `method_too_long` (501) or `target_too_long` (414 MUST), blamed on the longer field, while a grammar-breaking prefix, a bare CR, or empty lines alone exhausting the budget stay `malformed`; the request-line contract no longer emits the 431-mapped `too_large` (431 belongs to header parsing); target octets follow the URI character set with well-formed percent-encoding (RFC 9112 3.2, RFC 3986 2.1-2.3); `parse_request` is `[[nodiscard]]`; test defects fixed: the NUL fixture encoded VT (0x0B) and `parsed_of` dangled into a temporary variant (ASan stack-use-after-scope); suite 48/48 green under the verification trio and under ASan/UBSan, a 200,000-input seeded sanitizer fuzz run clean, clang-format clean, no build warnings; lookup-table refactor 2026-10-14: after benchmarking the external SIMD/LUT contribution (three-way variant cross-check, 16 inputs 0 mismatches), the byte classifiers moved from per-call `string_view::find` set searches to one compile-time 256-entry bitmask table and the percent-encoding check indexes directly instead of slicing a view per escape — measured at -O2 on the host arm64 toolchain: short valid 31.4→23.9 ns, 200-byte punctuation target 419→126 ns, 8 KiB overflow classification 4651→2559 ns, CR-dense unchanged; behavior identical (cross-check plus the 48-check suite green). The contribution's zero-copy `string_view` Request variant measured faster still (14.3 ns short valid) and stays out under the owned-copy contract; its hand-AVX2 branch is inert on the declared arm64 toolchain (no Rosetta on this host), where `std::find`'s NEON-backed memchr remains the search engine; header-block contract 2026-10-14: commit f9e6364 asserts the header-block suite (zero-field heads completing through the terminating empty line, field-line collection with OWS trimming, order/duplicate/case preservation, obs-text values, 431 boundary and grammar-broken overflow tails, obs-fold/colon/CTL rejections, incomplete partials; observed red 36 of 84 checks, ctest exit 8) and the implementing commit turns it green — the block after a parsed request line parses as CRLF-terminated `field-name: OWS field-value OWS` lines ended by one empty line (RFC 9112 5) into owned `Request::headers` entries, names are tokens so RFC 9112 5.1's whitespace-before-colon rule falls out of the token grammar, values are OWS-trimmed field-content with obs-text allowed (RFC 9110 5.5), obs-fold is rejected (RFC 9112 5.2), and the block spends only the head budget remaining after the request line (`header_block_cap - ParsedRequest::consumed`), owning the 431 `headers_too_long` outcome (RFC 6585 5) — discharging the recorded later-task item (1) and confirming the shared request-line/header budget against Scope; suite 84/84 green via the verification trio (Apple clang 21.0.0, CMake 4.2.3), clean under ASan/UBSan, clang-format clean, no build warnings |
+| T-1 | Hand-written HTTP/1.1 transport core, developed test-first | `service/` CMake project and POSIX socket code: single-threaded `poll()` event loop with readiness-driven read/write state machines, keep-alive connection lifecycle with the declared 5-second idle timeout, request-line/header/body parsing (Content-Length and chunked decode), response framing (Content-Length and chunked encode), the 8 KiB header cap (431) and 1 MiB body cap (413), each answered with `Connection: close` followed by connection closure; CTest unit suite for every behavior, with one persistent client completing multiple request-response cycles on a single stable connection as the exercised client model for valid requests, reconnecting after 431/413 | Not Started | Historical evidence under the invalidated approval — reverify after reapproval. Body and incremental decoder implemented in `f558e62`; see Request-Body And Incremental Decoder Evidence. Task 1 scaffold landed 2026-10-14 in this change: `service/CMakeLists.txt`, `service/tests/http_message_tests.cpp` (in-tree `CheckReporter` harness), and root `.clang-format`; harness wiring observed deliberately failing then passing through the verification trio (Apple clang 21.0.0, CMake 4.2.3); task 2 scaffold 2026-10-14: the `orange_http` library (namespace `orange::http`, `parse_request` declaration with a placeholder body) is linked into the suite wiring-only, asserting no behavior; first behavioral contract 2026-10-14: empty-input rejection landed failing-first in commit 12b0e43 (`parse_request("")` must yield `std::nullopt`, observed red at `http_message_tests.cpp:65` with ctest exit 8) and turned green with the minimal rejection implementation in the same change as this evidence update — suite 1/1 passing (ctest exit 0), clang-format clean, no build warnings; request-line contract 2026-10-14: commit 3faf3d9 asserts `method SP request-target SP HTTP-version CRLF` with three non-empty tokens parsed into owned `Request::method/target/version` fields plus seven malformed-line rejections (observed red: 10 of 11 new checks failing, ctest exit 8), turned green by the request-line parser in the same change as this evidence update (suite 1/1 passing, clang-format clean, no build warnings; bytes after the request line remain unconsumed pending the header task); terminator-search swap 2026-10-14: characterization checks landed first in commit 211c62b pinning that tokens cannot cross the first CRLF and that a bare '\r' stays inside its token, then the line-end location became `find('\n')` plus one-byte look-back in the following commit — behavior-equivalent by a 13-input cross-check (0 mismatches, this session) and the 15-check suite green throughout; rationale: a single-char search has no restart loop, eliminating the measured ~23 µs memchr-restart degradation on CR-dense input at the 8 KiB cap; error-classifying contract 2026-10-14: commit e739c68 lands the `std::variant<ParsedRequest, ParseError>` suite (incomplete/malformed/to_large plus consumed bytes, RFC 9112 2.2/3 expectations; observed red 23 of 28) and the implementing commit delivers it — every line search bounded by `header_block_cap` so an unfinished line can never force unbounded rescans, leading empty lines ignored, bare CR rejected, method validated as tchar, version as `HTTP/DIGIT.DIGIT` with case-sensitive HTTP-name, target free of SP/CTL bytes; suite 28/28 green, clang-format clean, no build warnings; owner-review RFC 9112 conformance 2026-10-14: commit db2856f lands the red suite (observed red 14 of 48 checks, ctest exit 8) and the implementing commit turns it green — a request line that cannot end inside `header_block_cap` is classified per RFC 9112 3 as `method_too_long` (501) or `target_too_long` (414 MUST), blamed on the longer field, while a grammar-breaking prefix, a bare CR, or empty lines alone exhausting the budget stay `malformed`; the request-line contract no longer emits the 431-mapped `too_large` (431 belongs to header parsing); target octets follow the URI character set with well-formed percent-encoding (RFC 9112 3.2, RFC 3986 2.1-2.3); `parse_request` is `[[nodiscard]]`; test defects fixed: the NUL fixture encoded VT (0x0B) and `parsed_of` dangled into a temporary variant (ASan stack-use-after-scope); suite 48/48 green under the verification trio and under ASan/UBSan, a 200,000-input seeded sanitizer fuzz run clean, clang-format clean, no build warnings; lookup-table refactor 2026-10-14: after benchmarking the external SIMD/LUT contribution (three-way variant cross-check, 16 inputs 0 mismatches), the byte classifiers moved from per-call `string_view::find` set searches to one compile-time 256-entry bitmask table and the percent-encoding check indexes directly instead of slicing a view per escape — measured at -O2 on the host arm64 toolchain: short valid 31.4→23.9 ns, 200-byte punctuation target 419→126 ns, 8 KiB overflow classification 4651→2559 ns, CR-dense unchanged; behavior identical (cross-check plus the 48-check suite green). The contribution's zero-copy `string_view` Request variant measured faster still (14.3 ns short valid) and stays out under the owned-copy contract; its hand-AVX2 branch is inert on the declared arm64 toolchain (no Rosetta on this host), where `std::find`'s NEON-backed memchr remains the search engine; header-block contract 2026-10-14: commit f9e6364 asserts the header-block suite (zero-field heads completing through the terminating empty line, field-line collection with OWS trimming, order/duplicate/case preservation, obs-text values, 431 boundary and grammar-broken overflow tails, obs-fold/colon/CTL rejections, incomplete partials; observed red 36 of 84 checks, ctest exit 8) and the implementing commit turns it green — the block after a parsed request line parses as CRLF-terminated `field-name: OWS field-value OWS` lines ended by one empty line (RFC 9112 5) into owned `Request::headers` entries, names are tokens so RFC 9112 5.1's whitespace-before-colon rule falls out of the token grammar, values are OWS-trimmed field-content with obs-text allowed (RFC 9110 5.5), obs-fold is rejected (RFC 9112 5.2), and the block spends only the head budget remaining after the request line (`header_block_cap - ParsedRequest::consumed`), owning the 431 `headers_too_long` outcome (RFC 6585 5) — discharging the recorded later-task item (1) and confirming the shared request-line/header budget against Scope; suite 84/84 green via the verification trio (Apple clang 21.0.0, CMake 4.2.3), clean under ASan/UBSan, clang-format clean, no build warnings |
 | T-2 | Serving features and TLS listener, developed test-first | Route dispatch, `GET /api/health`, `POST /api/echo` with chunked responses, static serving with MIME map and single-range 206/416, 405/404, loopback bind on both listeners, and the OpenSSL-terminated `https://127.0.0.1:8443` listener with first-run self-signed certificate; CTest integration suite plus `curl`-based end-to-end checks over both plaintext and TLS | Not Started | Pending |
 | T-3 | TypeScript status page, one documented run path, and verification evidence | `web/` npm project with pinned `typescript`, `src/status.ts` and its `node --test` suite, `tsc` build to `web/dist/`, `scripts/dev.sh` with first-run certificate generation, root `README.md` run section, repository-root verification runs of the acceptance checks | Not Started | Pending |
 
@@ -300,7 +295,10 @@ never committed)
 | Path | Stable symbol or contract anchor | Key code excerpt, when needed | Purpose | Source revision |
 | --- | --- | --- | --- | --- |
 | `service/src/http_server.cpp` | `serve_loopback(port, handler)` | N/A — stable symbol or anchor is sufficient | Owns the single-threaded `poll()` event loop and the per-connection readiness-driven read/write state machines with the 5-second idle timeout | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
-| `service/src/http_messages.cpp` | `parse_request()` and `write_response()` | N/A — stable symbol or anchor is sufficient | Own the wire format: request-line/header/body parsing with Content-Length and chunked decoding, the 8 KiB and 1 MiB caps, and response framing with the chunked encoder | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
+| `service/src/http_messages.cpp` | `orange::http::parse_request()` | N/A — stable symbol or anchor is sufficient | Head-only owned parsing with the 8 KiB cap; shared grammar also validates incremental head lines | `f558e62` — head parser implemented; full socket integration pending |
+| `service/src/http_request_decoder.cpp` | `orange::http::RequestDecoder::feed()`, `orange::http::RequestDecoder::reset()`, `orange::http::parse_message()` | N/A — stable symbols are sufficient | Own fragment progress, body decoding, pipeline boundaries and the 1 MiB decoded cap; terminal errors await connection-level rejection | `f558e62` — decoder implemented; network error-response closure pending |
+| `service/src/http_body_framing.cpp`, `service/src/http_chunk_line.cpp` | `orange::http::detail::body_framing()`, `orange::http::detail::ChunkLine::feed()` | N/A — stable symbols are sufficient | Resolve CL/TE once and validate chunk metadata with finite storage | `f558e62` |
+| `service/src/http_response.cpp` | `orange::http::write_response()` | N/A — stable symbol is sufficient | Planned Content-Length/chunked response framing, including `Connection: close` rejection responses | Planned revision 2026-10-15 — replace with the implementing commit before completion |
 | `service/src/tls.cpp` | `serve_tls()` | N/A — stable symbol or anchor is sufficient | Terminates TLS through the pinned OpenSSL library on the https listener using the generated self-signed certificate; crypto primitives are never hand-rolled | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
 | `service/src/routes.cpp` | `handle_request()` | N/A — stable symbol or anchor is sufficient | Dispatches health, echo, static-with-single-range (206/416), and 405/404 outcomes | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
 | `web/src/status.ts` | `renderServiceStatus()` | N/A — stable symbol or anchor is sufficient | Fetches `/api/health` and renders the observed status with a fail-fast connection-error state | Planned pre-commit state 2026-10-13 — replace with the implementing commit before completion |
@@ -314,7 +312,7 @@ replaced. Rollback is deleting the added paths.
 
 | Rule and affected unit | Measured value or condition | Rationale | Risks | Compensating controls | Owner | Removal, review, or permanent rationale | Verification evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| N/A — no repository software-engineering standard exists yet; development follows the AGENTS.md test-first rule and exactly pinned dependencies, and no rule is exceeded or waived | N/A — no standard to measure against | N/A | N/A | N/A | N/A | N/A | N/A |
+| Executable-unit 80-code-line cap: existing `service/tests/http_message_tests.cpp::main()` | At `f558e62`, 329 physical lines / 307 code lines excluding comment-only lines; body tests are separate, below the thresholds | Temporary retention of the preexisting characterization harness; this change does not modify it | Review difficulty in the existing head suite | Existing exhaustive head/OWS checks, ASan/UBSan and source differential coverage; new body cases live in a separate suite | @hailingu | Decompose the existing main before T-1 completion; this proposed exception grants no waiver for new or expanded oversized units | Point-in-time measurement 2026-10-15; head suite is unchanged and passes |
 
 ### Request-Head Optimization Evidence [Optional]
 
@@ -552,6 +550,115 @@ requirement, acceptance check, or status changes. The full transport task
 remains unfinished. Disposable verification outputs are deleted, preserving
 existing build metadata; no reusable artifact is retained or promoted.
 
+### Request-Body And Incremental Decoder Evidence [Optional]
+
+Historical implementation evidence from 2026-10-15, completed under the prior
+Accepted decision before its connection-rejection policy was revised. This
+section does not satisfy revised acceptance checks until they are rerun after
+reapproval. T-1 remains unfinished: response encoding and real socket/event-loop
+integration are absent, as are T-2 and T-3. Earlier optimization sections remain
+historical experiment records; consolidate their summary when T-1 is complete.
+
+- Red `2f11b19`: the three fixed-length body checks fail as expected (CTest
+  exit 8); minimal implementation `f4f11b9` makes both suites pass.
+- Red `8cd704a`: framing, chunked and fragment tests produce 668 expected
+  failures against the initial implementation (CTest exit 8).
+- Red `6006103`: additional trailing-BWS and allocation-failure regressions
+  are observed failing before their fixes (five failures, CTest exit 8).
+- Green implementation: `f558e62ae4fcf8c48afe20c2995f17a74e1fa6fd`;
+  `service/src/http_request_decoder.cpp` blob
+  `8b4a182fbfe47fa8aaabc55342019094292193be`,
+  `service/tests/http_request_decoder_tests.cpp` blob
+  `a8346ec88cf888e78021319b007f20ec9b16cc4f`, and shared head implementation
+  `service/src/http_messages.cpp` blob
+  `12587f8ab9da9a74d3d314d116490c3f3ea29dfb`.
+
+`parse_request` retains its head-only interface and owned fields. The new
+`parse_message` completes an owned head/body message; `RequestDecoder::feed`
+accepts only new fragments and reports the portion consumed from that fragment.
+`ParsedMessage::consumed` includes chunk framing and discarded trailers and
+excludes subsequent pipelined input. A decoder retains terminal errors until
+explicit reset, and completed decoders consume no further input until reset.
+
+Framing grammar references: [RFC 9112 section 6](https://www.rfc-editor.org/rfc/rfc9112.html#section-6)
+and [section 7.1](https://www.rfc-editor.org/rfc/rfc9112.html#section-7.1).
+
+The implementation resolves framing once: case-insensitive CL/TE field names,
+identical normalized decimal CL values across duplicate/list fields, no CL/TE
+ambiguity, one final chunked coding, and 501-mapped unsupported preceding
+codings. It accepts binary body octets, validates chunk extensions including
+quoted-pairs and BWS, discards validated trailers without merging them into the
+head, and checks decimal/hexadecimal sizes without integer overflow. The
+1 MiB cap counts decoded content across all chunks. No additional metadata
+length policy was introduced: extensions and trailers retain finite grammar
+state rather than their text. A future event loop still owns deadlines and
+connection closure. Allocation failure returns a sticky 500-mapped
+`resource_exhausted` value, with no reusable input boundary.
+
+Fragmented heads retain at most the 8 KiB head payload and saved line progress;
+complete lines are validated once as they arrive. The final bounded head parse
+constructs owned fields once. Complete heads in the first feed use the original
+parser directly. Shared request-line/field-line grammar and octet predicates
+prevent separate incremental grammar definitions. Body content is appended in
+bulk and chunk/trailer metadata is processed once per octet. Thus decoding work
+is linear in wire bytes; string capacity overhead is implementation-dependent
+and the decoded-content cap is not a claim of a 1 MiB total memory footprint.
+
+Configured verification from the repository root:
+
+- `cmake -S service -B service/build` — exit 0.
+- `cmake --build service/build` — exit 0, zero warnings.
+- `ctest --test-dir service/build --output-on-failure` — exit 0, 2/2 suites.
+- Direct `-O2 -Wall -Wextra` and ASan/UBSan runs of the decoder suite — exit 0,
+  5,105 checks, zero failures and no sanitizer findings; the existing head
+  suite also passes under ASan/UBSan.
+- Head comparison against `e0ebbb1`, checking all owned fields, errors and
+  consumed counts: 67,430 cases, seed `0x48454144`, zero mismatches.
+- Sanitized one-shot/fragment comparison: 108,416 cases, seed `0x424F4459`,
+  all prefixes of six fixtures plus 100,000 mutations/arbitrary byte strings,
+  zero mismatches and no sanitizer findings. This checks transport-split
+  equivalence rather than supplying an independent framing oracle; the suite
+  separately uses 400 seeded fixed/chunked fixtures with known binary content.
+
+Local arm64 Apple clang 21 `-O2` measurements below compare two calling models
+using the same final source: repeatedly parse the cumulative prefix, or feed
+only new bytes to one decoder. Seven alternating samples, median microseconds
+per complete message, `steady_clock`, no LTO, loop counts respectively
+100/100/100/30/100/1000/15/15. Long-head fixtures contain one field; dense-head
+fixtures contain 64 fields with 100-byte values. Bodies contain 256 KiB of `x`.
+The head baseline calls `parse_request`; body baselines call `parse_message`.
+These are synthetic decoder measurements, not service throughput or network
+results, and not a commit-before/after body benchmark.
+
+| Fixture | Wire bytes | Fragment bytes | Cumulative parsing (µs) | Incremental feed (µs) | Ratio |
+| --- | --- | --- | --- | --- | --- |
+| Long head | 1,025 | 1 | 43.860 | 15.525 | 2.83× |
+| Long head | 4,097 | 1 | 242.149 | 41.040 | 5.90× |
+| Long head | 8,001 | 1 | 751.969 | 77.352 | 9.72× |
+| Dense head | 6,738 | 1 | 2,796.729 | 69.471 | 40.26× |
+| Dense head | 6,738 | 16 | 175.864 | 9.109 | 19.31× |
+| Dense head | 6,738 | 1,024 | 4.591 | 3.744 | 1.23× |
+| Fixed body | 262,187 | 1,024 | 474.803 | 13.772 | 34.48× |
+| Chunked body | 262,205 | 1,024 | 464.550 | 13.478 | 34.47× |
+
+A separate head-only before/after comparison against `e0ebbb1` (seven
+alternating samples, 100,000 calls per sample) records: empty-field head
+21.99→23.09 ns (+5.0%), typical two-field POST 78.17→77.57 ns (−0.8%),
+8,000-byte plain value 537.35→529.56 ns (−1.4%), 8,000-byte OWS value
+393.97→387.78 ns (−1.6%), and 128 short fields 1,713.62→1,637.47 ns (−4.4%).
+The smallest path has a measured approximately 1 ns cost; no claim that every
+path became faster is made.
+
+Structured review: production files remain below 600 lines; the new test file
+has 399 lines. New or changed executable units remain below 60 code lines and
+nesting below the review threshold. Cyclomatic complexity: N/A — no configured
+complexity tool; executable spans and nesting were reviewed instead. The wire
+layer owns all state, uses no shared mutable decoder state, and adds no runtime
+dependency, thread, listener, reusable build artifact or remote operation.
+Disposable compiler/test outputs are deleted before task completion; command
+results are retained here. Formatting, diff, and governance checks are recorded
+in the final revision's Change Log.
+
 ## Contract-To-Check Traceability [Conditionally Required — source or configuration implementation]
 
 | Clause ID | Authoritative contract path and heading | Exact normative requirement | Acceptance check or deterministic test IDs | Explicit coverage method |
@@ -560,6 +667,7 @@ existing build metadata; no reusable artifact is retained or promoted.
 | CC-2 | docs/architecture/ADD-0001-orange-v1-baseline.md › Cross-Cutting Design › CON-02 | The compute service is loopback-only, has no outbound runtime calls, and exposes no LAN or cloud deployment mode | AC-1, AC-5 | AC-1 asserts the loopback bind in the service test suite; AC-5 shows no non-loopback listener and a failing LAN connection while the service runs |
 | CC-3 | docs/architecture/ADD-0001-orange-v1-baseline.md › ADR Task Candidates › CAND-0001 | Clean local checkout starts both sides, the client reaches the health endpoint, and ordinary restart preserves the origin; no LAN listener | AC-2, AC-3, AC-4, AC-5 | The checks execute exactly these observable outcomes on the delivered slice |
 | CC-4 | AGENTS.md › Verification And Completion Evidence | Source-code features use Red-Green-Refactor: the smallest failing test lands before the production change | AC-1, AC-2 | Each subtask's suite is committed failing first for its missing behavior, then implemented to green, with the sequence recorded in the pull request |
+| CC-5 | docs/adr/ADR-0003-local-runtime-path.md › Scope | An over-limit head receives 431 and an over-limit decoded body receives 413; each response declares `Connection: close`, completes before connection closure, and no following request is handled on that connection; subsequent requests use a new connection | AC-1 | Real-socket cap cases assert status, framing, `Connection: close`, EOF, no pipelined follow-up response on the rejected connection, and a successful valid request after reconnecting |
 
 ## Risk Coverage Matrix [Conditionally Required — source or configuration implementation]
 
@@ -568,14 +676,14 @@ existing build metadata; no reusable artifact is retained or promoted.
 | concurrency and ordering | Applicable: one keep-alive connection reused for multiple sequential requests must return responses in request order with correct framing (the single-user origin's observable requirement) | Runtime assembly (service) | CTest case with one persistent client performing 3 request-response cycles on a single connection | All 3 responses are correct, complete, and answered in request order on the same connection | AC-1 | Not Started | Not run — implementation not started |
 | timeout and deadline | Applicable: idle keep-alive connections must not accumulate descriptors forever once their owners stop using them | Runtime assembly (service) | CTest case with the idle timeout configured to 1 second: send a request, then hold the connection idle | The server closes the idle connection after the timeout; other connections continue to be served | AC-1 | Not Started | Not run — implementation not started |
 | cancellation and interruption | N/A — the endpoints are stateless with no session or persisted state; the interruption outcome is the documented restart path | Runtime assembly | AC-5 restart procedure | The same origins serve the page and health after restart | AC-5 | N/A — stateless endpoints; restart is the recovery path and is covered by AC-5 | N/A — not run |
-| resource bounds and backpressure | Applicable: a hand-written parser must not accept unbounded input, and the idle timeout is the declared bound on descriptor accumulation (no storm-tested connection guarantee) | Runtime assembly (service) | CTest cases sending a header block over 8 KiB (expect 431) and a body over 1 MiB (expect 413) | Each over-limit input receives its coded rejection without crashing, and the single stable connection continues to serve subsequent requests | AC-1 | Not Started | Not run — implementation not started |
+| resource bounds and backpressure | Applicable: parsing enforces the 8 KiB head and 1 MiB decoded-body caps; after rejection the next message boundary is not assumed safe, and idle timeout bounds descriptor accumulation (no storm-tested connection guarantee) | Runtime assembly (service) | CTest real-socket cases send an over-8-KiB head and over-1-MiB fixed/chunked content, with a following valid pipelined request; after EOF, reconnect and issue a valid request | Each cap response has respectively 431/413, valid framing and `Connection: close`; rejection response completes, then EOF; no follow-up response is sent on the rejected connection; the reconnected valid request receives its expected successful response; no crash | AC-1 | Not Started | Not run — network closure behavior awaits reapproval and implementation |
 | framework or trust-boundary rejection | Applicable: both listeners must bind loopback only, and the TLS listener must present the generated self-signed certificate | Runtime assembly (service) | CTest bind assertions for both listeners plus a live `lsof` inspection, a LAN-address connection attempt on both ports, and a `curl -k` TLS handshake check | Listener list shows only `127.0.0.1:8080` and `127.0.0.1:8443`; LAN connections fail; the TLS handshake succeeds and serves the health body | AC-1, AC-2, AC-6 | Not Started | Not run — implementation not started |
 
 ## Acceptance Checks [Required]
 
 | Check ID | Subtask | Binary acceptance point | Preconditions or input | Verification method | Exact expected result | Expected evidence | Status | Actual result and evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AC-1 | T-1 | The transport-core suite passes every declared protocol behavior | Service built after toolchain bootstrap | `ctest` in the service build directory | Exit code 0 with tests covering request-line/header/body parsing (Content-Length and chunked), chunked response encoding, keep-alive cycles on one stable connection, the idle timeout, and the 431 and 413 caps all passing, exercised by a single persistent client | Test output with named passing tests and exit code | Not Started | Pending |
+| AC-1 | T-1 | All declared transport cases pass, including rejection closure and reconnection | Service built after toolchain bootstrap; unit fixtures and one client driving real sockets, three valid keep-alive cycles on one connection, idle timeout configured to 1 second, oversized head/fixed/chunked body with a pipelined follow-up | `ctest --test-dir service/build --output-on-failure` | Exit 0: request-line/header/body parsing, binary Content-Length/chunked decoding, exact caps and response chunk encoding pass; three valid cycles stay ordered on the same connection; idle connection closes at the configured timeout; oversized head yields 431, oversized fixed/chunked body yields 413, each with a complete framed `Connection: close` response followed by EOF and no pipelined follow-up response; a valid request on a new connection succeeds | Named passing unit and real-socket tests, response/EOF/reconnection assertions, command exit code | Not Started | Not run after reapproval — historical decoder results do not establish socket behavior |
 | AC-2 | T-2 | The serving and TLS integration checks pass over both listeners | Service built and running from the test harness | The T-2 CTest integration suite plus `curl` checks against `http://127.0.0.1:8080` and `curl -k` against `https://127.0.0.1:8443` | `GET /api/health` returns HTTP 200 with exactly `{"status":"ok"}` on both listeners; `POST /api/echo` returns the sent body with chunked framing; a single-range static request returns 206 with the correct slice and an unsatisfiable range returns 416; 405 and 404 behave as declared | Test and curl transcripts | Not Started | Pending |
 | AC-3 | T-3 | The web suite and build pass and the page wires the health status | `web/` npm project installed | `npm test --prefix web` then `npm run build --prefix web` | Both exit 0; the compiled page references the status script that fetches `/api/health` | Command outputs and the served HTML/JS reference | Not Started | Pending |
 | AC-4 | T-3 | The one documented path starts the assembled runtime on a clean checkout | Clean checkout after documented toolchain bootstrap and first-run certificate generation | `scripts/dev.sh`, then `curl -kfsS https://127.0.0.1:8443/api/health` | The script prints the stable origin; curl exits 0 and prints exactly `{"status":"ok"}` | Script and curl transcript with exit codes | Not Started | Pending |
@@ -645,3 +753,7 @@ implementation completion. When triggered:
 | 2026-10-14 | Optimize the existing T-1 request-head parser without changing its interface or protocol outcomes: red allocation tests committed first in `ba7da00`, then defer owned construction, reserve the validated field count once, record bounded field offsets, and short-circuit invalid method/version checks before target validation. Request-Head Optimization Evidence records immutable source/test blobs, A/B timings and allocation counts, configured verification, sanitizer and differential results, and the bounded stack trade-off; acceptance checks, scope, approval metadata, and lifecycle status are unchanged | @codex |
 | 2026-10-14 | Refactor existing T-1 field-value and overflowing-tail validation into bounded groups with a short-value/scalar-remainder path after characterization tests in `39c5bc9`. Grouped Field-Value Validation Evidence records immutable blobs, measured long-value improvements and short-input costs, mutation coverage, sanitizer/differential results, and unchanged allocations. Approval metadata, accepted scope, acceptance checks, and lifecycle status remain unchanged | @codex |
 | 2026-10-14 | Refactor existing T-1 OWS trimming into bounded all-whitespace groups after characterization tests in `a8a9502`. Grouped OWS Trimming Evidence records immutable blobs, predeclared experimental performance budgets observed failing then passing, short-input costs, mutation coverage, and sanitizer/differential results. Approval metadata, accepted scope, contract traceability, risk-matrix requirements, acceptance checks, and lifecycle status remain unchanged | @codex |
+| 2026-10-15 | Complete the authorized body/incremental-decoder portion of T-1 before the rejection-close policy revision: red commits `2f11b19`, `8cd704a`, `6006103`, green implementation `f558e62`; Request-Body And Incremental Decoder Evidence records 5,105 checks, sanitizer/differential validation, synthetic calling-model timings and the measured short-head cost. Response encoding, sockets, T-2 and T-3 remain unfinished | @codex |
+| 2026-10-15 | Invalidate prior approval at 2026-10-14T16:20:49Z because owner @hailingu chose responses followed by connection closure for 413/431, replacing the resource-risk requirement to continue on the same connection. Prior Approver @hailingu; Approval Time 2026-10-13T17:02:57Z; Approval Evidence: Approve; informational Approval Context Revision 82a585e556c648ceacfbd86a73e107dbb422427e. Decision Status Accepted→Proposed and Implementation Status In Progress→Not Started; T-1 resets to Not Started. Earlier implementation/evidence is retained as historical and must be reverified after reapproval. Scope, Q-4, T-1, touchpoints, CC-5, risk row and AC-1 now specify close-after-rejection and success on a new connection; index synchronized | @codex |
+| 2026-10-15 | Proposed-record review also removes the obsolete duplicate out-of-scope list contradicting the previously owner-directed echo/body subset and replaces the stale no-engineering-standard claim with a measured temporary exception for the unchanged head-test main, to be decomposed before T-1 completion. No ADD outcome, primary boundary, dependency or product capability changes | @codex |
+| 2026-10-15 | Proposed-revision validation: `npm test --prefix tools/governance-validator` passes 208/208; `npm run validate --prefix tools/governance-validator` passes; `git diff --check` and clang-format check mode pass. Structured review confirms requirement-level metadata, prior-approval history, exact cap-response/EOF/reconnection assertions, risk-to-AC-1 and CC-5 traceability, one Runtime assembly boundary and three subtasks, truthful historical evidence, ADR index synchronization and unchanged reciprocal ADD CAND-0001 Selected linkage (its existing reason already names Proposed). The reapproval-stage reset is truthful; no socket-closure acceptance is claimed | @codex |
