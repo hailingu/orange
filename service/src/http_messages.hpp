@@ -46,6 +46,10 @@ enum class ParseError {
     // head budget that remains (HTTP 431, RFC 6585 section 5): the head is
     // too large to ever complete under the cap.
     headers_too_long,
+    // Decoded request content exceeds ADR-0003's 1 MiB cap (HTTP 413).
+    body_too_long,
+    // A valid transfer coding preceding chunked is not supported (HTTP 501).
+    unsupported_transfer_coding,
 };
 
 // One header field line as received: `name: value`. The name is a token

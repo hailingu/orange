@@ -3,6 +3,11 @@
 #include <charconv>
 #include <utility>
 namespace orange::http {
+struct RequestDecoder::Impl {};
+RequestDecoder::RequestDecoder() : impl_(std::make_unique<Impl>()) {}
+RequestDecoder::~RequestDecoder() = default;
+DecodeResult RequestDecoder::feed(std::string_view) { return {}; }
+void RequestDecoder::reset() { *impl_ = Impl{}; }
 std::variant<ParsedMessage, ParseError> parse_message(std::string_view raw) {
     auto head = parse_request(raw);
     if (auto *parsed = std::get_if<ParsedRequest>(&head)) {
