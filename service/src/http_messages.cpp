@@ -190,10 +190,33 @@ std::string_view trim_ows(std::string_view value) {
     return value;
 }
 
-// Field-content after OWS trimming: every remaining octet must be one a
-// value may carry; a CTL or DEL anywhere in the value is malformed.
+constexpr std::size_t field_octet_group_size = 16;
+
+// Checks full groups with independent range comparisons so the compiler
+// can vectorize them, rejecting between groups. Only complete groups are
+// read; the remainder uses the shared byte-class table.
+bool is_valid_field_value_groups(std::string_view value) {
+    std::size_t offset = 0;
+    while (value.size() - offset >= field_octet_group_size) {
+        unsigned int invalid = 0;
+        for (std::size_t i = 0; i < field_octet_group_size; ++i) {
+            const auto byte = static_cast<unsigned char>(value[offset + i]);
+            invalid |= (byte < 0x20 && byte != 0x09) || byte == 0x7F;
+        }
+        if (invalid != 0) {
+            return false;
+        }
+        offset += field_octet_group_size;
+    }
+    return std::all_of(value.begin() + offset, value.end(), is_field_octet);
+}
+
+// Field-content after OWS trimming: a CTL or DEL anywhere is malformed.
+// Keep short-value checks inlinable independently of the grouped loop.
 bool is_valid_field_value(std::string_view value) {
-    return std::all_of(value.begin(), value.end(), is_field_octet);
+    return value.size() < field_octet_group_size
+               ? std::all_of(value.begin(), value.end(), is_field_octet)
+               : is_valid_field_value_groups(value);
 }
 
 // Classifies a header block whose terminating empty line did not arrive
@@ -206,8 +229,7 @@ ParseError classify_unterminated_header(std::string_view tail) {
     if (tail.ends_with('\r')) {
         tail.remove_suffix(1);
     }
-    return std::all_of(tail.begin(), tail.end(), is_field_octet) ? ParseError::headers_too_long
-                                                                 : ParseError::malformed;
+    return is_valid_field_value(tail) ? ParseError::headers_too_long : ParseError::malformed;
 }
 
 // A validated header block's end and field count, used to allocate the

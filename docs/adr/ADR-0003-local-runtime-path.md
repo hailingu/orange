@@ -395,6 +395,79 @@ the pre-existing build-directory metadata is preserved. This evidence does not
 complete T-1 or AC-1: bodies, response framing, and the event loop remain
 unfinished.
 
+### Grouped Field-Value Validation Evidence [Optional]
+
+The second 2026-10-14 T-1 optimization is a behavior-preserving refactor of
+the existing red-green header-field contract. It checks complete 16-octet
+groups using independent unsigned-byte comparisons, rejects between groups,
+and checks short values and the remainder through the existing classification
+table. The overflow-tail classifier reuses this same octet validator after
+allowing its existing trailing-CR exception. Input bounds, owned copies,
+allocation costs, parser signature, and error precedence remain unchanged.
+
+- Baseline: commit `164ae61852f56ef23a6d2d672409b0041125ac19`, parser blob
+  `99df77b67b72b9929361d095b1c816791278ccd1`.
+- Supplemental characterization tests landed first in commit `39c5bc9`:
+  `check_field_value_octets` covers all 256 byte values at eight interior
+  positions; `check_field_value_boundaries` covers lengths 0 through 129 at
+  selected boundaries, 16 leading-OWS widths, and DEL at every position of
+  those nonempty values. They pass against the unchanged baseline before the
+  refactor. A disposable mutation skipping the grouped validator's scalar
+  remainder triggers 49 failures in the latter check (process exit 1).
+- Final parser blob: `8112d3a0cf3a0f71ddc76a2a520808514bca5a79`, stable
+  symbols `is_valid_field_value_groups`, `is_valid_field_value`, and
+  `classify_unterminated_header`; final test blob:
+  `6fb4de0e2b1afdc3d1c33d71eaa347685c9128e5`.
+- Apple clang 21.0.0 (`clang-2100.3.34.2`), arm64-apple-darwin27.0.0,
+  `-std=c++20 -O2 -Wall -Wextra`, separate compilation, no LTO. Assembly
+  inspection confirms bounded 16-byte loads, vector comparisons, and an
+  `umaxv` reduction. No architecture intrinsics or new dependency are added.
+- A disposable A/B benchmark alternates execution order across seven rounds
+  and reports medians, excluding input construction and including result
+  destruction. Its predeclared experimental long-value budget (candidate
+  median at most 70% of baseline) fails before the change (2,443.8 versus
+  2,468.4 ns, exit 1) and passes for the final source (486.8 versus 2,157.8 ns,
+  exit 0). This experiment is not a timing assertion in CTest or a new public
+  latency contract.
+
+| Synthetic fixture / delivery | Baseline | Final | Heap allocations baseline → final |
+| --- | --- | --- | --- |
+| 18-byte head without fields | 25.5 ns | 29.7 ns | 0 → 0 |
+| 68-byte POST echo head | 72.2 ns | 73.1 ns | 1 → 1 |
+| 1,188-byte head with 128 short fields | 1,544.7 ns | 1,596.6 ns | 1 → 1 |
+| Same short-field head, accumulated 64-byte prefixes | 10,033.6 ns | 10,596.8 ns | 1 → 1 |
+| 16 fields with 128-byte values | 1,170.2 ns | 539.0 ns | 17 → 17 |
+| Same long fields without the terminating empty line | 828.5 ns | 219.1 ns | 0 → 0 |
+| One padded field making the complete head exactly 8 KiB | 2,157.8 ns | 486.8 ns | 2 → 2 |
+| Same padded field, DEL at the end of its value | 2,025.3 ns | 349.2 ns | 0 → 0 |
+| Grammar-valid unterminated field tail reaching the 8 KiB cap | 1,988.2 ns | 342.6 ns | 0 → 0 |
+
+These remain local synthetic parser measurements. Short-field scenarios carry
+a small additional dispatch cost, and the no-field fixture adds 4.2 ns in this
+run; the retained change targets long values and oversized tails. Trials of
+direct vector-element filling and a no-field shortcut were discarded after
+comparison because they increased costs in other short-field scenarios.
+The stateless parser still repeats scans across fragmented deliveries.
+
+Final verification: the configured CMake/CTest trio and direct `-O2` suite
+pass; the direct ASan/UBSan suite reports no findings. Both an optimized and a
+sanitizer differential harness compare
+every returned field, error, and consumed count with the baseline for 151,913
+cases (seed `0x4F52414E`, every prefix of the benchmark fixtures, 50,000 seeded
+mutations/truncations/body suffixes, and 20,000 arbitrary byte strings), with
+zero mismatches. A separate allocation-count executable confirms unchanged
+counts for all 17 fixtures/delivery patterns. clang-format check mode and
+`git diff --check` pass. Both configured governance-validator commands pass.
+
+Structured review confirms that the unsigned range predicate admits exactly
+HTAB, SP/VCHAR, and obs-text; every vectorized load stays inside the supplied
+view, and the scalar remainder remains mandatory. New executable units remain
+below the 60-line review threshold, the production file remains below 600
+lines, and the existing test-main decomposition debt remains outside this
+refactor. No acceptance check, risk-matrix requirement, approved scope, or
+status is changed; the full transport task remains unfinished. Disposable
+compiler/test outputs are cleaned, preserving existing build metadata.
+
 ## Contract-To-Check Traceability [Conditionally Required — source or configuration implementation]
 
 | Clause ID | Authoritative contract path and heading | Exact normative requirement | Acceptance check or deterministic test IDs | Explicit coverage method |
@@ -486,3 +559,4 @@ implementation completion. When triggered:
 | 2026-10-14 | Per owner direction, record the borrowed-view lifetime trap inside the Request contract comment itself: why the fields stay owned copies (silent undefined behavior on temporary or reused buffers, no diagnostic), the measured price of ownership (~10-25 ns per request), and the single revisit condition — an event loop that guarantees a stable read buffer for the whole parse-to-response window by construction; comment-only change, suite re-verified green | @zcode |
 | 2026-10-14 | Land the header-block T-1 contract red-green through commit f9e6364 and the implementing change: `parse_request` now completes a whole head — request line, field lines, terminating empty line — with field lines following `field-name: OWS field-value OWS` (RFC 9112 5) into owned `Request::headers` entries that preserve order, duplicates, and case; values are OWS-trimmed field-content with obs-text allowed (RFC 9110 5.5) and obs-fold is rejected (RFC 9112 5.2); the block spends only the head budget remaining after the request line and owns the 431 `headers_too_long` classification (RFC 6585 5), discharging the recorded later-task item (1); body parsing (Content-Length and chunked) is the next T-1 rung | @zcode |
 | 2026-10-14 | Optimize the existing T-1 request-head parser without changing its interface or protocol outcomes: red allocation tests committed first in `ba7da00`, then defer owned construction, reserve the validated field count once, record bounded field offsets, and short-circuit invalid method/version checks before target validation. Request-Head Optimization Evidence records immutable source/test blobs, A/B timings and allocation counts, configured verification, sanitizer and differential results, and the bounded stack trade-off; acceptance checks, scope, approval metadata, and lifecycle status are unchanged | @codex |
+| 2026-10-14 | Refactor existing T-1 field-value and overflowing-tail validation into bounded groups with a short-value/scalar-remainder path after characterization tests in `39c5bc9`. Grouped Field-Value Validation Evidence records immutable blobs, measured long-value improvements and short-input costs, mutation coverage, sanitizer/differential results, and unchanged allocations. Approval metadata, accepted scope, acceptance checks, and lifecycle status remain unchanged | @codex |
