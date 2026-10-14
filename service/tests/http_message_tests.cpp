@@ -99,15 +99,19 @@ std::optional<orange::http::ParsedRequest> parsed_of(const ParseOutcome &outcome
 // Limits allocation tracking to one parse, including all error exits.
 class AllocationCounter {
   public:
+    // Starts a fresh measurement on this test thread.
     AllocationCounter() {
         allocation_count = 0;
         count_allocations = true;
     }
+    // Stops tracking before diagnostics or fixture cleanup can allocate.
     ~AllocationCounter() { count_allocations = false; }
 
+    // A measurement scope has exactly one owner.
     AllocationCounter(const AllocationCounter &) = delete;
     AllocationCounter &operator=(const AllocationCounter &) = delete;
 
+    // Reports the parser's observed allocation cost without allocating.
     [[nodiscard]] std::size_t count() const { return allocation_count; }
 };
 
@@ -166,6 +170,40 @@ void check_parse_allocations(CheckReporter &reporter) {
     reporter.check(is_error(long_incomplete.outcome, orange::http::ParseError::incomplete) &&
                        long_incomplete.allocations == 0,
                    "unfinished heads do not allocate long request-line or field copies");
+}
+
+// Catches incorrect deferred offsets, borrowed result fields, or a scratch
+// bound too small for the grammar's shortest valid header lines.
+void check_deferred_field_copies(CheckReporter &reporter) {
+    using namespace std::string_view_literals;
+    std::string source = "GET /owned HTTP/1.1\r\nx-a:\t \r\nX-Note: " + std::string(64, 'n') +
+                         " \t\r\nx-a: caf\xC3\xA9\r\n\r\n";
+    const auto owned = orange::http::parse_request(source);
+    source.assign(source.size(), 'x');
+    const auto *parsed = std::get_if<orange::http::ParsedRequest>(&owned);
+    reporter.check(parsed && parsed->request.method == "GET" &&
+                       parsed->request.target == "/owned" && parsed->request.version == "HTTP/1.1",
+                   "deferred request-line copies survive reuse of the input buffer");
+    reporter.check(parsed && parsed->request.headers.size() == 3 &&
+                       parsed->request.headers[0].name == "x-a" &&
+                       parsed->request.headers[0].value.empty() &&
+                       parsed->request.headers[1].name == "X-Note" &&
+                       parsed->request.headers[1].value == std::string(64, 'n') &&
+                       parsed->request.headers[2].name == "x-a" &&
+                       parsed->request.headers[2].value == "caf\xC3\xA9"sv,
+                   "deferred fields keep empty, trimmed, duplicate, and obs-text values owned");
+
+    std::string dense = "\r\nGET / HTTP/1.1\r\n";
+    for (int i = 0; i < 2043; ++i) {
+        dense += "a:\r\n";
+    }
+    dense += "\r\n";
+    const auto fitted = parse_counted(dense);
+    const auto *full = std::get_if<orange::http::ParsedRequest>(&fitted.outcome);
+    reporter.check(full && full->consumed == 8192 && full->request.headers.size() == 2043 &&
+                       full->request.headers.back().name == "a" &&
+                       full->request.headers.back().value.empty() && fitted.allocations <= 1,
+                   "shortest field lines fitting the head budget use bounded scratch offsets");
 }
 
 } // namespace
@@ -492,5 +530,6 @@ int main() {
                    "DEL in a field value is rejected");
 
     check_parse_allocations(reporter);
+    check_deferred_field_copies(reporter);
     return reporter.exit_status();
 }

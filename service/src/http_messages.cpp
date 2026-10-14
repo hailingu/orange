@@ -3,7 +3,9 @@
 #include "http_messages.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -208,7 +210,27 @@ ParseError classify_unterminated_header(std::string_view tail) {
                                                                  : ParseError::malformed;
 }
 
-// Parses the header block that follows an already-validated request line:
+// A validated header block's end and field count, used to allocate the
+// owned result only after the entire head has passed its grammar.
+struct HeaderBlock {
+    std::size_t consumed;
+    std::size_t field_count;
+};
+
+// Compact, call-local slices of validated fields. A field line needs at
+// least four bytes ("a:\r\n"), so the head budget bounds both the number of
+// entries and every offset. No borrowed slice escapes into the result.
+struct HeaderFieldOffsets {
+    std::uint16_t name_begin;
+    std::uint16_t name_size;
+    std::uint16_t value_begin;
+    std::uint16_t value_size;
+};
+
+static_assert(header_block_cap <= std::numeric_limits<std::uint16_t>::max());
+using HeaderFields = std::array<HeaderFieldOffsets, header_block_cap / 4>;
+
+// Validates the header block that follows an already-validated request line:
 // zero or more CRLF-terminated field lines, ended by one empty line, all
 // inside the head budget left after the request line. Field names are
 // tokens (RFC 9112 5.1 rejects whitespace before the colon), values are
@@ -218,9 +240,10 @@ ParseError classify_unterminated_header(std::string_view tail) {
 // classify_unterminated_header answers 431 or malformed, never a rescan of
 // unbounded input. Each line end is located by the first '\n' plus
 // one-byte look-back (see parse_request for the equivalence argument).
-std::variant<ParsedRequest, ParseError> parse_header_block(std::string_view raw,
-                                                           std::size_t head_end, Request request) {
+std::variant<HeaderBlock, ParseError>
+validate_header_block(std::string_view raw, std::size_t head_end, HeaderFields &fields) {
     std::size_t consumed = head_end;
+    std::size_t field_count = 0;
     while (true) {
         const std::string_view window =
             raw.substr(consumed, std::min(raw.size() - consumed, header_block_cap - consumed));
@@ -233,7 +256,7 @@ std::variant<ParsedRequest, ParseError> parse_header_block(std::string_view raw,
             return ParseError::malformed;
         }
         if (line_feed == 1) {
-            return ParsedRequest{std::move(request), consumed + line_feed + 1};
+            return HeaderBlock{consumed + line_feed + 1, field_count};
         }
         const std::string_view line = window.substr(0, line_feed - 1);
         if (line.front() == ' ' || line.front() == '\t') {
@@ -249,9 +272,41 @@ std::variant<ParsedRequest, ParseError> parse_header_block(std::string_view raw,
         if (!is_valid_field_value(value)) {
             return ParseError::malformed;
         }
-        request.headers.push_back(HeaderField{std::string(name), std::string(value)});
+        fields[field_count++] = HeaderFieldOffsets{
+            static_cast<std::uint16_t>(consumed), static_cast<std::uint16_t>(name.size()),
+            static_cast<std::uint16_t>(value.data() - raw.data()),
+            static_cast<std::uint16_t>(value.size())};
         consumed += line_feed + 1;
     }
+}
+
+// Copies already-validated fields into an exactly-sized vector. No
+// owned field is constructed on an incomplete or rejected head, so retries
+// never repeat allocations. Recorded offsets avoid searching and trimming
+// the same bytes again; order, duplicates, and received case are preserved.
+ParsedRequest copy_header_block(std::string_view raw, const HeaderFields &fields,
+                                const HeaderBlock &block) {
+    Request request;
+    request.headers.reserve(block.field_count);
+    for (std::size_t i = 0; i < block.field_count; ++i) {
+        const HeaderFieldOffsets &field = fields[i];
+        request.headers.push_back(
+            HeaderField{std::string(raw.substr(field.name_begin, field.name_size)),
+                        std::string(raw.substr(field.value_begin, field.value_size))});
+    }
+    return ParsedRequest{std::move(request), block.consumed};
+}
+
+// Holds the bounded scratch offsets only while validating and copying one
+// block; uninitialized entries are never read and no scratch heap is used.
+std::variant<ParsedRequest, ParseError> parse_header_block(std::string_view raw,
+                                                           std::size_t head_end) {
+    HeaderFields fields;
+    const auto block = validate_header_block(raw, head_end, fields);
+    if (const auto *error = std::get_if<ParseError>(&block)) {
+        return *error;
+    }
+    return copy_header_block(raw, fields, std::get<HeaderBlock>(block));
 }
 
 } // namespace
@@ -268,7 +323,8 @@ std::variant<ParsedRequest, ParseError> parse_header_block(std::string_view raw,
 // and while the budget lasts it is incomplete. A bare CR inside the line is
 // rejected (RFC 9112 2.2), and each field must pass its grammar (see the
 // header). The header block after the request line is parsed by
-// parse_header_block; the body is a later task of the T-1 ladder.
+// parse_header_block; the body is a later task of the T-1 ladder. Owned
+// fields are materialized only after the whole head has been validated.
 std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw) {
     const std::size_t limit = std::min(raw.size(), header_block_cap);
 
@@ -303,15 +359,20 @@ std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw) {
     const std::string_view target = line.substr(first_space + 1, second_space - first_space - 1);
     const std::string_view version = line.substr(second_space + 1);
 
-    const bool target_valid = !target.empty() && is_valid_target_octets(target, false);
-    const bool version_valid = version.size() == 8 && is_version_prefix(version);
-    if (!is_token(method) || !target_valid || !version_valid) {
+    // Reject cheap failures before scanning a potentially long target.
+    if (version.size() != 8 || !is_version_prefix(version) || !is_token(method) || target.empty() ||
+        !is_valid_target_octets(target, false)) {
         return ParseError::malformed;
     }
 
-    return parse_header_block(
-        raw, skipped + line_feed + 1,
-        Request{std::string(method), std::string(target), std::string(version), {}});
+    const std::size_t head_end = skipped + line_feed + 1;
+    auto outcome = parse_header_block(raw, head_end);
+    if (auto *parsed = std::get_if<ParsedRequest>(&outcome)) {
+        parsed->request.method = method;
+        parsed->request.target = target;
+        parsed->request.version = version;
+    }
+    return outcome;
 }
 
 } // namespace orange::http

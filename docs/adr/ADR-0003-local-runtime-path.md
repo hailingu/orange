@@ -316,6 +316,85 @@ replaced. Rollback is deleting the added paths.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | N/A — no repository software-engineering standard exists yet; development follows the AGENTS.md test-first rule and exactly pinned dependencies, and no rule is exceeded or waived | N/A — no standard to measure against | N/A | N/A | N/A | N/A | N/A | N/A |
 
+### Request-Head Optimization Evidence [Optional]
+
+The 2026-10-14 T-1 optimization preserves the `parse_request()` signature,
+owned result fields, received header order/case/duplicates, grammar outcomes,
+consumed-byte count, and shared 8 KiB head budget. It defers owned copies until
+validation completes, records compact call-local field offsets to avoid a
+second delimiter/OWS scan, reserves the validated field count once, and checks
+the version and method before scanning a potentially long target.
+
+- Baseline source: commit `e8f75a7cce3576c6c9a51ee9b5093b4e2d339bf3`,
+  `service/src/http_messages.cpp` blob
+  `28d8bcfc6fb3fe8c5b0d822837b45f3c7677a259`.
+- Red evidence: commit `ba7da00` adds allocation checks first; the configured
+  CMake/CTest trio reports five expected failures (CTest exit 8) for incomplete,
+  malformed, and oversized heads allocating copies, and short-field vector
+  growth. Existing grammar checks remain green.
+- Green source: `service/src/http_messages.cpp` blob
+  `99df77b67b72b9929361d095b1c816791278ccd1`, stable symbols
+  `orange::http::parse_request`, `validate_header_block`, and `copy_header_block`;
+  `service/tests/http_message_tests.cpp` blob
+  `a81cdb74e18f4e36b1bc86850240a4a3c6ffaf87`, stable checks
+  `check_parse_allocations` and `check_deferred_field_copies`. The latter also
+  exercises input-buffer reuse and 2,043 shortest field lines ending exactly
+  at the shared cap. No public borrowed view is introduced.
+- Host/toolchain: Apple clang 21.0.0 (`clang-2100.3.34.2`),
+  `arm64-apple-darwin27.0.0`, CMake 4.2.3. Timing uses separately compiled
+  baseline/current parsers with `-std=c++20 -O2 -Wall -Wextra`, alternating
+  before/after order over seven rounds and reporting the median. Input creation
+  and diagnostics are outside timing; result destruction is included. Ordinary
+  heap allocations are counted in a separate instrumented executable.
+
+| Synthetic fixture / delivery | Before | After | Heap allocations before → after |
+| --- | --- | --- | --- |
+| 68-byte POST echo head with Host and Content-Length | 105.1 ns | 79.1 ns | 2 → 1 |
+| 152-byte head, 16 fields `X-N: a` in numeric order | 316.5 ns | 254.7 ns | 5 → 1 |
+| 1,188-byte head, 128 fields `X-N: a` in numeric order | 1,999.0 ns | 1,671.0 ns | 8 → 1 |
+| Same 128-field head, parse each accumulated 64-byte prefix (19 calls) | 21,766.9 ns | 11,227.5 ns | 136 → 1 |
+| Same 128-field head, parse every accumulated byte prefix (1,188 calls) | 1,292,945.4 ns | 621,840.0 ns | 8,219 → 1 |
+| 16 fields with 128-byte values, terminating empty line missing | 1,395.0 ns | 937.0 ns | 21 → 0 |
+| One padded field making the complete head exactly 8 KiB | 2,437.3 ns | 2,426.7 ns | 2 → 2 |
+| Invalid method with an 8,001-byte target | 2,541.9 ns | 460.4 ns | 0 → 0 |
+
+These are local synthetic parser measurements, not network throughput or p99
+latency. Incomplete calls still rescan the accumulated input; cross-call scan
+progress belongs to the later connection state machine. On this host the
+scratch array is 16 KiB of call-local stack storage, bounded by the existing
+head budget and the four-byte shortest field-line grammar; no scratch heap
+allocation or persistent per-connection buffer is added.
+
+Verification evidence (all final commands exit 0):
+
+- `cmake -S service -B service/build`, `cmake --build service/build`, and
+  `ctest --test-dir service/build --output-on-failure`: 1/1 suite passes, no
+  compiler warnings.
+- Direct suite compile/run with `-std=c++20 -O1 -g -Wall -Wextra
+  -fsanitize=address,undefined -fno-omit-frame-pointer`: no sanitizer findings.
+- A disposable differential harness compiled under the same sanitizer flags
+  compares every parsed field, consumed count, and error against the baseline:
+  seed `0x4f52414e`, 106,898 cases, zero mismatches. Cases include generated
+  valid heads, truncated prefixes, single-byte mutations, trailing bodies,
+  arbitrary bytes, every prefix of dense and padded 8 KiB heads, and all 256
+  possible bytes at their last position.
+- `clang-format --dry-run --Werror service/src/http_messages.cpp
+  service/src/http_messages.hpp service/tests/http_message_tests.cpp` and
+  `git diff --check`: clean.
+- `npm test --prefix tools/governance-validator` and
+  `npm run validate --prefix tools/governance-validator`: pass.
+
+Structured review confirms bounded offsets and initialized-entry reads,
+unchanged grammar/error precedence and ownership, no new dependency or public
+API, and no new executable unit above the 60-line review threshold. The
+pre-existing monolithic test `main()` is retained with two helper calls;
+decomposing its existing assertions is outside this parser optimization. The
+scratch array's additional stack footprint is the measured implementation
+trade-off. Disposable compiler/test outputs are cleaned before task completion;
+the pre-existing build-directory metadata is preserved. This evidence does not
+complete T-1 or AC-1: bodies, response framing, and the event loop remain
+unfinished.
+
 ## Contract-To-Check Traceability [Conditionally Required — source or configuration implementation]
 
 | Clause ID | Authoritative contract path and heading | Exact normative requirement | Acceptance check or deterministic test IDs | Explicit coverage method |
@@ -406,3 +485,4 @@ implementation completion. When triggered:
 | 2026-10-14 | Adopt the benchmark-validated parts of the external SIMD/LUT contribution as a behavior-preserving refactor: the byte classifiers become one compile-time 256-entry bitmask table (replacing per-call `string_view::find` set searches) and the percent-encoding check indexes directly (no per-escape view slicing). A three-way variant cross-check (HEAD, LUT-owned, reviewer-zero-copy) over 16 inputs shows 0 mismatches; measured at -O2 on the host arm64 toolchain the refactor cuts the hot path 31.4→23.9 ns, the punctuation-target regression 419→126 ns, and the overflow classification 4651→2559 ns with CR-dense unchanged. Deliberately not adopted: the zero-copy `string_view` Request (14.3 ns short valid) breaks the owned-copy contract on documented dangling grounds, and the hand-AVX2 scanner is inert on arm64 — this host has no Rosetta, and `std::find` already runs NEON memchr | @zcode |
 | 2026-10-14 | Per owner direction, record the borrowed-view lifetime trap inside the Request contract comment itself: why the fields stay owned copies (silent undefined behavior on temporary or reused buffers, no diagnostic), the measured price of ownership (~10-25 ns per request), and the single revisit condition — an event loop that guarantees a stable read buffer for the whole parse-to-response window by construction; comment-only change, suite re-verified green | @zcode |
 | 2026-10-14 | Land the header-block T-1 contract red-green through commit f9e6364 and the implementing change: `parse_request` now completes a whole head — request line, field lines, terminating empty line — with field lines following `field-name: OWS field-value OWS` (RFC 9112 5) into owned `Request::headers` entries that preserve order, duplicates, and case; values are OWS-trimmed field-content with obs-text allowed (RFC 9110 5.5) and obs-fold is rejected (RFC 9112 5.2); the block spends only the head budget remaining after the request line and owns the 431 `headers_too_long` classification (RFC 6585 5), discharging the recorded later-task item (1); body parsing (Content-Length and chunked) is the next T-1 rung | @zcode |
+| 2026-10-14 | Optimize the existing T-1 request-head parser without changing its interface or protocol outcomes: red allocation tests committed first in `ba7da00`, then defer owned construction, reserve the validated field count once, record bounded field offsets, and short-circuit invalid method/version checks before target validation. Request-Head Optimization Evidence records immutable source/test blobs, A/B timings and allocation counts, configured verification, sanitizer and differential results, and the bounded stack trade-off; acceptance checks, scope, approval metadata, and lifecycle status are unchanged | @codex |
