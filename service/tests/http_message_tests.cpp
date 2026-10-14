@@ -11,12 +11,44 @@
 #include "http_messages.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <format>
+#include <new>
 #include <optional>
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
+
+namespace {
+
+// Measures ordinary heap allocations only during a parser call; fixture
+// construction and reporter diagnostics are outside the measurement.
+thread_local bool count_allocations = false;
+thread_local std::size_t allocation_count = 0;
+
+} // namespace
+
+// Keeps real allocation behavior while counting the parser's memory cost.
+void *operator new(std::size_t size) {
+    if (void *storage = std::malloc(size == 0 ? 1 : size)) {
+        if (count_allocations) {
+            ++allocation_count;
+        }
+        return storage;
+    }
+    throw std::bad_alloc();
+}
+
+// Counts array allocations through the same real allocator.
+void *operator new[](std::size_t size) { return ::operator new(size); }
+
+// Releases the storage obtained by the counting allocator.
+void operator delete(void *storage) noexcept { std::free(storage); }
+
+// Releases arrays obtained by the counting allocator.
+void operator delete[](void *storage) noexcept { ::operator delete(storage); }
 
 namespace {
 
@@ -62,6 +94,78 @@ std::optional<orange::http::ParsedRequest> parsed_of(const ParseOutcome &outcome
         return *parsed;
     }
     return std::nullopt;
+}
+
+// Limits allocation tracking to one parse, including all error exits.
+class AllocationCounter {
+  public:
+    AllocationCounter() {
+        allocation_count = 0;
+        count_allocations = true;
+    }
+    ~AllocationCounter() { count_allocations = false; }
+
+    AllocationCounter(const AllocationCounter &) = delete;
+    AllocationCounter &operator=(const AllocationCounter &) = delete;
+
+    [[nodiscard]] std::size_t count() const { return allocation_count; }
+};
+
+// Associates a real parse outcome with its measured heap allocation count.
+struct CountedParse {
+    ParseOutcome outcome;
+    std::size_t allocations;
+};
+
+// Excludes result inspection and diagnostics from the allocation count.
+CountedParse parse_counted(std::string_view raw) {
+    AllocationCounter counter;
+    auto outcome = orange::http::parse_request(raw);
+    return {std::move(outcome), counter.count()};
+}
+
+// Catches repeated materialization of incomplete/rejected heads and vector
+// growth while preserving the existing grammar and owned-result semantics.
+void check_parse_allocations(CheckReporter &reporter) {
+    const auto empty = parse_counted("GET / HTTP/1.1\r\n\r\n");
+    reporter.check(std::holds_alternative<orange::http::ParsedRequest>(empty.outcome) &&
+                       empty.allocations == 0,
+                   "a short head without fields remains allocation-free");
+
+    std::string head = "GET / HTTP/1.1\r\n";
+    for (int i = 0; i < 16; ++i) {
+        head += "X-A: a\r\n";
+    }
+    const auto incomplete = parse_counted(head);
+    reporter.check(is_error(incomplete.outcome, orange::http::ParseError::incomplete) &&
+                       incomplete.allocations == 0,
+                   "complete fields in an unfinished head do not allocate owned results");
+
+    const auto rejected = parse_counted(head + " Bad: folded\r\n\r\n");
+    reporter.check(is_error(rejected.outcome, orange::http::ParseError::malformed) &&
+                       rejected.allocations == 0,
+                   "a malformed field after valid fields rejects without allocations");
+
+    const auto oversized =
+        parse_counted(head + "X-Pad: " + std::string(orange::http::header_block_cap, 'a'));
+    reporter.check(is_error(oversized.outcome, orange::http::ParseError::headers_too_long) &&
+                       oversized.allocations == 0,
+                   "a header overflow after valid fields rejects without allocations");
+
+    head += "\r\n";
+    const auto complete = parse_counted(head + "body\r\nBad Header: ignored\r\n");
+    const auto *parsed = std::get_if<orange::http::ParsedRequest>(&complete.outcome);
+    reporter.check(parsed && parsed->consumed == 146 && parsed->request.headers.size() == 16 &&
+                       complete.allocations <= 1,
+                   "sixteen short fields use at most one allocation and consume only the head");
+
+    const std::string long_target = "/" + std::string(64, 'a');
+    const auto long_incomplete =
+        parse_counted("CUSTOM-METHOD-WITH-LONG-NAME " + long_target +
+                      " HTTP/1.1\r\nX-Long: " + std::string(128, 'b') + "\r\n");
+    reporter.check(is_error(long_incomplete.outcome, orange::http::ParseError::incomplete) &&
+                       long_incomplete.allocations == 0,
+                   "unfinished heads do not allocate long request-line or field copies");
 }
 
 } // namespace
@@ -387,5 +491,6 @@ int main() {
                             orange::http::ParseError::malformed),
                    "DEL in a field value is rejected");
 
+    check_parse_allocations(reporter);
     return reporter.exit_status();
 }
