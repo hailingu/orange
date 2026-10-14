@@ -11,19 +11,103 @@ namespace {
 
 constexpr bool is_digit(char c) { return c >= '0' && c <= '9'; }
 
-// RFC 9110 5.6.2 token characters: the only bytes a method may contain.
-constexpr bool is_tchar(char c) {
-    return is_digit(c) || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '!' ||
-           c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
-           c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~';
+constexpr bool is_alpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+
+constexpr bool is_hexdig(char c) {
+    return is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
-// A byte the request target may contain: anything but SP, the C0 controls,
-// and DEL. The full origin-form grammar is a later task; control bytes must
-// not ride through unvalidated.
-constexpr bool is_target_byte(char c) {
-    const auto byte = static_cast<unsigned char>(c);
-    return byte > 0x20 && byte != 0x7F;
+// RFC 9110 5.6.2 token characters: the only bytes a method may contain.
+constexpr bool is_tchar(char c) {
+    return is_digit(c) || is_alpha(c) ||
+           std::string_view("!#$%&'*+-.^_`|~").find(c) != std::string_view::npos;
+}
+
+// A URI character a request-target may carry outside a percent-encoding:
+// RFC 3986 unreserved and sub-delims plus the gen-delims the request-target
+// forms use (RFC 9112 3.2). '#' is excluded because no form carries a
+// fragment; every other byte, including SP, controls, DEL, and non-ASCII,
+// must arrive percent-encoded.
+constexpr bool is_target_char(char c) {
+    return is_digit(c) || is_alpha(c) ||
+           std::string_view("-._~!$&'()*+,;=:@/?[]").find(c) != std::string_view::npos;
+}
+
+bool is_valid_method(std::string_view method) {
+    return !method.empty() && std::all_of(method.begin(), method.end(), is_tchar);
+}
+
+// Checks target octets against the URI character set with well-formed
+// `%` HEXDIG HEXDIG encodings. A `truncated` target is a prefix cut off by
+// the head budget, so a percent-encoding cut at its end is acceptable.
+bool is_valid_target_octets(std::string_view target, bool truncated) {
+    for (std::size_t i = 0; i < target.size(); ++i) {
+        if (target[i] != '%') {
+            if (!is_target_char(target[i])) {
+                return false;
+            }
+            continue;
+        }
+        const std::string_view encoded = target.substr(i + 1, 2);
+        if (!std::all_of(encoded.begin(), encoded.end(), is_hexdig)) {
+            return false;
+        }
+        if (encoded.size() < 2) {
+            return truncated;
+        }
+        i += 2;
+    }
+    return true;
+}
+
+// True when `version` is a prefix of HTTP-version = %s"HTTP" "/" DIGIT "."
+// DIGIT (RFC 9112 2.3); a complete version is the full eight bytes.
+bool is_version_prefix(std::string_view version) {
+    constexpr std::string_view shape = "HTTP/0.0";
+    if (version.size() > shape.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < version.size(); ++i) {
+        const bool matches = shape[i] == '0' ? is_digit(version[i]) : version[i] == shape[i];
+        if (!matches) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Classifies a request line whose CRLF did not arrive inside the head
+// budget. A prefix that already breaks the grammar is malformed; otherwise
+// the line is too long (RFC 9112 3), blamed on the longer of method and
+// target, with a tie going to the target's MUST-level 414.
+ParseError classify_unterminated(std::string_view partial) {
+    if (partial.ends_with('\r')) {
+        // The first half of a CRLF that ends past the budget, not a bare CR.
+        partial.remove_suffix(1);
+    }
+    if (partial.find('\r') != std::string_view::npos) {
+        return ParseError::malformed;
+    }
+    const std::size_t first_space = partial.find(' ');
+    const std::string_view method = partial.substr(0, first_space);
+    if (!is_valid_method(method)) {
+        return ParseError::malformed;
+    }
+    if (first_space == std::string_view::npos) {
+        return ParseError::method_too_long;
+    }
+    const std::string_view rest = partial.substr(first_space + 1);
+    const std::size_t second_space = rest.find(' ');
+    const std::string_view target = rest.substr(0, second_space);
+    if (!is_valid_target_octets(target, second_space == std::string_view::npos)) {
+        return ParseError::malformed;
+    }
+    if (second_space != std::string_view::npos &&
+        (target.empty() || !is_version_prefix(rest.substr(second_space + 1)))) {
+        return ParseError::malformed;
+    }
+    return method.size() > target.size() ? ParseError::method_too_long
+                                         : ParseError::target_too_long;
 }
 
 } // namespace
@@ -35,12 +119,12 @@ constexpr bool is_target_byte(char c) {
 // preceded by '\r' is equivalent to finding the first CRLF (an earlier pair
 // would contain an earlier '\n'), and a single-char search has no restart
 // loop, so CR-dense garbage cannot degrade it. Every search is bounded by
-// header_block_cap: without a line end inside the budget the outcome is
-// too_large (never a rescan of unbounded input), and inside it,
-// incomplete. A bare CR inside the line is rejected (RFC 9112 2.2), and
-// each field must pass its grammar (see the header). Bytes after the
-// request line are not consumed yet — header and body parsing are later
-// tasks of the T-1 ladder.
+// header_block_cap: without a line end inside the budget the line is
+// classified by classify_unterminated (never a rescan of unbounded input),
+// and while the budget lasts it is incomplete. A bare CR inside the line is
+// rejected (RFC 9112 2.2), and each field must pass its grammar (see the
+// header). Bytes after the request line are not consumed yet — header and
+// body parsing are later tasks of the T-1 ladder.
 std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw) {
     const std::size_t limit = std::min(raw.size(), header_block_cap);
 
@@ -52,7 +136,8 @@ std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw) {
     const std::string_view window = raw.substr(skipped, limit - skipped);
     const std::size_t line_feed = window.find('\n');
     if (line_feed == std::string_view::npos) {
-        return ParseError::incomplete;
+        return raw.size() >= header_block_cap ? classify_unterminated(window)
+                                              : ParseError::incomplete;
     }
     if (line_feed == 0 || window[line_feed - 1] != '\r') {
         return ParseError::malformed;
@@ -74,13 +159,9 @@ std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw) {
     const std::string_view target = line.substr(first_space + 1, second_space - first_space - 1);
     const std::string_view version = line.substr(second_space + 1);
 
-    const bool method_valid =
-        !method.empty() && std::all_of(method.begin(), method.end(), is_tchar);
-    const bool version_valid = version.size() == 8 && version.starts_with("HTTP/") &&
-                               is_digit(version[5]) && version[6] == '.' && is_digit(version[7]);
-    const bool target_valid =
-        !target.empty() && std::all_of(target.begin(), target.end(), is_target_byte);
-    if (!method_valid || !version_valid || !target_valid) {
+    const bool target_valid = !target.empty() && is_valid_target_octets(target, false);
+    const bool version_valid = version.size() == 8 && is_version_prefix(version);
+    if (!is_valid_method(method) || !target_valid || !version_valid) {
         return ParseError::malformed;
     }
 
