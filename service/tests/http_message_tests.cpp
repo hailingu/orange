@@ -65,5 +65,32 @@ int main() {
     reporter.check(!orange::http::parse_request("").has_value(),
                    "parse_request rejects empty input");
 
+    // Second behavioral contract: the request line must be
+    // `method SP request-target SP HTTP-version CRLF` with three non-empty
+    // tokens, parsed into the named Request fields. Bytes after the request
+    // line are not consumed yet — header and body parsing are later tasks.
+    const auto posted = orange::http::parse_request("POST /api/echo HTTP/1.1\r\n");
+    reporter.check(posted.has_value(), "well-formed request line parses");
+    reporter.check(posted && posted->method == "POST", "request-line method parses into its field");
+    reporter.check(posted && posted->target == "/api/echo",
+                   "request-line target parses into its field");
+    reporter.check(posted && posted->version == "HTTP/1.1",
+                   "request-line version parses into its field");
+
+    reporter.check(!orange::http::parse_request("GET\r\n").has_value(),
+                   "one-token request line is rejected");
+    reporter.check(!orange::http::parse_request("GET /\r\n").has_value(),
+                   "two-token request line is rejected");
+    reporter.check(!orange::http::parse_request("GET  / HTTP/1.1\r\n").has_value(),
+                   "empty token from a doubled space is rejected");
+    reporter.check(!orange::http::parse_request(" GET / HTTP/1.1\r\n").has_value(),
+                   "leading space leaves an empty method and is rejected");
+    reporter.check(!orange::http::parse_request("GET / HTTP/1.1 extra\r\n").has_value(),
+                   "fourth token in the request line is rejected");
+    reporter.check(!orange::http::parse_request("GET / HTTP/1.1\n").has_value(),
+                   "LF without CR does not terminate a request line");
+    reporter.check(!orange::http::parse_request("GET / HTTP/1.1").has_value(),
+                   "input without CRLF is rejected");
+
     return reporter.exit_status();
 }
