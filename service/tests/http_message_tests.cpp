@@ -13,7 +13,9 @@
 #include <cstdio>
 #include <format>
 #include <source_location>
+#include <string>
 #include <string_view>
+#include <variant>
 
 namespace {
 
@@ -43,64 +45,113 @@ class CheckReporter {
     int failures_ = 0;
 };
 
+using ParseOutcome = std::variant<orange::http::ParsedRequest, orange::http::ParseError>;
+
+// True when the outcome holds exactly this error value.
+bool is_error(const ParseOutcome &outcome, orange::http::ParseError expected) {
+    const auto *error = std::get_if<orange::http::ParseError>(&outcome);
+    return error != nullptr && *error == expected;
+}
+
+// The parsed request when the outcome holds one, else nullptr.
+const orange::http::ParsedRequest *parsed_of(const ParseOutcome &outcome) {
+    return std::get_if<orange::http::ParsedRequest>(&outcome);
+}
+
 } // namespace
 
 int main() {
     CheckReporter reporter;
 
-    // Wiring sanity: proves the executable runs and that a passing check
-    // yields exit status 0 under CTest. The development sequence first
-    // observed a deliberately failing check; the evidence is recorded with
-    // this change's verification runs.
-    reporter.check(1 + 1 == 2, "harness wiring: arithmetic sanity");
+    // --- incomplete: no line end yet, head budget not exhausted ----------
+    reporter.check(is_error(orange::http::parse_request(""), orange::http::ParseError::incomplete),
+                   "empty input is incomplete, not malformed");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1"),
+                            orange::http::ParseError::incomplete),
+                   "request line without its CRLF is incomplete");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r"),
+                            orange::http::ParseError::incomplete),
+                   "trailing lone CR is incomplete");
+    reporter.check(is_error(orange::http::parse_request(std::string(64, 'A')),
+                            orange::http::ParseError::incomplete),
+                   "short unterminated input is incomplete");
+    reporter.check(
+        is_error(orange::http::parse_request("\r\n"), orange::http::ParseError::incomplete),
+        "only empty lines so far is incomplete");
 
-    // First behavioral contract of the T-1 ladder: empty raw input cannot
-    // be an HTTP/1.1 request at all, so the parser must reject it with
-    // std::nullopt (http_messages.hpp, parse_request).
-    reporter.check(!orange::http::parse_request("").has_value(),
-                   "parse_request rejects empty input");
+    // --- too_large: head budget exhausted without a line end -------------
+    const std::string cap_filled(orange::http::header_block_cap, 'A');
+    reporter.check(
+        is_error(orange::http::parse_request(cap_filled), orange::http::ParseError::too_large),
+        "cap-sized input without a line end is too_large");
 
-    // Second behavioral contract: the request line must be
-    // `method SP request-target SP HTTP-version CRLF` with three non-empty
-    // tokens, parsed into the named Request fields. Bytes after the request
-    // line are not consumed yet — header and body parsing are later tasks.
+    // --- parses: fields, validation breadth, consumed bytes --------------
     const auto posted = orange::http::parse_request("POST /api/echo HTTP/1.1\r\n");
-    reporter.check(posted.has_value(), "well-formed request line parses");
-    reporter.check(posted && posted->method == "POST", "request-line method parses into its field");
-    reporter.check(posted && posted->target == "/api/echo",
+    reporter.check(parsed_of(posted) != nullptr, "well-formed request line parses");
+    reporter.check(parsed_of(posted) && parsed_of(posted)->request.method == "POST",
+                   "request-line method parses into its field");
+    reporter.check(parsed_of(posted) && parsed_of(posted)->request.target == "/api/echo",
                    "request-line target parses into its field");
-    reporter.check(posted && posted->version == "HTTP/1.1",
+    reporter.check(parsed_of(posted) && parsed_of(posted)->request.version == "HTTP/1.1",
                    "request-line version parses into its field");
+    reporter.check(parsed_of(posted) && parsed_of(posted)->consumed == 25,
+                   "consumed spans the request line and its CRLF");
 
-    reporter.check(!orange::http::parse_request("GET\r\n").has_value(),
-                   "one-token request line is rejected");
-    reporter.check(!orange::http::parse_request("GET /\r\n").has_value(),
-                   "two-token request line is rejected");
-    reporter.check(!orange::http::parse_request("GET  / HTTP/1.1\r\n").has_value(),
-                   "empty token from a doubled space is rejected");
-    reporter.check(!orange::http::parse_request(" GET / HTTP/1.1\r\n").has_value(),
-                   "leading space leaves an empty method and is rejected");
-    reporter.check(!orange::http::parse_request("GET / HTTP/1.1 extra\r\n").has_value(),
-                   "fourth token in the request line is rejected");
-    reporter.check(!orange::http::parse_request("GET / HTTP/1.1\n").has_value(),
-                   "LF without CR does not terminate a request line");
-    reporter.check(!orange::http::parse_request("GET / HTTP/1.1").has_value(),
-                   "input without CRLF is rejected");
+    const auto *const future = parsed_of(orange::http::parse_request("GET / HTTP/2.0\r\n"));
+    reporter.check(future != nullptr && future->request.version == "HTTP/2.0",
+                   "grammar-valid future version parses; serving policy is a later layer");
 
-    // Line-boundary pin, landed before the terminator-search refactor: all
-    // three tokens must live before the first CRLF, so a first space that
-    // appears only after it cannot satisfy the grammar. A cursor-style
-    // walker without a line bound silently accepted this input class.
-    reporter.check(!orange::http::parse_request("GET\r\nX-Header: a b\r\n").has_value(),
-                   "tokens cannot cross the first CRLF");
+    const auto *const custom =
+        parsed_of(orange::http::parse_request("!CUSTOM! /a%20b?q=1 HTTP/1.1\r\n"));
+    reporter.check(custom != nullptr && custom->request.method == "!CUSTOM!",
+                   "tchar-only custom method parses");
 
-    // Bare-CR characterization: a lone '\r' inside a token is outside the
-    // declared grammar; this pins today's behavior (the byte stays part of
-    // the token) so a deliberate later rejection lands as a visible
-    // behavior change, not a silent regression.
-    const auto bare_cr = orange::http::parse_request("GET / HT\rTP/1.1\r\n");
-    reporter.check(bare_cr.has_value() && bare_cr->version == "HT\rTP/1.1",
-                   "bare CR inside a token stays part of the token");
+    const auto *const skipped = parsed_of(orange::http::parse_request("\r\nGET / HTTP/1.1\r\n"));
+    reporter.check(skipped != nullptr && skipped->request.method == "GET",
+                   "a leading empty line is ignored (RFC 9112 2.2)");
+    reporter.check(skipped != nullptr && skipped->consumed == 18,
+                   "consumed includes the skipped leading empty line");
+
+    // --- malformed: the bytes cannot be a request line --------------------
+    reporter.check(
+        is_error(orange::http::parse_request("GET\r\n"), orange::http::ParseError::malformed),
+        "one-token request line is malformed");
+    reporter.check(
+        is_error(orange::http::parse_request("GET /\r\n"), orange::http::ParseError::malformed),
+        "two-token request line is malformed");
+    reporter.check(is_error(orange::http::parse_request("GET  / HTTP/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "empty token from a doubled space is malformed");
+    reporter.check(is_error(orange::http::parse_request(" GET / HTTP/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "leading space leaves an empty method: malformed");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1 extra\r\n"),
+                            orange::http::ParseError::malformed),
+                   "fourth token in the request line is malformed");
+    reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\n"),
+                            orange::http::ParseError::malformed),
+                   "LF without CR does not terminate a request line: malformed");
+    reporter.check(is_error(orange::http::parse_request("GET\r\nX-Header: a b\r\n"),
+                            orange::http::ParseError::malformed),
+                   "tokens cannot cross the first CRLF: malformed");
+    reporter.check(is_error(orange::http::parse_request("GET / HT\rTP/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "bare CR inside the line is rejected (RFC 9112 2.2)");
+    reporter.check(is_error(orange::http::parse_request("GE(T / HTTP/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "method must contain only tchar characters");
+    reporter.check(is_error(orange::http::parse_request("GET / banana\r\n"),
+                            orange::http::ParseError::malformed),
+                   "version must match HTTP/DIGIT.DIGIT");
+    reporter.check(is_error(orange::http::parse_request("GET / http/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "HTTP-name is case-sensitive");
+    reporter.check(is_error(orange::http::parse_request("GET /a\x00b HTTP/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "NUL in the target is rejected");
+    reporter.check(is_error(orange::http::parse_request("GET /a\tb HTTP/1.1\r\n"),
+                            orange::http::ParseError::malformed),
+                   "TAB in the target is rejected");
 
     return reporter.exit_status();
 }
