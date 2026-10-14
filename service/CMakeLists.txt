@@ -28,10 +28,15 @@ enable_testing()
 # Production library of the transport core, one capability per file, headers
 # beside sources (cpp-development-standard.md, Project Layout). The PUBLIC
 # include directory propagates to every target that links this library.
-add_library(orange_http src/http_messages.cpp)
+add_library(orange_http src/http_messages.cpp src/http_request_decoder.cpp)
 target_include_directories(orange_http PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # One executable per test suite; CTest judges each by its process exit status.
 add_executable(http_message_tests tests/http_message_tests.cpp)
 target_link_libraries(http_message_tests PRIVATE orange_http)
 add_test(NAME http_message_tests COMMAND http_message_tests)
+
+# Full-message tests keep body-framing cases separate from the head contract.
+add_executable(http_request_decoder_tests tests/http_request_decoder_tests.cpp)
+target_link_libraries(http_request_decoder_tests PRIVATE orange_http)
+add_test(NAME http_request_decoder_tests COMMAND http_request_decoder_tests)
