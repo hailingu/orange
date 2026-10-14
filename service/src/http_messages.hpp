@@ -44,8 +44,15 @@ enum class ParseError {
 
 // One parsed HTTP/1.1 request. The request-line fields are owned copies of
 // the raw bytes, not views into the caller's buffer, because callers may
-// pass transient input. Header and body fields arrive with the later
-// parsing tasks of the T-1 ladder.
+// pass transient input. That is a deliberate lifetime contract: borrowed
+// std::string_view fields would hand lifetime control to the caller and
+// dangle silently — a temporary buffer destroyed after the call, or a read
+// buffer reused by the next cycle, yields undefined behavior with no
+// compile-time or run-time diagnostic (the measured saving is ~10-25 ns per
+// request; see ADR-0003's T-1 evidence for the benchmark). Revisit only if
+// a later event loop guarantees a stable read buffer for the whole
+// parse-to-response window by construction. Header and body fields arrive
+// with the later parsing tasks of the T-1 ladder.
 struct Request {
     // The request method token, containing only RFC 9110 tchar characters.
     std::string method;
