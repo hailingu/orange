@@ -261,6 +261,77 @@ void check_field_value_boundaries(CheckReporter &reporter) {
     }
 }
 
+// Catches trimming across a non-OWS byte, retaining SP/HTAB at the edges,
+// and losing interior whitespace or the owned slice at processing boundaries.
+// RFC 9110 5.6.3 permits only SP and HTAB in the surrounding OWS.
+void check_ows_trimming(CheckReporter &reporter) {
+    constexpr std::array<std::size_t, 17> lengths{0,  1,  7,  15,  16,  17,  31,  32,  33,
+                                                  63, 64, 65, 127, 128, 129, 511, 2048};
+    for (const std::size_t length : lengths) {
+        for (int pattern = 0; pattern < 3; ++pattern) {
+            std::string padding(length, pattern == 1 ? '\t' : ' ');
+            if (pattern == 2) {
+                for (std::size_t i = 1; i < length; i += 2) {
+                    padding[i] = '\t';
+                }
+            }
+            const std::string raw =
+                "GET / HTTP/1.1\r\nX:" + padding + "v \t\xFF" + padding + "\r\n\r\nbody";
+            const auto outcome = orange::http::parse_request(raw);
+            const auto *parsed = std::get_if<orange::http::ParsedRequest>(&outcome);
+            reporter.check(parsed && parsed->consumed == raw.size() - 4 &&
+                               parsed->request.headers.size() == 1 &&
+                               parsed->request.headers[0].value == "v \t\xFF",
+                           "surrounding OWS is removed while interior SP/HTAB and obs-text remain");
+            const std::string empty = "GET / HTTP/1.1\r\nX:" + padding + "\r\n\r\n";
+            const auto counted = parse_counted(empty);
+            const auto *trimmed = std::get_if<orange::http::ParsedRequest>(&counted.outcome);
+            reporter.check(trimmed && trimmed->consumed == empty.size() &&
+                               trimmed->request.headers.size() == 1 &&
+                               trimmed->request.headers[0].value.empty() &&
+                               counted.allocations <= 1,
+                           "all-OWS values become empty without adding allocations");
+        }
+    }
+    const std::string fitted = "GET / HTTP/1.1\r\nX:" + std::string(8170, '\t') + "\r\n\r\n";
+    const auto owned = orange::http::parse_request(fitted);
+    const auto *parsed = std::get_if<orange::http::ParsedRequest>(&owned);
+    reporter.check(parsed && parsed->consumed == 8192 && parsed->request.headers.size() == 1 &&
+                       parsed->request.headers[0].value.empty(),
+                   "an all-OWS field can complete at the shared 8 KiB cap");
+}
+
+// Catches treating any non-OWS octet as whitespace when a grouped trim
+// reaches it from either edge. Grammar expectations come from RFC 9110
+// 5.5 and 5.6.3, independently of the parser's classifiers.
+void check_ows_edge_octets(CheckReporter &reporter) {
+    constexpr std::array<std::size_t, 9> lengths{15, 16, 17, 31, 32, 33, 63, 64, 65};
+    for (const std::size_t length : lengths) {
+        for (unsigned int byte = 0; byte < 256; ++byte) {
+            const std::string raw = "GET / HTTP/1.1\r\nX:" + std::string(length, ' ') +
+                                    static_cast<char>(byte) + std::string(length, '\t') +
+                                    "\r\n\r\n";
+            const auto outcome = orange::http::parse_request(raw);
+            const auto *parsed = std::get_if<orange::http::ParsedRequest>(&outcome);
+            if (byte == 0x09 || byte == 0x20) {
+                reporter.check(parsed && parsed->consumed == raw.size() &&
+                                   parsed->request.headers.size() == 1 &&
+                                   parsed->request.headers[0].value.empty(),
+                               "SP and HTAB at either trimming boundary are OWS");
+            } else if ((byte >= 0x21 && byte <= 0x7E) || byte >= 0x80) {
+                reporter.check(parsed && parsed->consumed == raw.size() &&
+                                   parsed->request.headers.size() == 1 &&
+                                   parsed->request.headers[0].value ==
+                                       std::string(1, static_cast<char>(byte)),
+                               "every non-OWS field-content octet stops trimming at both edges");
+            } else {
+                reporter.check(is_error(outcome, orange::http::ParseError::malformed),
+                               "forbidden octets beside long OWS remain malformed");
+            }
+        }
+    }
+}
+
 } // namespace
 
 int main() {
@@ -588,5 +659,7 @@ int main() {
     check_deferred_field_copies(reporter);
     check_field_value_octets(reporter);
     check_field_value_boundaries(reporter);
+    check_ows_trimming(reporter);
+    check_ows_edge_octets(reporter);
     return reporter.exit_status();
 }
