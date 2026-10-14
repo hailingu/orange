@@ -8,6 +8,8 @@
 // turns each failed check into a stderr line, and main() turns the failure
 // count into that exit status.
 
+#include "http_messages.hpp"
+
 #include <cstdio>
 #include <format>
 #include <source_location>
@@ -51,6 +53,12 @@ int main() {
     // observed a deliberately failing check; the evidence is recorded with
     // this change's verification runs.
     reporter.check(1 + 1 == 2, "harness wiring: arithmetic sanity");
+
+    // Library wiring: proves the header include resolves and the
+    // orange_http symbol links into this executable. No behavior is
+    // asserted yet — the first contract lands failing-first in the next
+    // task of the T-1 ladder.
+    (void)orange::http::parse_request("GET");
 
     return reporter.exit_status();
 }
