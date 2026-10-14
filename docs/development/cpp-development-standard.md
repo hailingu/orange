@@ -133,3 +133,68 @@ Answer the baseline checklist, then additionally:
 - Does the change keep the event loop single-threaded and non-blocking?
 - Which declared protocol behavior or invariant does each new test pin?
 - Is every descriptor, buffer, and timeout bounded and owned?
+
+## Appendix: Rule Provenance (Informative)
+
+This appendix records the evidence that the rules above conform to
+authoritative C++ development standards and best practices. It is
+**informative, not normative**: it adds no rule and changes none; every
+citation was verified against the official online texts on 2026-10-14.
+Evidence layers: ISO C++ standard library; the C++ Core Guidelines
+(isocpp official); flagship industrial style guides (Google, LLVM);
+official tool documentation; and orange project governance, which is
+labeled honestly as a governance choice rather than an industry norm.
+
+| Rule in this standard | Verified authority |
+| --- | --- |
+| RAII ownership; no raw owning pointers; no explicit `new`/`delete` | C++ Core Guidelines **R.1** (Manage resources automatically using resource handles and RAII), **R.11** (Avoid calling `new` and `delete` explicitly), R.20 (Use `unique_ptr` or `shared_ptr` to represent ownership) |
+| Descriptor-owning types; leak-on-error-path is a defect | Direct corollary of R.1 (destructor release) |
+| A `.cpp` includes its own header first; headers are self-contained | C++ Core Guidelines **SF.5** (A .cpp file must include the header file(s) that defines its interface), **SF.11** (Header files should be self-contained); file naming follows the SF section |
+| Naming follows the NL section conventions | C++ Core Guidelines **NL** (Naming and Layout) section; descriptive names as in Google/LLVM conventions |
+| `<chrono>` end to end; no integer wall-clock arithmetic | C++ Core Guidelines **I.4** (Make interfaces precisely and strongly typed) — the guideline's own example types time units with `std::chrono` durations |
+| Concurrency rules (data races, locks, sharing) | C++ Core Guidelines **CP.1** (Assume that your code will run as part of a multi-threaded program), **CP.2** (Avoid data races), CP.3, CP.20 (Use RAII locks only), CP.21 |
+| Assertions only for local invariants; external input gets coded diagnostics | C++ Core Guidelines E-section layering — assertions express unreachable states, error handling expresses expected failures; boundary validation per `AGENTS.md` Security |
+| System calls checked explicitly | POSIX conventions; CERT C++ Secure Coding |
+| Machine formatting with clang-format | LLVM official tooling; Google and LLVM both mandate machine formatting over hand-formatting |
+| CMake/CTest verification trio | Official CMake and CTest documentation (cmake.org) standard workflow |
+| Cryptography never hand-written | `AGENTS.md` Security ("Use approved libraries for cryptography"); CERT cryptographic rules |
+| Dependencies exactly pinned via manifest | Supply-chain reproducible-build best practice (governance choice; PlotWeave-calibrated) |
+
+### Error-policy provenance (the one deliberate narrowing)
+
+The C++ Core Guidelines default to exceptions — **I.10** (Use exceptions to
+signal a failure to perform a required task) — while the same rule
+acknowledges value/error-code returns as an alternative and **E.1** requires
+an error-handling strategy fitted to the component. This standard's
+no-exceptions-across-boundaries rule is a deliberate narrowing under that
+authority, with flagship precedent:
+
+1. The Google C++ Style Guide states verbatim, **"We do not use C++
+   exceptions."** — its rationale (whole-codebase exception-safety cost,
+   migration cost) matches orange's greenfield-local posture.
+2. LLVM propagates failures through `Expected<T>`-style types instead of
+   exceptions — the same design in an industrial codebase.
+3. ISO C++ provides the sanctioned non-throwing channels this standard
+   uses: `std::optional` ([optional]) and `std::variant` ([variant]),
+   both C++17 and available under the pinned C++20 profile; the C++23
+   `std::expected` (P0323) continues that line and is unavailable here only
+   because the language level is pinned.
+
+### Governance choices (not industry norms)
+
+Toolchain pinning and the exact verification-command shape, the
+single-threaded `poll()` event loop (an ADR-0003 accepted decision that
+satisfies CP.2 by construction), documentation-before-implementation and
+test-first development (`AGENTS.md` Core Rules), and the numeric guardrails
+inherited from the PlotWeave-calibrated baseline (ADR-0004 Q-1 owner
+determination) are orange governance decisions. They are recorded here as
+choices, not as external best practice.
+
+Sources verified 2026-10-14:
+
+- C++ Core Guidelines: <https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines>
+  and <https://github.com/isocpp/CppCoreGuidelines/blob/master/CppCoreGuidelines.md>
+- Google C++ Style Guide (Exceptions decision):
+  <https://google.github.io/styleguide/cppguide.html>
+- C++ Core Guidelines Explained (Rainer Grimm), CP rules:
+  <https://ptgmedia.pearsoncmg.com/images/9780136875673/samplepages/9780136875673_Sample.pdf>
