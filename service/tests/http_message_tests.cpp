@@ -87,5 +87,20 @@ int main() {
     reporter.check(!orange::http::parse_request("GET / HTTP/1.1").has_value(),
                    "input without CRLF is rejected");
 
+    // Line-boundary pin, landed before the terminator-search refactor: all
+    // three tokens must live before the first CRLF, so a first space that
+    // appears only after it cannot satisfy the grammar. A cursor-style
+    // walker without a line bound silently accepted this input class.
+    reporter.check(!orange::http::parse_request("GET\r\nX-Header: a b\r\n").has_value(),
+                   "tokens cannot cross the first CRLF");
+
+    // Bare-CR characterization: a lone '\r' inside a token is outside the
+    // declared grammar; this pins today's behavior (the byte stays part of
+    // the token) so a deliberate later rejection lands as a visible
+    // behavior change, not a silent regression.
+    const auto bare_cr = orange::http::parse_request("GET / HT\rTP/1.1\r\n");
+    reporter.check(bare_cr.has_value() && bare_cr->version == "HT\rTP/1.1",
+                   "bare CR inside a token stays part of the token");
+
     return reporter.exit_status();
 }
