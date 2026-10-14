@@ -1,11 +1,13 @@
 // Governed by docs/adr/ADR-0003-local-runtime-path.md.
 
 #include "http_messages.hpp"
+#include "http_syntax.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -13,90 +15,11 @@
 namespace orange::http {
 namespace {
 
-// Byte-classification table for the request-head grammar: one 256-entry
-// bitmask built at compile time, so every classifier below is a single
-// table load encoding the same byte sets the grammar names (RFC 9110
-// 5.6.2, RFC 3986 2.1-2.3, RFC 9112 3.2, RFC 9110 5.5).
-struct ByteClassTable {
-    enum Mask : std::uint8_t {
-        digit = 1 << 0,
-        hexdig = 1 << 1,
-        tchar = 1 << 2,
-        target_char = 1 << 3,
-        field_octet = 1 << 4,
-    };
-
-    std::uint8_t masks[256] = {};
-
-    constexpr ByteClassTable() {
-        constexpr std::string_view tchar_specials = "!#$%&'*+-.^_`|~";
-        constexpr std::string_view target_specials = "-._~!$&'()*+,;=:@/?[]";
-        for (int i = 0; i < 256; ++i) {
-            const char c = static_cast<char>(i);
-            std::uint8_t mask = 0;
-            const bool dig = c >= '0' && c <= '9';
-            const bool alp = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-            if (dig) {
-                mask |= digit;
-            }
-            if (dig || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-                mask |= hexdig;
-            }
-            if (dig || alp || tchar_specials.find(c) != std::string_view::npos) {
-                mask |= tchar;
-            }
-            if (dig || alp || target_specials.find(c) != std::string_view::npos) {
-                mask |= target_char;
-            }
-            // VCHAR, SP, and HTAB (field-content plus its optional
-            // whitespace) and obs-text in a value (RFC 9110 5.5): every
-            // octet a field line may carry outside its CRLF.
-            if ((i >= 0x21 && i <= 0x7E) || i == 0x20 || i == 0x09 || i >= 0x80) {
-                mask |= field_octet;
-            }
-            masks[i] = mask;
-        }
-    }
-};
-
-constexpr ByteClassTable byte_classes{};
-
-constexpr bool is_digit(char c) {
-    return (byte_classes.masks[static_cast<unsigned char>(c)] & ByteClassTable::digit) != 0;
-}
-
-constexpr bool is_hexdig(char c) {
-    return (byte_classes.masks[static_cast<unsigned char>(c)] & ByteClassTable::hexdig) != 0;
-}
-
-// RFC 9110 5.6.2 token characters: the only bytes a method may contain.
-constexpr bool is_tchar(char c) {
-    return (byte_classes.masks[static_cast<unsigned char>(c)] & ByteClassTable::tchar) != 0;
-}
-
-// A URI character a request-target may carry outside a percent-encoding:
-// RFC 3986 unreserved and sub-delims plus the gen-delims the request-target
-// forms use (RFC 9112 3.2). '#' is excluded because no form carries a
-// fragment; every other byte, including SP, controls, DEL, and non-ASCII,
-// must arrive percent-encoded.
-constexpr bool is_target_char(char c) {
-    return (byte_classes.masks[static_cast<unsigned char>(c)] & ByteClassTable::target_char) != 0;
-}
-
-// An octet a field line may carry outside its CRLF: field-content octets
-// (VCHAR or obs-text, RFC 9110 5.5) plus the SP/HTAB of optional
-// whitespace. A CTL — including CR and LF, which appear only as the line
-// end — DEL, or any other byte cannot be part of a field name, colon, or
-// value.
-constexpr bool is_field_octet(char c) {
-    return (byte_classes.masks[static_cast<unsigned char>(c)] & ByteClassTable::field_octet) != 0;
-}
-
-// RFC 9110 5.6.2 token: one or more tchar characters — the grammar of a
-// method and of a field-name alike.
-constexpr bool is_token(std::string_view token) {
-    return !token.empty() && std::all_of(token.begin(), token.end(), is_tchar);
-}
+using detail::is_digit;
+using detail::is_field_octet;
+using detail::is_hexdig;
+using detail::is_target_char;
+using detail::is_token;
 
 // Checks target octets against the URI character set with well-formed
 // `%` HEXDIG HEXDIG encodings, indexing directly instead of slicing a view
@@ -291,6 +214,51 @@ struct HeaderFieldOffsets {
     std::uint16_t value_size;
 };
 
+// Borrowed validation results remain inside the parser; callers only receive
+// owned requests. Both complete and incremental parsing use these grammars.
+struct FieldViews {
+    std::string_view name;
+    std::string_view value;
+};
+std::optional<FieldViews> validate_field_line(std::string_view line) {
+    const auto colon = line.find(':');
+    const auto name = line.substr(0, colon);
+    if (colon == std::string_view::npos || !is_token(name)) {
+        return std::nullopt;
+    }
+    const auto value = trim_ows(line.substr(colon + 1));
+    return is_valid_field_value(value) ? std::optional<FieldViews>(FieldViews{name, value})
+                                       : std::nullopt;
+}
+
+// Three validated line tokens, borrowed only until the owned head is copied.
+struct RequestLineViews {
+    std::string_view method;
+    std::string_view target;
+    std::string_view version;
+};
+std::optional<RequestLineViews> validate_request_line(std::string_view line) {
+    if (line.find('\r') != std::string_view::npos) {
+        return std::nullopt;
+    }
+    const auto first = line.find(' ');
+    if (first == std::string_view::npos) {
+        return std::nullopt;
+    }
+    const auto second = line.find(' ', first + 1);
+    if (second == std::string_view::npos) {
+        return std::nullopt;
+    }
+    const auto method = line.substr(0, first);
+    const auto target = line.substr(first + 1, second - first - 1);
+    const auto version = line.substr(second + 1);
+    if (version.size() != 8 || !is_version_prefix(version) || !is_token(method) || target.empty() ||
+        !is_valid_target_octets(target, false)) {
+        return std::nullopt;
+    }
+    return RequestLineViews{method, target, version};
+}
+
 static_assert(header_block_cap <= std::numeric_limits<std::uint16_t>::max());
 using HeaderFields = std::array<HeaderFieldOffsets, header_block_cap / 4>;
 
@@ -323,23 +291,14 @@ validate_header_block(std::string_view raw, std::size_t head_end, HeaderFields &
             return HeaderBlock{consumed + line_feed + 1, field_count};
         }
         const std::string_view line = window.substr(0, line_feed - 1);
-        if (line.front() == ' ' || line.front() == '\t') {
-            // Obsolete line folding: a continuation line (RFC 9112 5.2).
-            return ParseError::malformed;
-        }
-        const std::size_t colon = line.find(':');
-        const std::string_view name = line.substr(0, colon);
-        if (colon == std::string_view::npos || !is_token(name)) {
-            return ParseError::malformed;
-        }
-        const std::string_view value = trim_ows(line.substr(colon + 1));
-        if (!is_valid_field_value(value)) {
+        const auto field = validate_field_line(line);
+        if (!field) {
             return ParseError::malformed;
         }
         fields[field_count++] = HeaderFieldOffsets{
-            static_cast<std::uint16_t>(consumed), static_cast<std::uint16_t>(name.size()),
-            static_cast<std::uint16_t>(value.data() - raw.data()),
-            static_cast<std::uint16_t>(value.size())};
+            static_cast<std::uint16_t>(consumed), static_cast<std::uint16_t>(field->name.size()),
+            static_cast<std::uint16_t>(field->value.data() - raw.data()),
+            static_cast<std::uint16_t>(field->value.size())};
         consumed += line_feed + 1;
     }
 }
@@ -375,6 +334,13 @@ std::variant<ParsedRequest, ParseError> parse_header_block(std::string_view raw,
 
 } // namespace
 
+namespace detail {
+bool is_valid_request_line(std::string_view line) {
+    return validate_request_line(line).has_value();
+}
+bool is_valid_header_line(std::string_view line) { return validate_field_line(line).has_value(); }
+} // namespace detail
+
 // Parses the CRLF-terminated request line `method SP request-target SP
 // HTTP-version` into owned Request fields, skipping leading empty lines
 // first (RFC 9112 2.2). The line end is located by finding the first '\n'
@@ -387,7 +353,7 @@ std::variant<ParsedRequest, ParseError> parse_header_block(std::string_view raw,
 // and while the budget lasts it is incomplete. A bare CR inside the line is
 // rejected (RFC 9112 2.2), and each field must pass its grammar (see the
 // header). The header block after the request line is parsed by
-// parse_header_block; the body is a later task of the T-1 ladder. Owned
+// parse_header_block; RequestDecoder owns body decoding. Owned
 // fields are materialized only after the whole head has been validated.
 std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw) {
     const std::size_t limit = std::min(raw.size(), header_block_cap);
@@ -407,34 +373,17 @@ std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw) {
         return ParseError::malformed;
     }
     const std::string_view line = window.substr(0, line_feed - 1);
-    if (line.find('\r') != std::string_view::npos) {
-        return ParseError::malformed;
-    }
-
-    const std::size_t first_space = line.find(' ');
-    if (first_space == std::string_view::npos) {
-        return ParseError::malformed;
-    }
-    const std::size_t second_space = line.find(' ', first_space + 1);
-    if (second_space == std::string_view::npos) {
-        return ParseError::malformed;
-    }
-    const std::string_view method = line.substr(0, first_space);
-    const std::string_view target = line.substr(first_space + 1, second_space - first_space - 1);
-    const std::string_view version = line.substr(second_space + 1);
-
-    // Reject cheap failures before scanning a potentially long target.
-    if (version.size() != 8 || !is_version_prefix(version) || !is_token(method) || target.empty() ||
-        !is_valid_target_octets(target, false)) {
+    const auto tokens = validate_request_line(line);
+    if (!tokens) {
         return ParseError::malformed;
     }
 
     const std::size_t head_end = skipped + line_feed + 1;
     auto outcome = parse_header_block(raw, head_end);
     if (auto *parsed = std::get_if<ParsedRequest>(&outcome)) {
-        parsed->request.method = method;
-        parsed->request.target = target;
-        parsed->request.version = version;
+        parsed->request.method = tokens->method;
+        parsed->request.target = tokens->target;
+        parsed->request.version = tokens->version;
     }
     return outcome;
 }

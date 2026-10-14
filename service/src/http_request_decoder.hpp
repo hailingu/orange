@@ -32,7 +32,8 @@ class RequestDecoder {
     RequestDecoder(const RequestDecoder &) = delete;
     RequestDecoder &operator=(const RequestDecoder &) = delete;
     // Consumes at most one message. Errors remain sticky until reset;
-    // after completion, later feeds consume zero bytes until reset.
+    // after completion, later feeds consume zero bytes until reset. Allocation
+    // failure returns resource_exhausted with no reusable input boundary.
     [[nodiscard]] DecodeResult feed(std::string_view fragment);
     // Discards the previous message's state and starts an independent request.
     void reset();

@@ -28,7 +28,11 @@ enable_testing()
 # Production library of the transport core, one capability per file, headers
 # beside sources (cpp-development-standard.md, Project Layout). The PUBLIC
 # include directory propagates to every target that links this library.
-add_library(orange_http src/http_messages.cpp src/http_request_decoder.cpp)
+add_library(orange_http
+    src/http_messages.cpp
+    src/http_request_decoder.cpp
+    src/http_body_framing.cpp
+    src/http_chunk_line.cpp)
 target_include_directories(orange_http PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # One executable per test suite; CTest judges each by its process exit status.

@@ -34,9 +34,10 @@ enum class ParseError {
     // No line end within the received bytes and the head budget is not yet
     // exhausted: the client may still be sending.
     incomplete,
-    // The bytes cannot be a request head (HTTP 400, RFC 9112 2.2): token
+    // The bytes cannot be a request message (HTTP 400, RFC 9112 2.2): token
     // structure, a bare CR or LF, a field failing its grammar, an obsolete
-    // line folding, or empty lines alone exhausting the head budget.
+    // line folding, empty lines alone exhausting the head budget, ambiguous
+    // body framing, or invalid chunk metadata/delimiters.
     malformed,
     // The request line cannot end inside the head budget and the method is
     // the longer of method and target (HTTP 501, RFC 9112 3 SHOULD).
@@ -76,8 +77,8 @@ struct HeaderField {
 // compile-time or run-time diagnostic (the measured saving is ~10-25 ns per
 // request; see ADR-0003's T-1 evidence for the benchmark). Revisit only if
 // a later event loop guarantees a stable read buffer for the whole
-// parse-to-response window by construction. The body arrives with a later
-// parsing task of the T-1 ladder.
+// parse-to-response window by construction. ParsedMessage in
+// http_request_decoder.hpp owns the decoded body separately.
 struct Request {
     // The request method token, containing only RFC 9110 tchar characters.
     std::string method;
@@ -117,8 +118,8 @@ struct ParsedRequest {
 // cannot finish inside the budget remaining after the request line
 // (RFC 6585 5), and ParseError::malformed for every grammar violation,
 // including a bare CR inside a line and an LF not preceded by CR. Only the
-// head is consumed — body parsing (Content-Length and chunked) is a later
-// task of the ADR-0003 T-1 ladder.
+// head is consumed. parse_message and RequestDecoder in
+// http_request_decoder.hpp also decode Content-Length and chunked bodies.
 [[nodiscard]] std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw);
 
 } // namespace orange::http

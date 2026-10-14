@@ -1,9 +1,12 @@
 // Governed by docs/adr/ADR-0003-local-runtime-path.md.
 // Behavior tests for complete request bodies, distinct from head-only parsing.
 #include "http_request_decoder.hpp"
+#include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include <random>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -26,8 +29,10 @@ void *operator new(std::size_t size) {
 void operator delete(void *memory) noexcept { std::free(memory); }
 namespace {
 int failures = 0;
+int checks = 0;
 // Checks public results and gives CTest a failing process exit status.
 void check(bool condition, std::string_view description) {
+    ++checks;
     if (!condition) {
         ++failures;
         std::fprintf(stderr, "CHECK failed: %.*s\n", static_cast<int>(description.size()),
@@ -244,6 +249,135 @@ void check_allocation_failure() {
               decoder.feed("GET / HTTP/1.1\r\n\r\n").outcome),
           "reset recovers a decoder after allocation failure");
 }
+// Characterizes extension/trailer octet sets independently of byte classifiers.
+void check_metadata_octets() {
+    using orange::http::ParseError;
+    for (unsigned int byte = 0; byte < 256; ++byte) {
+        const char c = static_cast<char>(byte);
+        const bool field_octet = byte == 9 || (byte >= 32 && byte != 127);
+        // A backslash in this fixture escapes the following valid 'b'.
+        const bool quoted = field_octet && c != '"';
+        const auto raw = message("Transfer-Encoding: chunked\r\n",
+                                 "0;foo=\"a" + std::string(1, c) + "b\"\r\n\r\n");
+        const auto result = orange::http::parse_message(raw);
+        check(quoted ? std::holds_alternative<orange::http::ParsedMessage>(result)
+                     : std::get_if<ParseError>(&result) &&
+                           std::get<ParseError>(result) == ParseError::malformed,
+              "every quoted extension octet follows its grammar");
+        const auto escaped = orange::http::parse_message(message(
+            "Transfer-Encoding: chunked\r\n", "0;foo=\"a\\" + std::string(1, c) + "b\"\r\n\r\n"));
+        check(field_octet ? std::holds_alternative<orange::http::ParsedMessage>(escaped)
+                          : std::get_if<ParseError>(&escaped) &&
+                                std::get<ParseError>(escaped) == ParseError::malformed,
+              "every escaped extension octet follows quoted-pair grammar");
+        const auto trailer = orange::http::parse_message(message(
+            "Transfer-Encoding: chunked\r\n", "0\r\nX: a" + std::string(1, c) + "b\r\n\r\n"));
+        check(field_octet ? std::holds_alternative<orange::http::ParsedMessage>(trailer)
+                          : std::get_if<ParseError>(&trailer) &&
+                                std::get<ParseError>(trailer) == ParseError::malformed,
+              "every trailer value octet follows field-content grammar");
+    }
+}
+// Heads share the old parser's byte cap and error precedence under fragmentation.
+void check_head_boundaries() {
+    using orange::http::ParseError;
+    const std::string short_head = "GET / HTTP/1.1\r\nX: ";
+    const auto exact = short_head +
+                       std::string(orange::http::header_block_cap - short_head.size() - 4, 'x') +
+                       "\r\n\r\n";
+    for (const auto &raw : std::array<std::string, 7>{
+             exact, exact.substr(0, exact.size() - 1),
+             "GET /" + std::string(orange::http::header_block_cap, 'x'),
+             std::string(orange::http::header_block_cap, 'M'), "GET / HTTP/1.1\r\n bad: y\r\n",
+             "GET / HTTP/1.1\n", "\r\n\r\nGET / HTTP/1.1\r\n\r\n"}) {
+        const auto expected = orange::http::parse_request(raw);
+        orange::http::RequestDecoder decoder;
+        std::variant<std::monostate, orange::http::ParsedMessage, ParseError> outcome;
+        for (std::size_t i = 0; i < raw.size(); ++i) {
+            const auto step = decoder.feed(std::string_view(raw).substr(i, 1));
+            outcome = step.outcome;
+            if (!std::holds_alternative<std::monostate>(outcome)) {
+                break;
+            }
+        }
+        if (const auto *error = std::get_if<ParseError>(&expected)) {
+            check(*error == ParseError::incomplete ? std::holds_alternative<std::monostate>(outcome)
+                                                   : std::get_if<ParseError>(&outcome) &&
+                                                         std::get<ParseError>(outcome) == *error,
+                  "fragmented head preserves established rejection classification");
+        } else {
+            const auto *parsed = std::get_if<orange::http::ParsedMessage>(&outcome);
+            check(parsed &&
+                      parsed->consumed == std::get<orange::http::ParsedRequest>(expected).consumed,
+                  "fragmented head completes at the same cap and leading-line boundary");
+        }
+    }
+}
+// Metadata is validated and discarded rather than charged against the body cap.
+void check_long_metadata() {
+    const auto raw = message("Transfer-Encoding: chunked\r\n",
+                             "0000000000000000000000000005;foo=\"" + std::string(20000, 'x') +
+                                 "\"\r\nhello\r\n0\r\nX: " + std::string(20000, 'y') + "\r\n\r\n");
+    orange::http::RequestDecoder decoder;
+    for (std::size_t i = 0; i < raw.size(); i += 17) {
+        const auto count = std::min<std::size_t>(17, raw.size() - i);
+        const auto result = decoder.feed(std::string_view(raw).substr(i, count));
+        check(result.consumed == count, "long metadata fragment advances without retaining text");
+        if (i + count == raw.size()) {
+            const auto *parsed = std::get_if<orange::http::ParsedMessage>(&result.outcome);
+            check(parsed && parsed->body == "hello" && parsed->consumed == raw.size(),
+                  "large extension and trailer preserve the decoded body and wire count");
+        }
+    }
+}
+// Uses known decoded content as an independent oracle for seeded wire fixtures.
+void check_generated_message(const std::string &wire, const std::string &content,
+                             std::mt19937 &rng) {
+    orange::http::RequestDecoder decoder;
+    const auto input = wire + "NEXT";
+    std::size_t offset = 0;
+    while (offset < input.size()) {
+        const auto count = std::min<std::size_t>(1 + rng() % 31, input.size() - offset);
+        const auto step = decoder.feed(std::string_view(input).substr(offset, count));
+        offset += step.consumed;
+        if (const auto *parsed = std::get_if<orange::http::ParsedMessage>(&step.outcome)) {
+            check(parsed->body == content && parsed->consumed == wire.size() &&
+                      offset == wire.size(),
+                  "seeded decoding matches the independent content and wire-boundary oracle");
+            return;
+        }
+        if (!std::holds_alternative<std::monostate>(step.outcome) || step.consumed != count) {
+            check(false, "a seeded valid fragment advances until completion");
+            return;
+        }
+    }
+    check(false, "a complete seeded fixture produces a message");
+}
+// Exercises arbitrary binary content and many chunk/transport boundaries.
+void check_seeded_roundtrips() {
+    std::mt19937 rng(0x424F4459);
+    for (std::size_t n = 0; n < 200; ++n) {
+        std::string content(n * 37 % 513, '\0');
+        for (auto &c : content) {
+            c = static_cast<char>(rng() % 256);
+        }
+        check_generated_message(
+            message("Content-Length: " + std::to_string(content.size()) + "\r\n", content), content,
+            rng);
+        std::string encoded;
+        for (std::size_t offset = 0; offset < content.size();) {
+            const auto count = std::min<std::size_t>(1 + rng() % 23, content.size() - offset);
+            char hex[32];
+            std::snprintf(hex, sizeof(hex), "%zx; x=\"a\\\"b\"\r\n", count);
+            encoded += hex;
+            encoded.append(content, offset, count);
+            encoded += "\r\n";
+            offset += count;
+        }
+        encoded += "0\r\nX: discarded\r\n\r\n";
+        check_generated_message(message("Transfer-Encoding: chunked\r\n", encoded), content, rng);
+    }
+}
 } // namespace
 int main() {
     check_content_length();
@@ -256,5 +390,10 @@ int main() {
     check_decoder_lifecycle();
     check_extension_whitespace();
     check_allocation_failure();
+    check_metadata_octets();
+    check_head_boundaries();
+    check_long_metadata();
+    check_seeded_roundtrips();
+    std::printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }
