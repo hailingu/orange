@@ -76,13 +76,118 @@ orange 的用法分两层,边界画得很清楚:
 }
 ```
 
-- `std::span<const HeaderFieldOffsets>`:对连续描述符数组的**非拥有视图**,
-  传参/遍历零拷贝。
-- `std::views::transform`:**惰性**范围适配器,不物化中间 vector——
-  头部字段按需逐个由"偏移描述符"翻译成 `HeaderField` 视图。1000 个字段
-  也不会多一次分配。
-- 注意 lambda 把 `head_` 先转成 `string_view` 捕获,保证管道各站借用同一份
-  存活的数据。
+### 4.1 先拆开看:这行代码由三层组成
+
+1. **源范围** `std::span(fields_)`:把成员 vector "降维"成一段连续内存的
+   非拥有视图;
+2. **适配器管道** `| std::views::transform(...)`:在视图上按需逐元素做
+   映射;
+3. **`auto` 返回**:组合出的视图类型无法命名,按值返回(极廉价)。
+
+### 4.2 `std::span`:连续内存的非拥有视图
+
+- **本质是指针 + 长度**,不是容器。拷贝一个 span 就是拷两个标量,所以
+  接口惯例是**按值传递**(比传引用还少一层间接)。仓库里 `Request` 的
+  私有构造函数就用它接收字段表:
+  `Request(std::string_view, RequestLineOffsets, std::span<const HeaderFieldOffsets>)`。
+- **CTAD 与 const 正确性**:`std::span(fields_)` 不写模板参数,由推导
+  指南从容器推。关键细节:这段代码在 **const 成员函数**里,`fields_`
+  的类型是 `const std::vector<...>`,于是推导结果是
+  `std::span<const HeaderFieldOffsets>`——**只读性自动成立**,调用方
+  无法通过视图写字段。
+- **只服务连续内存**:vector、`std::array`、C 数组都能直接构造 span;
+  `std::list`/`std::deque` 这类非连续容器不行(名字里的 "span" 指的就是
+  "一段连续内存的跨度")。这换来的是 `data()` + `size()` 的零开销访问和
+  与 C API 的无缝衔接。
+- **与 `string_view` 的分工**:`string_view` 专指字符序列且只读;
+  `span<T>` 适用于任意元素类型,且 `span<T>`(非 const T)**允许写穿**
+  到所指元素——所以只读接口应显式写 `span<const T>`,如本例。
+- **extent(长度是编译期已知与否)**:`span<T>` 默认动态长度;
+  长度编译期已知时可写 `span<T, N>`,对象里连长度字段都能省掉。
+- 常用操作:`size()/empty()/data()/front()/back()`、下标,以及切片
+  `first<N>()/last<N>()/subspan(off, n)`——都不拷贝数据,只调整窗口。
+- **代价:不拥有**。源容器销毁或扩容(vector 重新分配使旧 `data()`
+  失效)之后,span 就是悬垂指针 + 过期长度,**不会有任何运行期报警**,
+  只能靠生命周期纪律兜底(见 4.4)。
+
+### 4.3 ranges 视图与 `|` 管道:惰性在哪里
+
+- C++20 的"范围(range)"统一了遍历语义:任何有 begin/end 的东西都是
+  范围,算法库(`std::ranges::find` 等)直接吃范围而非迭代器对。
+  **视图(view)** 是其中特殊的一类:O(1) 拷贝/移动、**不拥有元素**。
+  `std::views` 是 `std::ranges::views` 的别名。
+- `views::transform(f)` 返回的 `transform_view` 只是把"(底层范围, f)"
+  打包;**遍历时才对每个元素现调 f**——全程没有任何中间容器。1000 个
+  字段也只是 1000 次"查表翻译",零分配。
+- `|` 管道语法是嵌套调用的语法糖:`r | views::transform(f) |
+  views::filter(p)` 等价于 `filter_view(transform_view(r, f), p)`,
+  从左往右读就是数据流向。常用家族:`transform`(映射)、`filter`
+  (按谓词过滤)、`take/drop`(取前/去前 N 个)、`iota`(生成整数序列)、
+  `reverse`(需要双向范围)。
+- **范围类别会被保留**:`span` 是"连续 + 随机访问 + sized"的范围,
+  `transform_view` 原样继承这些性质——所以 `headers()` 的返回值能
+  `.size()`、能下标随机访问(这正是真实头文件注释 "sized/indexable"
+  的含义),不是只能从头走到尾的单遍流。
+- **性能**:transform 在优化器眼里就是"循环体里调一个可内联的小函数",
+  内联后与手写循环无异;本例循环上界还被 8 KiB 头预算封顶。
+
+### 4.4 生命周期:三层借用,两条规则
+
+这段代码同时存在**三层借用**,悬垂风险也分三层:
+
+1. `span` 借用成员 `fields_`——`Request` 活着才有效;
+2. lambda 里的 `bytes` 借用成员 `head_` 的字符——同上;
+3. `transform_view` 的**迭代器借用视图对象本身**(其内部持有指回视图
+   的指针以便调用函数)——这层最反直觉:视图对象销毁后,**已取出的
+   迭代器**悬垂。
+
+由此得出两条使用规则:
+
+- **规则一**:遍历期间 `Request` 必须存活(头文件注释 "The range and
+  fields borrow from this Request" 即此意),与第 3 节 `string_view` 的
+  纪律同源;
+- **规则二**:迭代器存活期间,视图对象必须存活(注释 "iterators
+  additionally require the returned range object to remain alive")。
+
+好消息:范围 for 天然满足规则二——`for (auto f : req.headers())` 中,
+临时视图被绑定到隐藏的 `auto&&`,生命周期延长到循环结束。坏消息的
+典型写法:
+
+```cpp
+auto it = std::ranges::begin(req.headers());  // 临时视图在本行末销毁
+++it;                                         // 悬垂迭代器:未定义行为
+```
+
+标准库提供了部分防线:`std::ranges` 算法收到**右值范围**时返回
+`std::ranges::dangling` 而非悬垂迭代器,把一类错误从运行期 UB 提前到
+编译期;但 range-for 与手存迭代器仍只能靠上面两条规则。
+
+另一个值得学的细节是 lambda 的**初始化捕获**
+`[bytes = std::string_view(head_)]`:它把"指针 + 长度"**按值拷进闭包**
+(而不是捕获 `this` 或引用 `head_`),闭包因此可以自由拷贝移动;
+当然字符数据本身仍属于 `Request`——第 2 层借用并没有消失。
+
+### 4.5 返回 `auto` 与"物化"
+
+- 管道组合出的类型形如 `transform_view<span<const HeaderFieldOffsets>,
+  <lambda 类型>>`,而 **lambda 类型每个都独一无二、无法拼写**,
+  所以返回类型只能写 `auto`。它是纯视图,按值返回只是搬几个指针。
+- C++20 没有标准的"视图 → 容器"物化操作;若真要落成
+  `std::vector<HeaderField>`,得手写循环或 `ranges::copy`。C++23 才有
+  `req.headers() | std::ranges::to<std::vector>()`。本仓库的调用方全部
+  直接遍历,从不物化——**惰性设计配合"只用一次"的访问模式才是零成本**。
+
+### 4.6 对照:另外三种设计为什么没被选
+
+| 备选设计 | 问题 |
+| --- | --- |
+| 返回 `const std::vector<HeaderField>&` | 必须提前物化并双份存储(字符 + 每字段独立 string),1000 字段即上千次分配;还把存储形态焊死在公共 API 上 |
+| 提供 `header(size_t i)` 下标访问器 | 可用,但遍历场景啰嗦,表达不出"这是一段有序字段"的范围语义 |
+| 公开 `detail::HeaderFieldOffsets` | 把 `detail::` 实现细节泄漏进公共契约,破坏第 9 节的可信构造边界 |
+
+惰性视图同时拿到三件事:**零分配、零双份存储、实现细节封死在
+detail 层**;代价只是 4.4 的生命周期纪律——这正是 service ADR-0004
+"所有权存储 + 惰性物化"设计的落点。
 
 ## 5. `[[nodiscard]]`
 
