@@ -66,6 +66,12 @@ orange 的用法分两层,边界画得很清楚:
    更快(short valid 14.3 ns vs 23.9 ns),但被拒绝——因为它把结果的生命
    期绑到输入缓冲区,破坏所有权契约。见
    [`performance-and-simd.md`](performance-and-simd.md) 第 6 节。
+3. **同一陷阱在另一层复现**(事件循环套件,2026-10-19):处理器把指向
+   **函数局部 `std::array`** 的字段 span 塞进按值返回的 `Response`——
+   return 一到,数组死亡,序列化读到的是尸体。修复:字段存储提升到
+   处理器存活期。教训:借用契约("views borrow caller storage")对
+   **返回值**尤其危险——函数返回的那一刻,它栈上的一切视图都过期;
+   返回带视图的聚合时,视图必须指向比函数活得久的东西。
 
 ## 4. `std::span` 与 `std::ranges` 惰性视图
 
@@ -309,6 +315,28 @@ struct RequestDecoder::Impl {
   引用计数、控制块分配、两倍指针体积。`unique_ptr` 在默认删除器下
   **零开销**(大小就是一个裸指针),这才是 Pimpl 的标准搭配。
 
+### 7.3.1 同一手法解决"成员不可移动":事件循环里的解码器
+
+`unique_ptr` 持有成员还有第二个用途,与编译防火墙无关:`RequestDecoder`
+按其契约**既不可拷贝也不可移动**(显式删除拷贝 + 声明析构抑制了隐式
+移动,见 7.3),而事件循环的 `Connection` 结构体住在 `std::vector`
+里——vector 扩容(`emplace_back`)和压缩(`remove_if`)都要求元素可
+移动。按值持有一个不可移动成员会让整个 `Connection` 成为 vector 放不
+下的类型(编译器直接报 Cpp17MoveInsertable 静态断言)。解法一行:
+
+```cpp
+struct Connection {
+    OwnedFd fd;
+    std::unique_ptr<RequestDecoder> decoder;  // 指针持有:状态原地不动
+    ...
+};
+```
+
+移动 `Connection` 只是搬一个指针,解码器对象连同它的在途解析状态留在
+原堆内存里——语义正确(状态不丢)且搬移廉价。**"不可移动的成员 +
+必须可移动的容器" → 指针持有**,与 Pimpl 是同一个模式服务于两个理由
+(编译隔离 vs 可移动性)。
+
 ### 7.4 懒分配与 `noexcept` 构造:真实代码的两个决策
 
 公共类其实有**两个**数据成员,而不是一个:
@@ -392,6 +420,37 @@ service ADR-0004 的关键设计:`Request` 内部**不存 `string_view` 字段**
 配套的还有手工写的移动构造/赋值(`noexcept`,移动后源为安全空态)与
 **强异常安全**的拷贝赋值:先构造临时再 `swap`,两段分配都成功才提交——
 `Request &operator=(const Request &other)` 因此不能是 `= default`。
+
+### 8.1 `OwnedFd`:最小心智负担的移动专属 RAII
+
+事件循环给每个 socket 描述符配了一个 15 行的移动专属包装
+(`http_server.cpp` 的 `OwnedFd`),是上述纪律的最小完整样本:
+
+```cpp
+class OwnedFd {
+  public:
+    OwnedFd() noexcept = default;
+    explicit OwnedFd(int fd) noexcept : fd_{fd} {}
+    ~OwnedFd() { reset(); }                       // 析构即 close
+    OwnedFd(OwnedFd &&other) noexcept
+        : fd_{std::exchange(other.fd_, -1)} {}    // 移动 = 掏空源
+    OwnedFd &operator=(OwnedFd &&other) noexcept {
+        if (this != &other) { reset(); fd_ = std::exchange(other.fd_, -1); }
+        return *this;
+    }
+    ...
+};
+```
+
+- **`std::exchange` 是"移动并置空"的惯用一字函数**:`exchange(other.fd_,
+  -1)` 返回旧值同时把源写成 -1——比"先保存、再赋值"两行不易错,且让
+  "无效值 = -1"的约定只出现一次;
+- **自移动防护**:`if (this != &other)` 先 `reset()` 再接管,自赋值变
+  no-op 而不是把 fd 关掉再使用;
+- **拷贝删除**、`get()/valid()/release()/reset()` 对齐智能指针词汇,
+  唯一所有权一目了然。标准没有 `unique_fd`(C++23 也只有提案),这类
+  包装是每个 C++ 网络代码的必经之路——cpp 标准的"描述符由拥有型类型
+  包装、错误路径泄漏即缺陷"规则落在它身上。
 
 ## 9. 私有构造 + `friend`:可信构造边界
 

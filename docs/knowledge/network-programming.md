@@ -2,11 +2,11 @@
 
 对应索引:[README.md](README.md) › 文件索引。
 
-> **实现状态**:解析器(service ADR-0002/0003/0004 与 ADR-0008/0009 的
-> 对象)**已实现**;本篇的 socket/事件循环/TLS/静态服务部分是 **ADR-0003
-> 已批准、待实现**(T-2/T-3,Implementation Status: Not Started)的设计。
-> 以下按"设计 + 知识点"讲解,引用处标注 ADR 的 Scope/AC,不冒充已落地
-> 的代码。
+> **实现状态**:解析器与**响应序列化/错误映射**已实现;单线程 `poll()`
+> 事件循环(`service/src/http_server.cpp`,红 `cf1eed6` / 绿 `f7ca39c`)
+> 已实现并通过真实 socket 套件(ADR-0003 T-1 Complete,AC-1 Pass)。
+> TLS 监听、路由/静态服务与状态页仍是 T-2/T-3 待实现的设计,引用处
+> 标注 ADR 的 Scope/AC,不冒充已落地的代码。
 
 ## 1. 回环绑定:第一道安全边界
 
@@ -17,6 +17,8 @@ orange 是单学习者本地系统,ADD-0001 CON-02 规定计算服务**仅回环
 - `0.0.0.0`(INADDR_ANY):所有网卡,包括局域网——家庭/咖啡馆 Wi-Fi 下
   等于把服务暴露给同网段任意主机。
 
+实现里这是**构造性约束**:`LoopbackServer::bind` 只填
+`htonl(INADDR_LOOPBACK)` 的地址,API 根本无法表达"绑到别的地址"。
 ADR-0003 的 AC-6 把它变成可验证行为:`lsof -nP -iTCP:8080 -iTCP:8443
 -sTCP:LISTEN` 必须只列出两个回环监听,且连接本机 LAN IPv4 的两个端口
 都必须失败。
@@ -36,6 +38,19 @@ accept()        从队列取一个已连接套接字(每个客户端一个新 fd
 recv()/send()   在已连接套接字上读写
 close()         释放
 ```
+
+`LoopbackServer::bind` 的四个实现细节,每个都对应一条真实约束:
+
+- **错误通道是 errno 风格的返回值**(`return errno`),不是异常也不是
+  输出参数——套接字调用失败时 errno 本身就是编码诊断;ADR-0003 TN-2
+  要求端口冲突产生"编码错误"而不是悄悄换端口,套件断言第二个
+  `bind(port)` 返回非零(EADDRINUSE);
+- **SO_REUSEADDR**:不加它,重启服务会因上一个连接的 TIME_WAIT 残留
+  而绑定失败——AC-5"普通重启保持同一 origin"直接依赖这条;
+- **port 0 = 临时端口**:测试要拿到内核分配的端口,`getsockname` 在
+  bind 之后回填实际端口。两阶段 API(先 `bind` 拿端口、再 `serve`)
+  让测试无竞态地知道端口——比"起线程后 sleep 一下再连"诚实;
+- **监听 fd 也设 O_NONBLOCK**:accept 才能非阻塞地"排空为止"。
 
 关键认知:**recv 返回 n 字节 ≠ 语义单元**。TCP 是字节流,没有消息边界;
 "一个 HTTP 请求"必须由应用层协议(HTTP 的 Content-Length/chunked)在流上
@@ -68,16 +83,17 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout);
 
 ### readiness 驱动的读写状态机
 
-事件循环的心跳(ADR-0003 T-1 的设计):
+事件循环的心跳(`service/src/http_server.cpp` 的 `serve`,与设计一致):
 
 ```
-循环:
-  poll(所有连接 fd + 监听 fd, 带超时)
-  监听 fd 就绪        → accept() 新连接(非阻塞)
+循环直到 stop 标志:
+  重建 pollfd 数组:监听 fd + 每连接一项(按状态开/关 POLLIN、POLLOUT)
+  poll(…, timeout = min(所有连接的空闲截止, 250ms 上限))
+  监听 fd 就绪        → accept 循环直到 EAGAIN(非阻塞排空)
   连接可读(POLLIN)   → recv 进该连接的解码器(RequestDecoder::feed)
                         解析出完整请求 → 生成响应,挂到该连接的写队列
   连接可写(POLLOUT)   → send 冲写队列,写完撤回 POLLOUT 关心
-  超时                → 关闭超过 5 秒空闲的 keep-alive 连接
+  每轮巡检           → 关闭超过空闲时限的 keep-alive 连接
 ```
 
 要点:
@@ -85,10 +101,33 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout);
 - **非阻塞 socket + 读状态机**:读缓冲空时 `recv` 返回 EWOULDBLOCK,
   不能阻塞线程;解析器的 `incomplete` 对应"这轮读完了,等下一次 POLLIN";
 - **写也要状态机**:send 可能只写出部分(内核发送缓冲满),响应剩余部分
-  记在连接上,等 POLLOUT——这就是"readiness-driven read/write state
-  machines";
+  记在连接上(`outgoing` + `outgoing_offset`),等 POLLOUT——这就是
+  "readiness-driven read/write state machines"。**SIGPIPE 陷阱**:向已
+  关闭的对端 send 默认触发 SIGPIPE 杀死进程;Linux 有 `MSG_NOSIGNAL`
+  标志,**macOS 没有**,等价物是每个接受的 socket 上
+  `setsockopt(SOL_SOCKET, SO_NOSIGPIPE, 1)`——事件循环里必须做,否则
+  一个提前断开的测试客户端就能带走整个服务;
 - **每连接一个 `RequestDecoder`**:状态由解析器对象持有,事件循环只做
-  搬运(见 [`parser-design.md`](parser-design.md) 第 7 节)。
+  搬运(见 [`parser-design.md`](parser-design.md) 第 7 节)。解码器类型
+  刻意不可移动(声明析构抑制移动),而连接对象要随 vector 扩容/压缩而
+  搬迁——解法是 `unique_ptr<RequestDecoder>` 指针持有,状态原地不动
+  (与 [`cpp-language.md`](cpp-language.md) 第 7 节 Pimpl 同型);
+- **poll 超时 = 停止标志延迟 + 空闲巡检粒度**:取"所有连接最近的空闲
+  截止时刻"与 250ms 上限的较小者,stop 置位后最多 250ms 被观察到,
+  空闲关闭也不必等到整 5 秒的tick;
+- **背压**:连接积压的未发送输出 + 未解析输入达到 1 MiB 时关掉 POLLIN,
+  读方停了内存就有界,写方追平后自动恢复——不丢字节,只暂停读。
+
+### 一个 ASan 抓到的真实顺序缺陷
+
+第一版循环在 `poll` 返回、`accept` 排空新连接之后,按 `connections`
+的**当前**大小去读 `poll_fds[i+1].revents`——但 pollfd 数组是 poll 之前
+构建的,新接受的连接没有对应项,**越界读**了 vector 之后的内存。非
+sanitizer 构建恰好读到零值(revents=0,什么也不做)"碰巧通过";ASan
+直接报 heap-buffer-overflow。修复:accept 前先记录 `polled =
+connections.size()`,只服务"poll 时已存在"的连接,新连接等下一轮。
+教训有两条:**pollfd 集合与连接表必须在同一时刻对齐**;**多路复用循环
+的越界在普通构建里经常是沉默的**,socket 套件必须跑 sanitizer。
 
 ## 4. 队头阻塞与 AC-7
 
@@ -99,22 +138,41 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout);
 
 设计含义:A 的"等字节"是**状态**,不是**阻塞**——poll 循环天然满足,
 反而是"每请求同步处理完"的写法会违反。TLS 监听(OpenSSL 非阻塞 BIO)
-同样要在两个监听上分别通过该测试。
+同样要在两个监听上分别通过该测试。事件循环套件已用轻量版钉住机制:
+连接 A 只发半截请求(无终止空行),连接 B 的完整请求先得到响应,A
+补上剩余字节后也得到响应——"等"发生在 A 自己的连接状态里,循环照常
+服务 B。AC-7 的 echo 版本(pause 请求体、双监听)属 T-2。
 
 ## 5. keep-alive 与空闲超时
 
 - keep-alive:连接复用,省握手;有效请求的测试模型就是"一个持久客户端
-  在一条连接上连续三轮请求-响应"(AC-1);
-- 5 秒空闲超时:空闲连接也占 fd;超时关闭把**描述符积累**限制在有界
-  范围(资源上限与背压维度)。测试时超时配成 1 秒加速验证。
+  在一条连接上连续三轮请求-响应"(AC-1),外加同一连接上的管线化对
+  (一次写两个请求,收两个响应——解码器 `consumed` 之后的剩余字节留给
+  下一条消息,这就是增量解码与管线化的接缝);
+- 请求带 `Connection: close` 时服务端必须照办:响应加 `Connection:
+  close` 字段、发完即关(RFC 9110 7.6.1 的选项列表解析:逗号分隔、
+  大小写不敏感);
+- 空闲超时:空闲连接也占 fd;超时关闭把**描述符积累**限制在有界范围
+  (资源上限与背压维度)。实现细节:活跃时刻在**读和写两个方向**都刷新
+  ——客户端停止读响应时连接同样会因"无进度"超时,不会被写不出去的
+  字节永远挂住;测试时超时配成 1 秒加速验证,套件证明连接在配置的
+  时限被关、活跃连接不受影响。
 
 ## 6. 拒绝后关闭连接(为什么不是继续服务)
 
-ADR-0003(提交 `1f87646` 的提案,CC-5):431/413 拒绝响应带
-`Connection: close`,**响应写完即关闭**该连接,不做管线化续读。理由在
-[`parser-design.md`](parser-design.md) 第 3、5 节:终局错误后输入流的
-下一个"消息边界"不可信。测试要求:被拒连接上**不得**出现对后续管线
-请求的响应,EOF 必须发生,客户端**重连**后新请求成功。
+ADR-0003(CC-5):431/413 拒绝响应带 `Connection: close`,**响应写完即
+关闭**该连接,不做管线化续读。理由在 [`parser-design.md`](parser-design.md)
+第 3、5 节:终局错误后输入流的下一个"消息边界"不可信。
+
+实现里的完整生命周期(套件逐字节断言):错误响应先入写队列,连接标记
+`closing_after_flush` 并**立刻停止读**(POLLIN 关心撤掉,后续字节不再
+消费),POLLOUT 把响应冲干净后关闭——客户端观察到"精确的 431/413/400
+字节 → EOF",且**同连接上尾随的管线请求得不到任何响应**;重连后新
+请求成功。400(malformed)与 500(资源耗尽)同样走"响应即关"的路径,
+而处理器返回的正常响应保持 keep-alive。另一个细节:拒绝前必须把socket
+里的字节**读完**(一个 16 KiB 的 read 常常覆盖整个恶意输入)——
+否则 close 时接收队列有未读数据,内核发 RST 而不是 FIN,客户端可能
+在读到响应前就看到连接重置。
 
 ## 7. TLS:锁版 OpenSSL 与自签名证书(待实现)
 
@@ -145,10 +203,28 @@ ADR-0003(提交 `1f87646` 的提案,CC-5):431/413 拒绝响应带
 - AC-8 用真实浏览器 + 网络面板(仅中断 `/api/health`)验证状态页失败
   反馈在 2 秒内出现——浏览器行为无法被 curl 替代的部分才用浏览器。
 
+事件循环套件(`service/tests/http_server_tests.cpp`)自己的客户端工具
+箱,每一条都是为了"坏服务必须快败而不是挂死套件"(cpp 标准的确定性
+测试要求):
+
+- **SO_RCVTIMEO 截止**:每个客户端 socket 设 2 秒接收超时,服务端死锁
+  时 recv 返回 EAGAIN 失败,而不是把 CTest 挂到全局超时;
+- **线程只是宿主,不是并发模型**:测试用一个线程运行 `serve`(标准
+  要求的 stop 标志模式),主线程做客户端——被测的循环本身仍是单线程;
+  `stop_and_join` 保证析构总是可重入地停止;
+- **期望字节是独立预言**:断言的响应字节串手写在测试里,不经被测的
+  `write_response` 生成——序列化器写错时测试才说得出"错在哪";
+- **recv_eof 一石二鸟**:读到 EOF 为真;读到**多余字节**为假——正好
+  断言"被拒连接上不得有对管线后续请求的响应"。
+
 ## 延伸阅读
 
 - man pages:`poll(2)`、`socket(2)`、`accept(2)`、`recv(2)`(注意
   EAGAIN/EWOULDBLOCK 段落);
 - 《TCP/IP 详解 卷1》第17-22章( TCP 连接管理到拥塞控制);
 - C10K 文档(事件驱动并发的经典论述);
-- OpenSSL 官方 `SSL_accept`/non-blocking BIO 指南。
+- OpenSSL 官方 `SSL_accept`/non-blocking BIO 指南;
+- 代码入口:`LoopbackServer::bind/serve`、`serve_loopback`
+  (`service/src/http_server.cpp`),`error_response`
+  (`service/src/http_response.cpp`),真实 socket 套件
+  (`service/tests/http_server_tests.cpp`)。
