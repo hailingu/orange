@@ -2,16 +2,17 @@
 
 ## Metadata [Required]
 
-- **Decision Status**: Proposed
+- **Decision Status**: Accepted
 - **Implementation Status**: Not Started
 - **Date**: 2026-10-13
 - **Author**: @zcode
 - **Decision Owner**: @hailingu
 - **Required Approver**: @hailingu
 - **Record Scope**: Project
-- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — reapproval required
-- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — reapproval required
-- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — reapproval required
+- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: @hailingu
+- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: 2026-10-19T01:31:13Z
+- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Approve
+- **Approval Context Revision [Optional — informational and non-binding]**: Commit 50a0075 (exactly represents the approved document content; not approval evidence)
 - **Rejector [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
 - **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
 - **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
@@ -821,3 +822,5 @@ implementation completion. When triggered:
 | 2026-10-15 | Remove the obsolete head-test-main size exception with measured before/after evidence from Accepted service/docs/adr/ADR-0001-http-message-test-decomposition.md. The extraction retains every request-head assertion and both CTest targets pass; main is 24 code lines and the file 718 physical lines. Runtime decision, implementation and approval metadata and reciprocal ADD candidate linkage remain unchanged; this maintenance evidence grants no runtime implementation approval | @codex |
 
 | 2026-10-16 | Under the owner's explicit repair waiver, synchronized Scope, T-1, stable symbols, CC-5/CC-8, resource risk and AC-1 with the implemented independent chunk-metadata budget. Added joint-budget characterization; retained historical evidence and truthful Proposed / Not Started status. Formal approval and runtime socket acceptance are not inferred from the waiver. | @codex |
+
+| 2026-10-19 | Reapproval: repository owner @hailingu self-declared the identity and responded with the exact word Approve in the sole context of this record's repository-relative path. Decision Status Proposed→Accepted; Implementation Status remains Not Started; Approver, Approval Time and Approval Evidence recorded; Approval Context Revision recorded informationally at commit 50a0075, which exactly represents the approved content. Approval-preserving metadata change; no implementation evidence is claimed | @zcode |
