@@ -76,12 +76,11 @@ std::optional<ResponseError> wire_error(const Response &response) {
 void check_wire_shapes() {
     const std::array<ResponseField, 1> json_type{{{"Content-Type", "application/json"}}};
     check(wire_bytes(with_fields(200, BodyFraming::content_length, "{\"status\":\"ok\"}",
-                                 json_type)) ==
-              "HTTP/1.1 200 OK\r\n"
-              "Content-Type: application/json\r\n"
-              "Content-Length: 15\r\n"
-              "\r\n"
-              "{\"status\":\"ok\"}",
+                                 json_type)) == "HTTP/1.1 200 OK\r\n"
+                                                "Content-Type: application/json\r\n"
+                                                "Content-Length: 15\r\n"
+                                                "\r\n"
+                                                "{\"status\":\"ok\"}",
           "health shape serializes fields, framing and body exactly");
     check(wire_bytes(plain(200, BodyFraming::none, "")) == "HTTP/1.1 200 OK\r\n\r\n",
           "a bare response is the status line and empty line only");
@@ -94,8 +93,8 @@ void check_wire_shapes() {
     check(wire_bytes(plain(200, BodyFraming::chunked, "")) ==
               "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
           "an empty chunked body is only the last chunk");
-    check(wire_bytes(plain(200, BodyFraming::chunked, std::string_view("he\r\nllo", 6))) ==
-              "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n6\r\nhe\r\nllo\r\n0\r\n\r\n",
+    check(wire_bytes(plain(200, BodyFraming::chunked, "he\r\nllo")) ==
+              "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n7\r\nhe\r\nllo\r\n0\r\n\r\n",
           "chunk data may carry CR and LF bytes verbatim");
     const std::string filled(2748, 'x');
     check(wire_bytes(plain(200, BodyFraming::chunked, filled)) ==
@@ -118,8 +117,8 @@ void check_wire_shapes() {
               "HTTP/1.1 413 Content Too Large\r\nContent-Length: 8\r\n"
               "Connection: close\r\n\r\nrejected",
           "close follows the framing field before the body");
-    const std::array<ResponseField, 3> repeated{{
-        {"X-A", "1"}, {"X-B", std::string_view("caf\xC3\xA9", 5)}, {"X-A", "2"}}};
+    const std::array<ResponseField, 3> repeated{
+        {{"X-A", "1"}, {"X-B", std::string_view("caf\xC3\xA9", 5)}, {"X-A", "2"}}};
     check(wire_bytes(with_fields(200, BodyFraming::none, "", repeated)) ==
               "HTTP/1.1 200 OK\r\nX-A: 1\r\nX-B: caf\xC3\xA9\r\nX-A: 2\r\n\r\n",
           "fields keep caller order and duplicates; obs-text passes");
@@ -148,7 +147,7 @@ void check_reason_phrases() {
     for (const auto &entry : known) {
         const auto bytes = wire_bytes(plain(entry.status, BodyFraming::none, ""));
         check(bytes && *bytes == "HTTP/1.1 " + std::to_string(entry.status) + " " +
-                                    std::string(entry.phrase) + "\r\n\r\n",
+                                     std::string(entry.phrase) + "\r\n\r\n",
               "known status serializes its registered reason phrase");
     }
     check(wire_bytes(plain(599, BodyFraming::none, "")) == "HTTP/1.1 599 \r\n\r\n",
@@ -178,7 +177,7 @@ void check_rejections() {
     const std::array<ResponseField, 1> spaced_name{{{"X Test", "v"}}};
     const std::array<ResponseField, 1> slashed_name{{{"X/Test", "v"}}};
     check(wire_error(with_fields(200, BodyFraming::none, "", empty_name)) ==
-                      ResponseError::invalid_field_name &&
+                  ResponseError::invalid_field_name &&
               wire_error(with_fields(200, BodyFraming::none, "", spaced_name)) ==
                   ResponseError::invalid_field_name &&
               wire_error(with_fields(200, BodyFraming::none, "", slashed_name)) ==
@@ -189,9 +188,10 @@ void check_rejections() {
     const std::array<ResponseField, 1> bare_cr{{{"X-A", "a\rb"}}};
     const std::array<ResponseField, 1> bare_lf{{{"X-A", "a\nb"}}};
     const std::array<ResponseField, 1> nul_value{{{"X-A", std::string_view("a\0b", 3)}}};
-    const std::array<ResponseField, 1> del_value{{{"X-A", "a\x7F" "b"}}};
+    const std::array<ResponseField, 1> del_value{{{"X-A", "a\x7F"
+                                                          "b"}}};
     check(wire_error(with_fields(200, BodyFraming::none, "", leading_space)) ==
-                      ResponseError::invalid_field_value &&
+                  ResponseError::invalid_field_value &&
               wire_error(with_fields(200, BodyFraming::none, "", trailing_tab)) ==
                   ResponseError::invalid_field_value &&
               wire_error(with_fields(200, BodyFraming::none, "", bare_cr)) ==
@@ -210,7 +210,7 @@ void check_rejections() {
     const std::array<ResponseField, 1> transfer{{{"Transfer-Encoding", "chunked"}}};
     const std::array<ResponseField, 1> mixed_connection{{{"cOnNeCtIoN", "close"}}};
     check(wire_error(with_fields(200, BodyFraming::none, "", upper_length)) ==
-                      ResponseError::conflicting_field &&
+                  ResponseError::conflicting_field &&
               wire_error(with_fields(200, BodyFraming::none, "", transfer)) ==
                   ResponseError::conflicting_field &&
               wire_error(with_fields(200, BodyFraming::none, "", mixed_connection)) ==
