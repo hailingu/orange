@@ -62,7 +62,6 @@ class LoopbackServer {
 // errno-style code of the first failing phase, or 0 after a clean stop.
 [[nodiscard]] int serve_loopback(std::uint16_t port, RequestHandler handler,
                                  std::chrono::milliseconds idle_timeout,
-                                 const std::atomic_bool &stop,
-                                 std::uint16_t *bound_port = nullptr);
+                                 const std::atomic_bool &stop, std::uint16_t *bound_port = nullptr);
 } // namespace orange::http
 #endif // ORANGE_HTTP_SERVER_HPP

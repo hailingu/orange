@@ -102,6 +102,11 @@ const std::string fixed_wire = "HTTP/1.1 200 OK\r\n"
                                "\r\n"
                                "{\"status\":\"ok\"}";
 
+// Handler-owned field storage: a Response's field views must outlive the
+// write_response call (the borrowed-view contract), so they cannot point
+// into the handler's frame.
+const std::array<ResponseField, 1> handler_fields{{{"Content-Type", "application/json"}}};
+
 // Hosts the event loop on one thread with a stop flag; the loop itself
 // stays single-threaded, and the destructor always stops and joins.
 class TestServer {
@@ -109,9 +114,8 @@ class TestServer {
     TestServer(std::chrono::milliseconds idle_timeout, RequestHandler handler)
         : handler_(std::move(handler)) {
         check(server_.bind(0, &port_) == 0, "the loop binds an ephemeral loopback port");
-        thread_ = std::thread([this, idle_timeout] {
-            serve_exit_ = server_.serve(handler_, idle_timeout, stop_);
-        });
+        thread_ = std::thread(
+            [this, idle_timeout] { serve_exit_ = server_.serve(handler_, idle_timeout, stop_); });
     }
     ~TestServer() { stop_and_join(); }
     TestServer(const TestServer &) = delete;
@@ -150,8 +154,7 @@ void check_keepalive(const TestServer &server) {
               "keep-alive cycle receives the exact response in order");
     }
     check(send_all(fd, request + request), "pipelined pair sends in one delivery");
-    check(recv_exact(fd, fixed_wire.size() * 2, &received) &&
-              received == fixed_wire + fixed_wire,
+    check(recv_exact(fd, fixed_wire.size() * 2, &received) && received == fixed_wire + fixed_wire,
           "a pipelined pair receives both responses on one connection");
     ::close(fd);
 }
@@ -219,8 +222,7 @@ void check_rejections(const TestServer &server) {
                     "HTTP/1.1 431 Request Header Fields Too Large\r\n"
                     "Connection: close\r\n\r\n",
                     "an oversized head receives 431, close and EOF with no follow-up");
-    check_rejection(server,
-                    "POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 1048577\r\n\r\n",
+    check_rejection(server, "POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 1048577\r\n\r\n",
                     "HTTP/1.1 413 Content Too Large\r\nConnection: close\r\n\r\n",
                     "an over-capacity Content-Length receives 413, close and EOF");
     // 2000 one-byte chunks spend 10,000 metadata bytes on size lines and
@@ -228,11 +230,11 @@ void check_rejections(const TestServer &server) {
     std::string tiny_chunks;
     for (int i = 0; i < 2000; ++i)
         tiny_chunks += "1\r\nx\r\n";
-    check_rejection(
-        server, "POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nTransfer-Encoding: chunked\r\n\r\n" +
-                    tiny_chunks,
-        "HTTP/1.1 413 Content Too Large\r\nConnection: close\r\n\r\n",
-        "aggregate chunk metadata past 8192 bytes receives 413, close and EOF");
+    check_rejection(server,
+                    "POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nTransfer-Encoding: chunked\r\n\r\n" +
+                        tiny_chunks,
+                    "HTTP/1.1 413 Content Too Large\r\nConnection: close\r\n\r\n",
+                    "aggregate chunk metadata past 8192 bytes receives 413, close and EOF");
     check_rejection(server, "GET-ONLY\r\n\r\n",
                     "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n",
                     "a malformed request line receives 400, close and EOF");
@@ -262,8 +264,7 @@ void check_two_connections(const TestServer &server) {
 }
 
 // Request bodies reach the handler decoded, in both framings.
-void check_bodies_reach_handler(const TestServer &server,
-                                const std::vector<std::string> *bodies) {
+void check_bodies_reach_handler(const TestServer &server, const std::vector<std::string> *bodies) {
     const int fd = connect_client(server.port());
     check(fd >= 0, "body client connects");
     if (fd < 0)
@@ -294,8 +295,8 @@ int main() {
     const auto bodies = std::make_shared<std::vector<std::string>>();
     const RequestHandler handler = [bodies](const ParsedMessage &message) {
         bodies->push_back(message.body);
-        const std::array<ResponseField, 1> fields{{{"Content-Type", "application/json"}}};
-        return Response{200, BodyFraming::content_length, "{\"status\":\"ok\"}", fields, false};
+        return Response{200, BodyFraming::content_length, "{\"status\":\"ok\"}", handler_fields,
+                        false};
     };
     {
         TestServer server(std::chrono::milliseconds(1000), handler);
