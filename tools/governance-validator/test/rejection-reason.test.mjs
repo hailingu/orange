@@ -1,7 +1,7 @@
-// ADR: docs/adr/ADR-0002-governance-validator-adoption.md
+// ADR: docs/adr/ADR-0002-governance-validator-adoption.md, docs/adr/ADR-0007-governance-fixture-lifecycle.md
 
 import assert from "node:assert/strict";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -9,14 +9,6 @@ import { RISK_MATRIX_TABLE, acceptedAdr, run, validRepository, write } from "./f
 
 // A concrete explanation that must satisfy the ADR rejection-reason gate.
 const COMPLETE_REASON = "the proposal exceeded the approved concurrency scope";
-
-// Every fixture root is task-owned temporary state and is removed after its
-// test (AGENTS.md rejection-reason contract).
-function repository(t) {
-  const root = validRepository();
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  return root;
-}
 
 function reasonDiagnostic(path) {
   return new RegExp(`${path.replaceAll(/[-/.*+?^${}()|[\]\\]/g, "\\$&")}: ADR_REJECTION_REASON_REQUIRED —`);
@@ -106,7 +98,7 @@ Initial.
 // RR-2 (S-1): a Rejected Full ADR without an active Rejection Reason must
 // fail validation with the path-prefixed diagnostic contract.
 test("RR-2 rejects a Rejected Full ADR whose Rejection Reason is missing", (t) => {
-  const root = repository(t);
+  const root = validRepository(t);
   const path = rejectedAdr(root, { id: "0101", reason: "@@absent@@" });
 
   const result = run(root);
@@ -182,7 +174,7 @@ for (const [id, label, reason] of [
   ["0107", "a template-placeholder", "{{REJECTION_REASON}}"],
 ]) {
   test(`RR-2 rejects a Rejected Full ADR with ${label} Rejection Reason`, (t) => {
-    const root = repository(t);
+    const root = validRepository(t);
     const path = rejectedAdr(root, { id, reason });
 
     const result = run(root);
@@ -198,7 +190,7 @@ for (const [id, lightweight, service] of [
   ["0112", true, true],
 ]) {
   test(`RR-2 rejects a missing Rejection Reason for a Rejected ${lightweight ? "Lightweight" : "Full"} ADR in ${service ? "a service" : "the project"} archive`, (t) => {
-    const root = repository(t);
+    const root = validRepository(t);
     const path = rejectedAdr(root, { id, reason: "@@absent@@", lightweight, service });
 
     const result = run(root);
@@ -210,7 +202,7 @@ for (const [id, lightweight, service] of [
 // RR-2 success group (S-2): concrete reasons pass for both types, label forms,
 // and scopes.
 test("RR-2 accepts a Rejected Full ADR with a concrete plain Rejection Reason", (t) => {
-  const root = repository(t);
+  const root = validRepository(t);
   rejectedAdr(root, { id: "0120" });
 
   const result = run(root);
@@ -218,7 +210,7 @@ test("RR-2 accepts a Rejected Full ADR with a concrete plain Rejection Reason", 
 });
 
 test("RR-2 accepts a Rejected Lightweight ADR with a requirement-labeled reason in a service archive", (t) => {
-  const root = repository(t);
+  const root = validRepository(t);
   rejectedAdr(root, { id: "0121", labeled: true, lightweight: true, service: true });
 
   const result = run(root);
@@ -228,7 +220,7 @@ test("RR-2 accepts a Rejected Lightweight ADR with a requirement-labeled reason 
 // RR-2 recovery group (S-6): correcting only the missing reason restores
 // validity without any state outside the document.
 test("RR-2 restores validity after the missing reason is corrected", (t) => {
-  const root = repository(t);
+  const root = validRepository(t);
   const path = rejectedAdr(root, { id: "0122", reason: "@@absent@@" });
   assert.equal(run(root).status, 1);
 
@@ -276,7 +268,7 @@ for (const [id, label, inject] of [
   ],
 ]) {
   test(`RR-3 does not satisfy the reason from ${label}`, (t) => {
-    const root = repository(t);
+    const root = validRepository(t);
     const path = rejectedAdr(root, { id, reason: "@@absent@@" });
     rewrite(root, path, inject(COMPLETE_REASON));
 
@@ -287,7 +279,7 @@ for (const [id, label, inject] of [
 }
 
 test("RR-3 does not satisfy the reason from duplicate active metadata and retains the duplicate diagnostic", (t) => {
-  const root = repository(t);
+  const root = validRepository(t);
   const path = rejectedAdr(root, { id: "0134", reason: "@@absent@@" });
   rewrite(root, path, (content) => content.replace(
     "- **Superseded By**: None",
@@ -302,14 +294,14 @@ test("RR-3 does not satisfy the reason from duplicate active metadata and retain
 
 // RR-4 compatibility group (S-4): the gate applies only to Rejected ADRs.
 test("RR-4 leaves a Proposed ADR without the field valid", (t) => {
-  const root = repository(t);
+  const root = validRepository(t);
 
   const result = run(root);
   assert.equal(result.status, 0, result.stderr);
 });
 
 test("RR-4 leaves an Accepted ADR without the field valid", (t) => {
-  const root = repository(t);
+  const root = validRepository(t);
   acceptedAdr(root, "0140");
 
   const result = run(root);
@@ -317,7 +309,7 @@ test("RR-4 leaves an Accepted ADR without the field valid", (t) => {
 });
 
 test("RR-4 leaves a Rejected OCR without the field valid", (t) => {
-  const root = repository(t);
+  const root = validRepository(t);
   rejectedOcr(root, "0141");
 
   const result = run(root);
@@ -327,7 +319,7 @@ test("RR-4 leaves a Rejected OCR without the field valid", (t) => {
 // RR-4 group (S-5): a complete reason never substitutes for the independent
 // rejection, final-state, and archival-residence gates.
 test("RR-4 still requires the Rejector metadata when the reason is complete", (t) => {
-  const root = repository(t);
+  const root = validRepository(t);
   rejectedAdr(root, { id: "0142", omitRejector: true });
 
   const result = run(root);
@@ -336,7 +328,7 @@ test("RR-4 still requires the Rejector metadata when the reason is complete", (t
 });
 
 test("RR-4 still requires Not Applicable implementation for a Rejected ADR with a complete reason", (t) => {
-  const root = repository(t);
+  const root = validRepository(t);
   rejectedAdr(root, { id: "0143", implementation: "In Progress" });
 
   const result = run(root);
@@ -345,7 +337,7 @@ test("RR-4 still requires Not Applicable implementation for a Rejected ADR with 
 });
 
 test("RR-4 still requires archive residence for a Rejected ADR with a complete reason", (t) => {
-  const root = repository(t);
+  const root = validRepository(t);
   rejectedAdr(root, { id: "0144", archived: false });
 
   const result = run(root);

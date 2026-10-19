@@ -1,4 +1,6 @@
 // ADR: docs/adr/ADR-0002-governance-validator-adoption.md
+// Repair authorization: docs/reviews/2026-10-16-peer-assessment-repairs.md.
+import { recordKind } from "./record-identity.mjs";
 
 // A CommonMark fence line consisting solely of a closing marker run.
 const CLOSING_FENCE_PATTERN = /^\s{0,3}(`{3,}|~{3,})\s*$/;
@@ -77,123 +79,116 @@ function commentStrippedDiagrams(content) {
     .join("\n");
 }
 
-// Builds the Mermaid syntax and ADD diagram-completeness validator from the
-// configured parser and shared Markdown helpers.
-export function createMermaidValidator(context) {
-  const {
-    escapeRegExp,
-    mermaid,
-    metadata,
-    sectionContent,
-    stripFencedCode,
-    tableFromContent,
-  } = context;
+// Collects semantic IDs from the section's structured table.
+function tableIds(context, content, pattern) {
+  const { tableFromContent } = context;
+  const table = tableFromContent(content);
+  const idColumn = table?.header.indexOf("ID") ?? -1;
+  if (idColumn < 0) return [];
+  return table.rows.map((row) => row[idColumn]).filter((id) => pattern.test(id));
+}
 
-  function tableIds(content, pattern) {
-    const table = tableFromContent(content);
-    const idColumn = table?.header.indexOf("ID") ?? -1;
-    if (idColumn < 0) return [];
-    return table.rows.map((row) => row[idColumn]).filter((id) => pattern.test(id));
+// A conditional flow section is exempt only when its entire stripped body
+// is one reasoned N/A: a real table followed by a stray N/A line still owes
+// its triggered table/diagram gates.
+function wholeBodyIsNa(context, content) {
+  const { stripFencedCode } = context;
+  const body = stripFencedCode(content).trim();
+  return body.length > 0 && !body.includes("\n") && /^N\/A\s+—\s+\S/.test(body);
+}
+
+// Whether this file is a Current ADD, whose triggered design gates apply
+// (Draft ADDs may be temporarily incomplete).
+function isCurrentAdd(context, path, markdown) {
+  const { metadata } = context;
+  return recordKind(path).isAdd
+    && metadata(markdown, "Design Status") === "Current";
+}
+
+// Combines syntax and ADD-specific completeness checks for one design.
+export async function validateMermaid(context, path, markdown, errors) {
+  await validateMermaidSyntax(context, path, markdown, errors);
+  validateArchitectureDesignCompleteness(context, path, markdown, errors);
+  validateDiagramIdCoverage(context, path, markdown, errors);
+  validateCurrentAddFlowGates(context, path, markdown, errors);
+}
+
+// Syntax-checks every Mermaid block through the configured parser.
+export async function validateMermaidSyntax(context, path, markdown, errors) {
+  const { mermaid } = context;
+  for (const [index, block] of mermaidBlocks(markdown).entries()) {
+    try {
+      const result = await mermaid.parse(block, { suppressErrors: true });
+      if (result === false) throw new Error("parser rejected the diagram");
+    } catch (error) {
+      errors.push(`${path}: invalid Mermaid block ${index + 1}: ${error.message}`);
+    }
   }
+}
 
-  // A conditional flow section is exempt only when its entire stripped body
-  // is one reasoned N/A: a real table followed by a stray N/A line still owes
-  // its triggered table/diagram gates.
-  function wholeBodyIsNa(content) {
-    const body = stripFencedCode(content).trim();
-    return body.length > 0 && !body.includes("\n") && /^N\/A\s+—\s+\S/.test(body);
+// A Current ADD's Architecture Design must contain its own structured
+// component table and a Mermaid flowchart in this section (an unauthorized
+// N/A cannot substitute for a Required section).
+function validateArchitectureDesignCompleteness(context, path, markdown, errors) {
+  const { sectionContent } = context;
+  if (!isCurrentAdd(context, path, markdown)) return;
+  const content = sectionContent(markdown, "Architecture Design");
+  if (!content) return;
+  if (tableIds(context, content, /^C-\d+$/).length === 0) {
+    errors.push(`${path}: Architecture Design requires a structured component table`);
   }
-
-  // Whether this file is a Current ADD, whose triggered design gates apply
-  // (Draft ADDs may be temporarily incomplete).
-  function isCurrentAdd(path, markdown) {
-    return path.includes("/architecture/")
-      && path.split("/").at(-1).startsWith("ADD-")
-      && metadata(markdown, "Design Status") === "Current";
+  const sectionDiagrams = mermaidBlocks(content);
+  if (sectionDiagrams.length === 0) {
+    errors.push(`${path}: Architecture Design requires a Mermaid flowchart in this section`);
+    return;
   }
-
-  async function validateMermaid(path, markdown, errors) {
-    await validateMermaidSyntax(path, markdown, errors);
-    validateArchitectureDesignCompleteness(path, markdown, errors);
-    validateDiagramIdCoverage(path, markdown, errors);
-    validateCurrentAddFlowGates(path, markdown, errors);
+  if (!sectionDiagrams.some((d) => /^flowchart\b/m.test(d))) {
+    errors.push(`${path}: Architecture Design Mermaid diagram must be a flowchart`);
   }
+}
 
-  // Syntax-checks every Mermaid block through the configured parser.
-  async function validateMermaidSyntax(path, markdown, errors) {
-    for (const [index, block] of mermaidBlocks(markdown).entries()) {
-      try {
-        const result = await mermaid.parse(block, { suppressErrors: true });
-        if (result === false) throw new Error("parser rejected the diagram");
-      } catch (error) {
-        errors.push(`${path}: invalid Mermaid block ${index + 1}: ${error.message}`);
+// Every table-declared component, flow, or interaction ID must appear in
+// its section's Mermaid diagrams.
+function validateDiagramIdCoverage(context, path, markdown, errors) {
+  const { escapeRegExp, sectionContent } = context;
+  for (const [section, idPattern, description] of [
+    ["Architecture Design", /^C-\d+$/, "Mermaid architecture diagram"],
+    ["Control Flow Design", /^CF-\d+$/, "Mermaid control-flow diagram"],
+    ["Interaction Flow Design", /^IX-\d+$/, "Mermaid interaction-flow diagram"],
+  ]) {
+    const content = sectionContent(markdown, section);
+    if (!content || wholeBodyIsNa(context, content)) continue;
+    const diagrams = commentStrippedDiagrams(content);
+    for (const id of tableIds(context, content, idPattern)) {
+      if (!new RegExp(`(^|[^A-Za-z0-9-])${escapeRegExp(id)}($|[^A-Za-z0-9-])`).test(diagrams)) {
+        errors.push(`${path}: ${description} does not cover ${id}`);
       }
     }
   }
+}
 
-  // A Current ADD's Architecture Design must contain its own structured
-  // component table and a Mermaid flowchart in this section (an unauthorized
-  // N/A cannot substitute for a Required section).
-  function validateArchitectureDesignCompleteness(path, markdown, errors) {
-    if (!isCurrentAdd(path, markdown)) return;
-    const content = sectionContent(markdown, "Architecture Design");
-    if (!content) return;
-    if (tableIds(content, /^C-\d+$/).length === 0) {
-      errors.push(`${path}: Architecture Design requires a structured component table`);
+// A Current ADD's triggered Control Flow and Interaction Flow sections must
+// each carry a structured table, a Mermaid diagram, and an allowed diagram
+// type (Draft ADDs may be incomplete). Control Flow allows a flowchart or
+// sequenceDiagram; Interaction Flow allows a sequenceDiagram or stateDiagram-v2.
+function validateCurrentAddFlowGates(context, path, markdown, errors) {
+  const { sectionContent } = context;
+  if (!isCurrentAdd(context, path, markdown)) return;
+  for (const [section, idPattern, allowedTypes] of [
+    ["Control Flow Design", /^CF-\d+$/, [/^flowchart\b/m, /^sequenceDiagram\b/m]],
+    ["Interaction Flow Design", /^IX-\d+$/, [/^sequenceDiagram\b/m, /^stateDiagram-v2\b/m]],
+  ]) {
+    const content = sectionContent(markdown, section);
+    if (!content || wholeBodyIsNa(context, content)) continue;
+    const ids = tableIds(context, content, idPattern);
+    const diagrams = mermaidBlocks(content);
+    if (ids.length === 0) {
+      errors.push(`${path}: ${section} requires a structured table for a Current ADD`);
     }
-    const sectionDiagrams = mermaidBlocks(content);
-    if (sectionDiagrams.length === 0) {
-      errors.push(`${path}: Architecture Design requires a Mermaid flowchart in this section`);
-      return;
-    }
-    if (!sectionDiagrams.some((d) => /^flowchart\b/m.test(d))) {
-      errors.push(`${path}: Architecture Design Mermaid diagram must be a flowchart`);
+    if (diagrams.length === 0) {
+      errors.push(`${path}: ${section} requires a Mermaid diagram for a Current ADD`);
+    } else if (!diagrams.some((d) => allowedTypes.some((type) => type.test(d)))) {
+      errors.push(`${path}: ${section} Mermaid diagram must be an allowed type for a Current ADD`);
     }
   }
-
-  // Every table-declared component, flow, or interaction ID must appear in
-  // its section's Mermaid diagrams.
-  function validateDiagramIdCoverage(path, markdown, errors) {
-    for (const [section, idPattern, description] of [
-      ["Architecture Design", /^C-\d+$/, "Mermaid architecture diagram"],
-      ["Control Flow Design", /^CF-\d+$/, "Mermaid control-flow diagram"],
-      ["Interaction Flow Design", /^IX-\d+$/, "Mermaid interaction-flow diagram"],
-    ]) {
-      const content = sectionContent(markdown, section);
-      if (!content || wholeBodyIsNa(content)) continue;
-      const diagrams = commentStrippedDiagrams(content);
-      for (const id of tableIds(content, idPattern)) {
-        if (!new RegExp(`(^|[^A-Za-z0-9-])${escapeRegExp(id)}($|[^A-Za-z0-9-])`).test(diagrams)) {
-          errors.push(`${path}: ${description} does not cover ${id}`);
-        }
-      }
-    }
-  }
-
-  // A Current ADD's triggered Control Flow and Interaction Flow sections must
-  // each carry a structured table, a Mermaid diagram, and an allowed diagram
-  // type (Draft ADDs may be incomplete). Control Flow allows a flowchart or
-  // sequenceDiagram; Interaction Flow allows a sequenceDiagram or stateDiagram-v2.
-  function validateCurrentAddFlowGates(path, markdown, errors) {
-    if (!isCurrentAdd(path, markdown)) return;
-    for (const [section, idPattern, allowedTypes] of [
-      ["Control Flow Design", /^CF-\d+$/, [/^flowchart\b/m, /^sequenceDiagram\b/m]],
-      ["Interaction Flow Design", /^IX-\d+$/, [/^sequenceDiagram\b/m, /^stateDiagram-v2\b/m]],
-    ]) {
-      const content = sectionContent(markdown, section);
-      if (!content || wholeBodyIsNa(content)) continue;
-      const ids = tableIds(content, idPattern);
-      const diagrams = mermaidBlocks(content);
-      if (ids.length === 0) {
-        errors.push(`${path}: ${section} requires a structured table for a Current ADD`);
-      }
-      if (diagrams.length === 0) {
-        errors.push(`${path}: ${section} requires a Mermaid diagram for a Current ADD`);
-      } else if (!diagrams.some((d) => allowedTypes.some((type) => type.test(d)))) {
-        errors.push(`${path}: ${section} Mermaid diagram must be an allowed type for a Current ADD`);
-      }
-    }
-  }
-
-  return { validateMermaid };
 }

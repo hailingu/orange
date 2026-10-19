@@ -1,4 +1,4 @@
-// ADR: docs/adr/ADR-0002-governance-validator-adoption.md
+// ADR: docs/adr/ADR-0002-governance-validator-adoption.md, docs/adr/ADR-0006-complete-record-index-validation.md
 
 // Structural Markdown parsing for the governance validator: fence-aware
 // comment and code stripping, heading and record-filename recognition, and
@@ -182,6 +182,32 @@ export function tableFromContent(markdown) {
     header: tableCells(tableLines[0]),
     rows: tableLines.slice(1).filter((line) => !isSeparatorRow(line)).map(tableCells),
   };
+}
+
+// Enumerates every real table with independent headers and rows. Uses the
+// established fence, cell and separator grammar in one advancing table scan;
+// non-table prose and literal examples contribute no entries.
+export function tablesFromContent(markdown) {
+  const lines = stripFencedCode(markdown).split("\n");
+  const tables = [];
+  let index = 0;
+  while (index < lines.length - 1) {
+    const header = lines[index];
+    const separator = lines[index + 1];
+    if (!header.startsWith("|") || isSeparatorRow(header)
+      || !isSeparatorRow(separator) || tableCells(separator).length !== tableCells(header).length) {
+      index += 1;
+      continue;
+    }
+    const rows = [];
+    index += 2;
+    while (index < lines.length && lines[index].startsWith("|")) {
+      if (!isSeparatorRow(lines[index])) rows.push(tableCells(lines[index]));
+      index += 1;
+    }
+    tables.push({ header: tableCells(header), rows });
+  }
+  return tables;
 }
 
 // Parses a Markdown task-list item at the list margin or after three spaces.

@@ -70,9 +70,14 @@ change that adds its Scope Routing row.
 
 ## Verification Tooling
 
-The configured governance validator at `tools/governance-validator/` does not
-exist yet, so the `npm test --prefix tools/governance-validator` and
-`npm run validate --prefix tools/governance-validator` checks referenced by
-AGENTS.md Scope Routing cannot run. This is the recorded open prerequisite of
-ADR-0001 (AC-06) and is not a passing state; structured review supplements it
-until the validator is supplied.
+The configured governance validator is available at
+[`tools/governance-validator/`](../tools/governance-validator/README.md), adopted
+under [ADR-0002](adr/ADR-0002-governance-validator-adoption.md). Its configured
+checks, executed from the repository root, are:
+
+- `npm test --prefix tools/governance-validator`
+- `npm run validate --prefix tools/governance-validator`
+
+The original missing-tool prerequisite of ADR-0001 (AC-06) has been resolved;
+the decision-record index records its completed status. Automated validation
+supplements the structured review required by AGENTS.md.

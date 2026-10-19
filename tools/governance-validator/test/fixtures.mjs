@@ -1,8 +1,9 @@
-// ADR: docs/adr/ADR-0002-governance-validator-adoption.md
+// ADR: docs/adr/ADR-0002-governance-validator-adoption.md, docs/adr/ADR-0007-governance-fixture-lifecycle.md
+// Direct repair authorization: docs/reviews/2026-10-16-peer-assessment-followup.md.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,20 +34,17 @@ function write(root, path, content) {
   writeFileSync(absolute, content);
 }
 
-function validRepository() {
-  const root = mkdtempSync(join(tmpdir(), "orange-governance-"));
-  write(
-    root,
+// Immutable baseline grammar, populated only after the caller owns teardown.
+const BASE_REPOSITORY_FILES = [
+  [
     "docs/adr/INDEX.md",
     `| Type | ID | Title | Decision Status | Implementation Status | Scope | Architecture Source | Path | Superseded By |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| Full ADR | ADR-0001 | Example | Proposed | Not Started | Project | N/A — governance-only example | docs/adr/ADR-0001-example.md | None |\n`,
-  );
-  write(
-    root,
+  ],
+  [
     "docs/architecture/INDEX.md",
     `| ID | Title | Design Status | Scope Level | Scope | Path | Demand Source | Superseded By |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| ADD-0001 | Example | Draft | Repository / Cross-project | Project | docs/architecture/ADD-0001-example.md | https://example.test/card | None |\n`,
-  );
-  write(
-    root,
+  ],
+  [
     "docs/adr/ADR-0001-example.md",
     `# ADR-0001: Example
 
@@ -89,9 +87,8 @@ Inactive guidance.
 ## Change Log [Required]
 Initial.
 `,
-  );
-  write(
-    root,
+  ],
+  [
     "docs/architecture/ADD-0001-example.md",
     `# ADD-0001: Example
 
@@ -151,7 +148,21 @@ Inactive guidance.
 ## Change Log [Required]
 Initial.
 `,
-  );
+  ],
+];
+
+// Allocates one directory and registers its exact owner before any population.
+function temporaryDirectory(t, prefix) {
+  assert.equal(typeof t?.after, "function", "a test context must own temporary directories");
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  return root;
+}
+
+// Creates a valid repository whose lifetime is owned by the supplied test.
+function validRepository(t) {
+  const root = temporaryDirectory(t, "orange-governance-");
+  for (const [path, content] of BASE_REPOSITORY_FILES) write(root, path, content);
   return root;
 }
 
@@ -383,4 +394,7 @@ Initial.
   );
 }
 
-export { ACCEPTED_RISK_MATRIX_TABLE, RISK_MATRIX_TABLE, acceptedAdr, acceptedOcr, completeOcr, replaceSection, run, validRepository, write };
+export {
+  ACCEPTED_RISK_MATRIX_TABLE, RISK_MATRIX_TABLE, acceptedAdr, acceptedOcr,
+  completeOcr, replaceSection, run, temporaryDirectory, validRepository, write,
+};

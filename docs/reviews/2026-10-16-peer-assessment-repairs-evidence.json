@@ -1,0 +1,262 @@
+{
+  "date": "2026-10-16",
+  "kind": "Task verification evidence; no commit or retained executable artifact",
+  "baseCommit": "1f876464862c69c5a54424d91fbfd6937983e23c",
+  "branch": "feat/cand-0001-local-runtime",
+  "authorization": {
+    "actor": "@hailingu",
+    "evidence": "本次明确豁免 ADR 前置审批与串行限制，直接修复已证实问题",
+    "scope": "Confirmed peer-review repairs only; existing Proposed ADRs retain their statuses"
+  },
+  "toolchain": {
+    "compiler": "Apple clang 21.0.0 (clang-2100.3.34.2)",
+    "target": "arm64-apple-darwin27.0.0"
+  },
+  "testFirst": [
+    {
+      "command": "TMPDIR=<owned>/fixtures node --test tools/governance-validator/test/peer-review-regressions.test.mjs",
+      "beforeProductionChange": true,
+      "tests": 15,
+      "pass": 4,
+      "fail": 11,
+      "result": "Expected CLI behavior mismatches, no crash or import failure in the initial red run",
+      "failedCases": [
+        "t ok 1 - rejects mismatched record location: docs/adr/ocr/ADR-0001-example.md",
+        "t ok 2 - rejects mismatched record location: docs/adr/ADD-0001-example.md",
+        "t ok 3 - syntax-checks Mermaid in docs/adr/ADR-0001-example.md",
+        "t ok 4 - syntax-checks Mermaid in docs/adr/ocr/OCR-0002-example.md",
+        "t ok 5 - syntax-checks Mermaid in docs/guide.md",
+        "t ok 7 - Deferred candidate needs a recorded reason",
+        "t ok 9 - risk legend is not a baseline dimension table",
+        "t ok 10 - fenced and commented template examples are inactive",
+        "t ok 12 - OCR eligibility clauses are independent of list position",
+        "t ok 14 - archiving a record requires updating source provenance markers",
+        "t ok 15 - Markdown link supersession retains a complete service-root identity"
+      ]
+    },
+    {
+      "command": "ctest --test-dir <owned>/cpp-build --output-on-failure",
+      "beforeProductionChange": true,
+      "tests": 2,
+      "pass": 1,
+      "fail": 1,
+      "failedRuntimeChecks": 14,
+      "result": "Unbounded chunk metadata was accepted; new aggregate-limit and sticky-error expectations failed",
+      "diagnostics": [
+        "CHECK failed: one metadata byte above the cap is rejected with HTTP 413",
+        "CHECK failed: one metadata byte above the cap is rejected with HTTP 413",
+        "CHECK failed: aggregate metadata is bounded across chunk, trailer and transport splits",
+        "CHECK failed: metadata rejection remains sticky until reset",
+        "CHECK failed: aggregate metadata is bounded across chunk, trailer and transport splits",
+        "CHECK failed: metadata rejection remains sticky until reset",
+        "CHECK failed: aggregate metadata is bounded across chunk, trailer and transport splits",
+        "CHECK failed: metadata rejection remains sticky until reset",
+        "CHECK failed: aggregate metadata is bounded across chunk, trailer and transport splits",
+        "CHECK failed: metadata rejection remains sticky until reset",
+        "CHECK failed: aggregate metadata is bounded across chunk, trailer and transport splits",
+        "CHECK failed: metadata rejection remains sticky until reset",
+        "CHECK failed: aggregate metadata is bounded across chunk, trailer and transport splits",
+        "CHECK failed: metadata rejection remains sticky until reset"
+      ]
+    },
+    {
+      "command": "TMPDIR=<owned>/fixtures node --test --test-name-pattern=\"multiline source example\" tools/governance-validator/test/peer-review-regressions.test.mjs",
+      "beforeFollowupProductionChange": true,
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "result": "A literal multiline source example was misread as a file marker; restricting markers to their required leading-comment position corrected it"
+    }
+  ],
+  "checks": [
+    {
+      "command": "TMPDIR=<owned>/fixtures npm test --prefix tools/governance-validator",
+      "exitCode": 0,
+      "tests": 290,
+      "pass": 290,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "durationMs": 29662.620583
+    },
+    {
+      "command": "npm run validate --prefix tools/governance-validator",
+      "exitCode": 0,
+      "result": "Governance validation passed."
+    },
+    {
+      "command": "cmake -S service -B <owned>/cpp-build",
+      "exitCode": 0,
+      "result": "Configured disposable verification compile; service/build preserved"
+    },
+    {
+      "command": "cmake --build <owned>/cpp-build",
+      "exitCode": 0,
+      "result": "Build succeeded, zero compiler warnings"
+    },
+    {
+      "command": "ctest --test-dir <owned>/cpp-build --output-on-failure",
+      "exitCode": 0,
+      "tests": 2,
+      "pass": 2,
+      "fail": 0,
+      "output": "Test project /private/tmp/orange-peer-repair-TJYIE6/cpp-build\n    Start 1: http_message_tests\n1/2 Test #1: http_message_tests ...............   Passed    1.74 sec\n    Start 2: http_request_decoder_tests\n2/2 Test #2: http_request_decoder_tests .......   Passed    0.37 sec\n\n100% tests passed, 0 tests failed out of 2\n\nTotal Test time (real) =   2.11 sec\n"
+    },
+    {
+      "command": "cmake -S service -B <owned>/cpp-sanitized -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer -Werror -Wshadow -Wconversion'",
+      "exitCode": 0
+    },
+    {
+      "command": "cmake --build <owned>/cpp-sanitized",
+      "exitCode": 0,
+      "result": "Build succeeded, zero compiler warnings"
+    },
+    {
+      "command": "ctest --test-dir <owned>/cpp-sanitized --output-on-failure",
+      "exitCode": 0,
+      "tests": 2,
+      "pass": 2,
+      "fail": 0,
+      "result": "No ASan/UBSan reports",
+      "output": "Test project /private/tmp/orange-peer-repair-TJYIE6/cpp-sanitized\n    Start 1: http_message_tests\n1/2 Test #1: http_message_tests ...............   Passed    0.44 sec\n    Start 2: http_request_decoder_tests\n2/2 Test #2: http_request_decoder_tests .......   Passed    0.46 sec\n\n100% tests passed, 0 tests failed out of 2\n\nTotal Test time (real) =   0.90 sec\n"
+    },
+    {
+      "command": "clang-format --dry-run --Werror service/src/*.cpp service/src/*.hpp service/tests/*.cpp",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "sourceContentIds": {
+    "service/src/http_body_framing.cpp": "48826bf302876b912824b9648059e08249181ac6",
+    "service/src/http_messages.hpp": "6e33453901bfc0bd2e5a6d6c9a1bfee3a9f6da5b",
+    "service/src/http_request_decoder.cpp": "cb3c08acefa1482386474fc9422edea46d48a4b8",
+    "service/src/http_request_decoder.hpp": "f2eda67bd70c1cc2d53d554aa37c916172abe829",
+    "service/tests/http_request_decoder_tests.cpp": "e92364ebe93175f987d6844bcd129bdddd7a60a6",
+    "tools/governance-validator/validate.mjs": "41dcd31c32b1e1023ce234a3a06612f34451ab84",
+    "tools/governance-validator/test/peer-review-regressions.test.mjs": "0a26618c802a5bebf775ea450770108dfdb1789e",
+    "tools/governance-validator/lib/accepted-records.mjs": "1cfe925b45734305fcc4eea3e53722655a3655b5",
+    "tools/governance-validator/lib/accepted-plans.mjs": "e99ae9c9babfd8d8fddb95e82e00769be4c750ff",
+    "tools/governance-validator/lib/accepted-risk.mjs": "53894ba2aebcb3ea29b8100c40751834aa7c0c17",
+    "tools/governance-validator/lib/accepted-ocr.mjs": "b602d91fb3f349dbd7646aa825ff7980df27ec7c",
+    "tools/governance-validator/lib/reasoned-na.mjs": "6b2eed12b1693ffd93e684234ea5bce4251cd20e",
+    "tools/governance-validator/lib/relationship-validation.mjs": "e87975ff1515cd161df0f87857b4c194396e050f",
+    "tools/governance-validator/lib/terminal-validation.mjs": "0ae6d83537b75d3fa48cc9276c91ab1a2f367ad9",
+    "tools/governance-validator/lib/mermaid-validation.mjs": "718ee6c299716c697e8f7cf120ca859e92b31780",
+    "tools/governance-validator/lib/record-identity.mjs": "cd28563167faab39eeed29efe8731488d35dc730",
+    "tools/governance-validator/lib/provenance-validation.mjs": "726ce47ff4e9b0f9ccc2d6b8d835de515a09f303"
+  },
+  "decompositionMeasurements": [
+    {
+      "path": "tools/governance-validator/validate.mjs",
+      "physicalLines": 763,
+      "largestFunction": {
+        "symbol": "validateSupersession",
+        "codeLines": 51
+      }
+    },
+    {
+      "path": "tools/governance-validator/lib/accepted-records.mjs",
+      "physicalLines": 155,
+      "largestFunction": {
+        "symbol": "validateRequiredBodyContent",
+        "codeLines": 21
+      }
+    },
+    {
+      "path": "tools/governance-validator/lib/accepted-plans.mjs",
+      "physicalLines": 192,
+      "largestFunction": {
+        "symbol": "validateStableImplementationTouchpoints",
+        "codeLines": 43
+      }
+    },
+    {
+      "path": "tools/governance-validator/lib/accepted-risk.mjs",
+      "physicalLines": 236,
+      "largestFunction": {
+        "symbol": "riskMatrixColumns",
+        "codeLines": 38
+      }
+    },
+    {
+      "path": "tools/governance-validator/lib/accepted-ocr.mjs",
+      "physicalLines": 93,
+      "largestFunction": {
+        "symbol": "validateOcrEligibility",
+        "codeLines": 46
+      }
+    },
+    {
+      "path": "tools/governance-validator/lib/reasoned-na.mjs",
+      "physicalLines": 8,
+      "largestFunction": {
+        "symbol": "isReasonedNa",
+        "codeLines": 3
+      }
+    },
+    {
+      "path": "tools/governance-validator/lib/relationship-validation.mjs",
+      "physicalLines": 355,
+      "largestFunction": {
+        "symbol": "validateArchitectureSource",
+        "codeLines": 33
+      }
+    },
+    {
+      "path": "tools/governance-validator/lib/terminal-validation.mjs",
+      "physicalLines": 289,
+      "largestFunction": {
+        "symbol": "validateTerminalTable",
+        "codeLines": 28
+      }
+    },
+    {
+      "path": "tools/governance-validator/lib/mermaid-validation.mjs",
+      "physicalLines": 194,
+      "largestFunction": {
+        "symbol": "validateCurrentAddFlowGates",
+        "codeLines": 21
+      }
+    },
+    {
+      "path": "tools/governance-validator/lib/record-identity.mjs",
+      "physicalLines": 33,
+      "largestFunction": {
+        "symbol": "recordPathsFromValue",
+        "codeLines": 6
+      }
+    },
+    {
+      "path": "tools/governance-validator/lib/provenance-validation.mjs",
+      "physicalLines": 48,
+      "largestFunction": {
+        "symbol": "validateProvenance",
+        "codeLines": 16
+      }
+    }
+  ],
+  "measurementMethod": "Point-in-time signature-to-closing-brace spans; blank lines included, standalone comment lines excluded; structural review also covers short anonymous callbacks. Not an equality assertion or unit test against source layout.",
+  "complexity": "N/A — no configured cyclomatic complexity tool; function spans and manual nesting review used instead",
+  "preservation": {
+    "existingWorktreeChanges": "Preserved; no staging, commit, stash or branch switch",
+    "markdownParsingBeforeAndAfter": "54e4724f13ffe3cc135c952e3e915cfceca6e592",
+    "unrelatedUserPaths": [
+      ".vscode/",
+      ".zcodeignore"
+    ],
+    "serviceBuild": "Existing service/build not used or removed"
+  },
+  "notPerformed": [
+    "Peer benchmark timings and 400,000-case oracle were not independently reproduced because their programs and fixtures were not supplied",
+    "No real HTTP listener/browser verification; the changed boundary is the existing parser library",
+    "No new lint/formatter dependency, benchmark target or speculative performance rewrite"
+  ],
+  "cleanup": {
+    "ownedRoot": "/private/tmp/orange-peer-repair-TJYIE6",
+    "status": "Removed and verified absent after all verification processes completed",
+    "retained": "This JSON and repair report only; no compiler or test fixtures retained"
+  }
+}
