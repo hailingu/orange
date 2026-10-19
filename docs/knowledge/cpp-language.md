@@ -36,6 +36,11 @@ HTTP 解析的返回值天然是"成功或多种失败之一"。orange 用
   `std::variant<std::monostate, ParsedMessage, ParseError>`:
   `std::monostate` 表示"输入还不够,既没成功也没失败",这是 variant 表示
   "空/进行中"状态的标准手法(`http_request_decoder.hpp` 的 `DecodeResult`)。
+- 响应序列化器复用同一模式:`std::variant<std::string, ResponseError>`
+  (`http_response.hpp` 的 `write_response`)——序列化的失败同样分多类
+  (状态码范围、禁正文状态、字段文法、成帧冲突、分配失败),且**捕获
+  `std::bad_alloc` 后翻译成 `resource_exhausted` 返回**,不跨模块边界抛
+  异常(错误策略见第 11 节)。
 - 项目早期版本曾用 `std::optional<Request>`(`parse_request("")` 返回
   `std::nullopt` 的第一条契约),后来随着错误分类细化升级为 variant——
   这是 API 演进的常见路径:先二值,后分类。
@@ -421,6 +426,53 @@ obs-text(`0x80-0xFF` 的字段值字节,RFC 9110 5.5 允许)使这条路径真�
 `RequestDecoder` 文档注明 "Allocation failure returns resource_exhausted"。
 错误处理原则(显式、结构化、不掩盖)来自
 `docs/development/cpp-development-standard.md`。
+
+## 12. 无分配数字格式化:`std::to_chars`
+
+`write_response` 要把状态码、`Content-Length`(十进制)和 chunk 大小行
+(十六进制)写进字节串,用的是 `<charconv>` 的 `std::to_chars`:
+
+```cpp
+// service/src/http_response.cpp(摘录)
+void append_number(std::string &out, std::size_t value, int base) {
+    char buffer[24];
+    const auto result = std::to_chars(buffer, buffer + sizeof(buffer), value, base);
+    out.append(buffer, static_cast<std::size_t>(result.ptr - buffer));
+}
+```
+
+为什么是它而不是别的:
+
+- **无分配、无 locale、无虚发**:输出写入调用方给的缓冲区,不碰堆,不查
+  本地化设置(对照 `std::to_string` 会构造临时 string,`printf` 家族要过
+  varargs 与 locale)。线格式是纯 ASCII,`to_chars` 的"性能优先、绝不失败
+  于格式化本身"的契约正对口;
+- **进制即参数**:base 16 直接得到**小写**十六进制(chunk 大小行的惯例),
+  base 10 是十进制——同一函数服务 `Content-Length` 与 chunk 两种数字;
+- **缓冲区上界要自己算**:64 位 `size_t` 十进制最长 **20** 位、十六进制
+  16 位——**十进制更长**!24 字节缓冲同时覆盖两者;`to_chars` 返回
+  `to_chars_result{ptr, ec}`,`ptr - buffer` 就是写入长度;
+- `value == 0` 时写入 `"0"`,无需特判(对照手写循环容易漏掉零)。
+
+`write_response` 还配了一个 `digit_count` 循环:序列化前**精确算出整条
+响应的线长度**(状态行 + 字段 + 成帧字段 + 体 + chunk 开销),`reserve`
+一次后纯追加——单次堆分配完成整条响应的组装。
+
+## 13. 两个字面量/初始化陷阱(测试代码的真实修复)
+
+- **十六进制转义的 maximal munch**:C/C++ 的 `\x` 转义会贪婪吞掉**尽可能
+  多**的十六进制字符。`"a\x7Fb"` 不是 `a, 0x7F, b`——`\x7Fb` 是一个
+  越界的转义,直接编译错误或得到错误值。写法是拆开两个相邻字面量:
+  `"a\x7F" "b"`(编译期拼接,转义在第一个字面量内终止)。响应套件的
+  DEL 夹具就是这么写的(`http_response_tests.cpp`);同理,`std::string_view("he\r\nllo")`
+  是 **7** 字节不是 6——把 CR/LF 夹具数错长度是本次对着绿灯实现修掉的
+  测试缺陷。
+- **聚合部分初始化触发 `-Wmissing-field-initializers`**:
+  `Response{200, BodyFraming::chunked, "hello"}` 合法(余下成员取默认
+  值),但本仓库把警告当缺陷(`-Wall -Wextra` 零警告纪律)。解法不是
+  到处补 `{}`,而是给测试写两个**显式命名全部成员**的构造辅助:
+  `plain(status, framing, body, close)` 与 `with_fields(...)`,套件里
+  再无部分初始化,可读性反而更好。
 
 ## 延伸阅读
 

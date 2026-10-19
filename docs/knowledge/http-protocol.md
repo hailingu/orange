@@ -9,8 +9,8 @@
 
 | RFC | 管什么 | orange 用到的节 |
 | --- | --- | --- |
-| RFC 9112 | HTTP/1.1 **报文在线格式**(怎么从字节切出消息) | 2.2(消息与行结尾)、3(请求行)、5(字段行)、5.2(obs-fold)、7.1.1(chunked) |
-| RFC 9110 | HTTP **语义**(字段是什么意思、字符集) | 5.5(field-content/obs-text)、5.6.2(token/tchar)、5.2(重复字段策略) |
+| RFC 9112 | HTTP/1.1 **报文在线格式**(怎么从字节切出消息) | 2.2(消息与行结尾)、3(请求行)、4(状态行)、5(字段行)、5.2(obs-fold)、6.1(TE 与 CL)、7.1.1(chunked) |
+| RFC 9110 | HTTP **语义**(字段是什么意思、字符集) | 5.5(field-content/obs-text)、5.6.2(token/tchar)、5.2(重复字段策略)、7.6.1(Connection)、15(状态码与 reason phrase) |
 | RFC 3986 | URI 语法 | 2.1–2.3(percent-encoding、保留/未保留字符) |
 | RFC 6585 | 扩展状态码 | 5(431 Request Header Fields Too Large) |
 
@@ -103,19 +103,68 @@ RFC 9112 6。体的存在与长度由**成帧字段**(framing)决定,orange 在
 边界不可信,不能假设"下一个请求从哪开始"。见
 [`network-programming.md`](network-programming.md) 第 7 节。
 
-## 6. keep-alive 与连接生命周期
+## 6. 响应序列化:状态行、成帧与字段防线(`write_response`)
+
+解析侧回答"怎么读",序列化侧回答"怎么写"——`service/src/http_response.*`
+的 `orange::http::write_response()`(ADR-0003 T-1,红 `87548eb` / 绿
+`743b5ed`)把一个 `Response` 值一次序列化为所有权线字节。规则同样是按
+RFC 逐节来的:
+
+- **状态行**(RFC 9112 4):`HTTP-version SP status-code SP [ reason-phrase ]
+  CRLF`。注意**第二个 SP 是语法必选**,reason-phrase 才可空——未知码 599
+  序列化为 `HTTP/1.1 599 \r\n`(空 reason 前仍留空格),不是删掉空格。
+  版本恒为 `HTTP/1.1`:对非 1.x 请求版本答 505 是派发层(T-2)的策略。
+- **状态码范围**(RFC 9110 15.1):"All valid status codes are within the
+  range of 100 to 599, inclusive."——99 与 600 都是编码器拒绝的输入
+  (`invalid_status`),不是"随便三位数"。
+- **reason phrase 表**:只收录本切片会应答的注册码。413 在 RFC 9110 已
+  更名为 **Content Too Large**(旧名 Payload Too Large);431 仍来自
+  RFC 6585 5。未注册码用空 reason,合法且明确。
+- **禁正文状态**(RFC 9110 15.2 / 15.3.5 / 15.4.5):"A 1xx/204/304
+  response is terminated by the end of the header section; it cannot
+  contain content or trailers."——这三类状态带体或带成帧字段直接是编码
+  错误(`body_forbidden_status`),不是"体会被忽略"。
+- **成帧二选一**:`Content-Length: N`(十进制)或
+  `Transfer-Encoding: chunked`(RFC 9112 6.1/7.1 禁止二者共存)。chunked
+  编码:小写十六进制大小行 + 数据 + CRLF,末块 `0\r\n\r\n`;**chunk 数据
+  二进制安全**——数据区可以原样携带 CR/LF(测试夹具 `7\r\nhe\r\nllo\r\n0
+  \r\n\r\n`),因为长度前缀已经定界,不再依赖行结尾;空体的 chunked
+  响应就是单个 last-chunk。
+- **编码器独占成帧字段**:`content-length`/`transfer-encoding`/
+  `connection` 三个名字(大小写不敏感)由编码器持有,调用方字段带上即
+  拒绝(`conflicting_field`)。这是请求侧 smuggling 防线的**响应侧对偶**:
+  两条成帧意见永远不可能同时上线。
+- **响应字段校验防 splitting**:字段名必须 token(RFC 9110 5.6.2)、值只
+  能是 field-content(无 CTL,obs-text 放行)且**不得带首尾 OWS**——首尾
+  空白上线后会变成 `Name:  value`,对端解析出的值与本意不同;CR/LF/NUL/
+  DEL 出现在值里直接拒绝,响应拆分(response splitting)在线格式层被挡死。
+- **`Connection: close`(RFC 9110 7.6.1)**:作为编码器字段跟在成帧字段
+  之后、空行之前。431/413 拒绝响应的形状即
+  `HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\n\r\n`
+  ——发完即关连接(见 [`network-programming.md`](network-programming.md)
+  第 7 节)。
+- **确定性顺序**:状态行 → 调用方字段(保序、保留重复)→ 成帧字段 →
+  可选 `Connection: close` → 空行 → 成帧的体。同一输入永远同一字节。
+
+字段名/值的校验直接复用解析侧的 `http_syntax.hpp` 分类器
+(`detail::is_token`/`detail::is_field_octet`)——**解析与序列化共享同一
+张字节文法表**,双向保证同一套 RFC 字符集(见
+[`parser-design.md`](parser-design.md) 第 2 节)。
+
+## 7. keep-alive 与连接生命周期
 
 HTTP/1.1 默认持久连接(keep-alive):一条连接上多个"请求-响应"顺序
 往返。orange 的模型:有效请求在一条稳定连接上多轮循环;被 431/413 拒绝
 后连接关闭、客户端重连。空闲连接由服务端的 5 秒超时关闭以回收描述符。
 
-## 7. 已批准待实现(T-2/T-3,ADR-0003)
+## 8. 已批准待实现(T-2/T-3,ADR-0003)
 
-以下协议行为还没有实现代码,引用的是 ADR-0003 的 Scope 与验收检查:
+以下协议行为还没有实现代码,引用的是 ADR-0003 的 Scope 与验收检查
+(响应**成帧**本身已在 T-1 落地,见第 6 节;这里缺的是路由与监听):
 
-- 响应成帧:Content-Length 与 chunked 编码(如 `POST /api/echo` 用 chunked
-  响应回显请求体);
-- `GET /api/health` 返回 200 与精确体 `{"status":"ok"}`;
+- 路由与诊断端点:`GET /api/health` 返回 200 与精确体
+  `{"status":"ok"}`;`POST /api/echo` 用第 6 节的 chunked 编码回显
+  请求体;
 - 静态文件服务:小 MIME 表、单区间 Range 请求(206)与不可满足区间(416)、
   405(方法不支持)/404(未知路径);
 - TLS:`https://127.0.0.1:8443` 由锁版 OpenSSL 终止,首启生成自签名证书;
@@ -129,4 +178,5 @@ HTTP/1.1 默认持久连接(keep-alive):一条连接上多个"请求-响应"顺�
   都是安全边界而不只是格式洁癖。
 - 代码入口:`parse_request`(`http_messages.cpp`)、
   `parse_message`/`RequestDecoder`(`http_request_decoder.cpp`)、
-  `body_framing`/`ChunkLine`(`http_body_framing.cpp`/`http_chunk_line.cpp`)。
+  `body_framing`/`ChunkLine`(`http_body_framing.cpp`/`http_chunk_line.cpp`)、
+  `write_response`(`http_response.cpp`)。

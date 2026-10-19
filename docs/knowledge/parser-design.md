@@ -50,9 +50,15 @@ parse_request(raw)        一次到位的头部解析(整块输入)
 parse_message(raw)        完整消息(头+体),管线字节不计入 consumed
 RequestDecoder::feed()    连接级增量解码:持有跨 feed 的状态
   └─ ChunkLine / HeadFields / body_framing(detail 层,无独立所有权)
+write_response(response)  响应序列化:与解析共享同一张字节文法表
 ```
 
-公共契约只有最上面三层;`detail::` 是实现细节。
+公共契约只有最上面三层和 `write_response`;`detail::` 是实现细节。
+序列化侧对字段名/值的校验**不另写一套规则**,直接调用
+`detail::is_token`/`detail::is_field_octet`(`http_syntax.hpp` 的 256 项
+`ByteClassTable`)——解析与序列化是同一文法的两个方向,共享分类器保证
+双向永远对同一字符集达成一致(规则详见
+[`http-protocol.md`](http-protocol.md) 第 6 节)。
 
 ## 3. 错误分类学与"粘性错误"
 
