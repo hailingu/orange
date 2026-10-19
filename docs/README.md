@@ -15,6 +15,7 @@ exist and defers lifecycle status to the indexes below.
 | `docs/adr/` | Decision records: Full and Lightweight ADRs and OCRs, with their index, templates, and review fixtures |
 | `docs/architecture/` | Architecture Design Documents (ADDs), with their index and shared template |
 | `docs/development/` | Development standards for repository work |
+| `docs/knowledge/` | Non-normative study notes indexing the C++, CMake, network-programming, compilation, SIMD, and testing knowledge exercised by ADR-0001 through ADR-0009 |
 
 ## Decision Records — `docs/adr/`
 
@@ -52,6 +53,16 @@ exist and defers lifecycle status to the indexes below.
   issue title, severity, label, body, evidence, and closure rules for the
   `hailingu/orange` tracker, governed by
   [`docs/adr/ADR-0001-orange-issue-governance.md`](adr/ADR-0001-orange-issue-governance.md).
+
+## Knowledge Notes — `docs/knowledge/`
+
+- [`docs/knowledge/README.md`](knowledge/README.md) — the knowledge-point
+  index and reading order for non-normative study notes. Each topic file
+  (C++ language, HTTP protocol, parser design, network programming, build
+  and toolchain, performance and SIMD, testing and verification) maps its
+  concepts to the ADRs and source symbols where they are used. The notes are
+  learning material in Chinese; ADRs, ADDs, and the standards above remain
+  authoritative wherever they differ.
 
 ## Language And Platform Standards Catalog
 
