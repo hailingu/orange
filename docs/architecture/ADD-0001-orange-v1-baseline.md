@@ -823,7 +823,7 @@ sequenceDiagram
 | A-1 | Browser-local progress may be lost by external data clearing, private browsing, profile changes, or origin changes, and V1 provides no export/import/backup/synchronization | @hailingu | Resolved | Accepted as a V1 boundary (PR-11, NG-05); loss recovery is explicitly out of scope |
 | A-2 | Machine validation cannot prove the educational correctness of every natural-language explanation | @hailingu | Resolved | Accepted residual limitation recorded in CON-15; advisory AI review covers prose quality without becoming a correctness gate |
 | A-3 | The shared ADD template and governance validator were absent when this document was first drafted | @hailingu | Resolved | The owner restored the template family and adopted the validator through docs/adr/ADR-0002-governance-validator-adoption.md; this document was aligned to the restored template structure on 2026-10-13 with semantics, statuses, and index identity unchanged |
-| A-4 | Whether this Draft becomes the V1 design baseline | @hailingu | Open | Requires the exact `Approve` under the AGENTS.md approval contract before Design Status may become `Current`; until then no candidate is selectable |
+| A-4 | Whether this ADD becomes the V1 design baseline | @hailingu | Resolved | Approved by @hailingu with exact `Approve` at 2026-10-13T09:23:35Z, as recorded in Metadata and the 2026-10-13 approval Change Log entry; Design Status is Current and candidates are eligible for selection under the existing handoff rules |
 
 ## Risks And Trade-Offs [Required]
 
@@ -980,3 +980,4 @@ triggered:
 | 2026-10-13 | Rename interaction-flow IDs IF-01 through IF-06 to IX-01 through IX-06 to satisfy the restored template's interaction-ID contract (table and diagram labels unchanged in meaning) | @zcode |
 | 2026-10-13 | Record approval per repository owner @hailingu's exact Approve: Design Status Draft→Current with approval metadata and an informational approval context revision; resolve open question A-4; check the approval and review checklist; update the architecture index row in the same change. The eighteen ADR task candidates become eligible for selection | @zcode |
 | 2026-10-13 | Select CAND-0001 (Ready→Selected) with the reciprocal ADR path docs/adr/ADR-0003-local-runtime-path.md; the ADR's Architecture Source records this document and CAND-0001 atomically. Permitted status transition; approval-preserving | @zcode |
+| 2026-10-15 | Correct A-4's stale Open label and Draft wording to reflect the approval already recorded in Metadata and the 2026-10-13 Change Log. Evidence-only maintenance; requirement baseline, design, candidates, approval metadata and index fields are unchanged | @codex |
