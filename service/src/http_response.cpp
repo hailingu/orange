@@ -193,11 +193,39 @@ std::variant<std::string, ResponseError> write_response(const Response &response
     return out;
 }
 
-// Wiring-only placeholder; the mapping contract is asserted red by
-// check_error_responses before the real table replaces this stub.
+// The rejection each terminal parse error owes the connection. The status
+// for every value is fixed by the ParseError contract comments; see
+// http_messages.hpp for the RFC anchors.
 Response error_response(ParseError error) {
-    (void)error;
-    return Response{};
+    Response response;
+    response.close = true;
+    switch (error) {
+    case ParseError::method_too_long:
+    case ParseError::unsupported_transfer_coding:
+        response.status = 501;
+        break;
+    case ParseError::target_too_long:
+        response.status = 414;
+        break;
+    case ParseError::headers_too_long:
+        response.status = 431;
+        break;
+    case ParseError::body_too_long:
+    case ParseError::chunk_metadata_too_long:
+        response.status = 413;
+        break;
+    case ParseError::resource_exhausted:
+        response.status = 500;
+        break;
+    case ParseError::malformed:
+    case ParseError::incomplete:
+        // incomplete is a caller defect here: the event loop feeds the
+        // decoder until a terminal outcome, so this branch answers as
+        // malformed rather than inventing a response for a pending read.
+        response.status = 400;
+        break;
+    }
+    return response;
 }
 
 } // namespace orange::http

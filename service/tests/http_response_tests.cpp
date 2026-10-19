@@ -269,8 +269,7 @@ void check_error_responses() {
     check(wire_bytes(orange::http::error_response(orange::http::ParseError::body_too_long)) ==
               "HTTP/1.1 413 Content Too Large\r\nConnection: close\r\n\r\n",
           "body_too_long serializes the exact 413 closing wire");
-    check(wire_bytes(
-              orange::http::error_response(orange::http::ParseError::resource_exhausted)) ==
+    check(wire_bytes(orange::http::error_response(orange::http::ParseError::resource_exhausted)) ==
               "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n",
           "resource_exhausted serializes the exact 500 closing wire");
 }
