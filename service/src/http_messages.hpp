@@ -1,21 +1,47 @@
+// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
 // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+// Repair authorization: docs/reviews/2026-10-16-peer-assessment-repairs.md.
+// Storage authorization: docs/reviews/2026-10-16-owned-request-storage.md.
 //
 // Wire-format layer of the orange loopback service: types and functions for
-// HTTP/1.1 messages (ADR-0003, subtask T-1). Failures are reported as
-// values, never exceptions, across this module boundary
-// (docs/development/cpp-development-standard.md, Error Handling And
-// Contracts).
+// HTTP/1.1 messages (ADR-0003, subtask T-1). Parser entry points report coded
+// errors. Ordinary Request value copies can throw bad_alloc; a proposed narrow
+// value-copy exception is recorded in
+// service/docs/adr/ADR-0004-owned-request-storage.md (Engineering Exceptions).
 
 #ifndef ORANGE_HTTP_MESSAGES_HPP
 #define ORANGE_HTTP_MESSAGES_HPP
 
 #include <cstddef>
+#include <cstdint>
+#include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
 
 namespace orange::http {
+
+namespace detail {
+// Validated slices fit the 8 KiB head cap; each wire field needs four bytes.
+struct HeaderFieldOffsets {
+    std::uint16_t name_begin;
+    std::uint16_t name_size;
+    std::uint16_t value_begin;
+    std::uint16_t value_size;
+};
+// The version has exactly eight octets after request-line validation.
+struct RequestLineOffsets {
+    std::uint16_t method_begin;
+    std::uint16_t method_size;
+    std::uint16_t target_begin;
+    std::uint16_t target_size;
+    std::uint16_t version_begin;
+};
+// Incremental validation is the other trusted constructor of request storage.
+class HeadFields;
+} // namespace detail
 
 // The whole head — request line and header block — shares this budget:
 // ADR-0003's 8 KiB header cap. Every line search is bounded by it, so a
@@ -51,9 +77,12 @@ enum class ParseError {
     headers_too_long,
     // Decoded request content exceeds ADR-0003's 1 MiB cap (HTTP 413).
     body_too_long,
+    // Aggregate chunk framing and discarded trailers exceed the independent
+    // chunk_metadata_cap wire budget (HTTP 413; close the connection).
+    chunk_metadata_too_long,
     // A valid transfer coding preceding chunked is not supported (HTTP 501).
     unsupported_transfer_coding,
-    // An owned decoder buffer could not be allocated (HTTP 500).
+    // Owned request storage or a decoder buffer could not be allocated (HTTP 500).
     resource_exhausted,
 };
 
@@ -63,35 +92,72 @@ enum class ParseError {
 // trimmed of its optional surrounding whitespace (RFC 9110 5.5), where
 // obs-text octets are allowed. Duplicate names stay separate entries:
 // combining them is per-field policy (RFC 9110 5.2), not the wire parser's.
+// Views borrow from the owning Request, not from caller input; they expire
+// when that Request is destroyed, assigned, or moved from.
 struct HeaderField {
-    std::string name;
-    std::string value;
+    std::string_view name;
+    std::string_view value;
 };
 
-// One parsed HTTP/1.1 request. The request-line fields are owned copies of
-// the raw bytes, not views into the caller's buffer, because callers may
-// pass transient input. That is a deliberate lifetime contract: borrowed
-// std::string_view fields would hand lifetime control to the caller and
-// dangle silently — a temporary buffer destroyed after the call, or a read
-// buffer reused by the next cycle, yields undefined behavior with no
-// compile-time or run-time diagnostic (the measured saving is ~10-25 ns per
-// request; see ADR-0003's T-1 evidence for the benchmark). Revisit only if
-// a later event loop guarantees a stable read buffer for the whole
-// parse-to-response window by construction. ParsedMessage in
-// http_request_decoder.hpp owns the decoded body separately.
-struct Request {
-    // The request method token, containing only RFC 9110 tchar characters.
-    std::string method;
-    // The request target as received, built only from URI characters with
-    // well-formed percent-encoding (RFC 9112 3.2, RFC 3986 2.1-2.3).
-    // Distinguishing the four request-target forms belongs to dispatch.
-    std::string target;
-    // The HTTP version token, matching `HTTP/DIGIT.DIGIT` (RFC 9112 2.5).
-    // Serving-policy for unsupported versions belongs to a later layer.
-    std::string version;
-    // The header fields in received order, owned copies under the same
-    // lifetime contract as the other fields.
-    std::vector<HeaderField> headers;
+// Forward declaration for the parser's validated construction boundary.
+struct ParsedRequest;
+
+// Owns request characters independently of input and decoder lifetimes. Offsets,
+// rather than saved views, survive both short-string and heap-backed moves.
+// Accessor views borrow from this value and expire on assignment/destruction or
+// moving from it. Copies own independent storage; moved-from values are empty.
+// ParsedMessage owns the decoded body separately. Mutating wire fields is not
+// part of this parser value's API.
+class Request {
+  public:
+    // An empty value supports containers, decoder reset and move destinations.
+    Request() = default;
+    // Copies own independent character and descriptor storage.
+    Request(const Request &) = default;
+    // Commits a copy only after both allocations succeed.
+    Request &operator=(const Request &other);
+    // Transfers ownership and leaves the source safely empty.
+    Request(Request &&other) noexcept;
+    // Replaces storage and leaves the source safely empty; self-move is inert.
+    Request &operator=(Request &&other) noexcept;
+    // Standard containers release all storage when the value dies.
+    ~Request() = default;
+    // Returns the validated RFC 9110 method token, or empty for an empty value.
+    [[nodiscard]] std::string_view method() const noexcept {
+        return {head_.data() + line_.method_begin, line_.method_size};
+    }
+    // Returns the raw URI target with validated percent-encoding.
+    [[nodiscard]] std::string_view target() const noexcept {
+        return {head_.data() + line_.target_begin, line_.target_size};
+    }
+    // Returns HTTP/DIGIT.DIGIT; serving policy belongs to the caller.
+    [[nodiscard]] std::string_view version() const noexcept {
+        return {head_.data() + line_.version_begin, head_.empty() ? 0U : 8U};
+    }
+    // Provides sized/indexable ordered fields without per-field strings or
+    // allocations. The range and fields borrow from this Request; iterators
+    // additionally require the returned range object to remain alive.
+    [[nodiscard]] auto headers() const noexcept {
+        return std::span(fields_) | std::views::transform([bytes = std::string_view(head_)](
+                                                              detail::HeaderFieldOffsets field) {
+                   return HeaderField{{bytes.data() + field.name_begin, field.name_size},
+                                      {bytes.data() + field.value_begin, field.value_size}};
+               });
+    }
+
+  private:
+    friend class detail::HeadFields;
+    friend std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw);
+    // Only the parser's validated, capped offsets may construct owned storage.
+    Request(std::string_view head, detail::RequestLineOffsets line,
+            std::span<const detail::HeaderFieldOffsets> fields);
+    // Appends one validated slice and rewrites its offset into compact storage.
+    void append_slice(std::string_view source, std::uint16_t &begin, std::uint16_t size);
+    // Exchanges the entire coupled representation for strong copy assignment.
+    void swap(Request &other) noexcept;
+    std::string head_;
+    std::vector<detail::HeaderFieldOffsets> fields_;
+    detail::RequestLineOffsets line_{};
 };
 
 // A complete parse plus how many raw bytes it consumed — leading empty
@@ -120,6 +186,7 @@ struct ParsedRequest {
 // including a bare CR inside a line and an LF not preceded by CR. Only the
 // head is consumed. parse_message and RequestDecoder in
 // http_request_decoder.hpp also decode Content-Length and chunked bodies.
+// Owned-storage allocation failure returns ParseError::resource_exhausted.
 [[nodiscard]] std::variant<ParsedRequest, ParseError> parse_request(std::string_view raw);
 
 } // namespace orange::http

@@ -1,6 +1,9 @@
+// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
 // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+// Repair authorization: docs/reviews/2026-10-16-peer-assessment-repairs.md.
 #include "http_body_framing.hpp"
 #include "http_syntax.hpp"
+#include <algorithm>
 #include <optional>
 namespace orange::http::detail {
 namespace {
@@ -146,7 +149,7 @@ std::variant<BodyFraming, ParseError> body_framing(const Request &request) {
     Codings codings;
     bool has_length = false;
     bool has_codings = false;
-    for (const auto &field : request.headers) {
+    for (const auto &field : request.headers()) {
         if (equal_ascii(field.name, "content-length")) {
             has_length = true;
             if (!collect_length(field.value, length)) {
@@ -160,7 +163,7 @@ std::variant<BodyFraming, ParseError> body_framing(const Request &request) {
         }
     }
     if (has_codings) {
-        if (has_length || request.version == "HTTP/1.0" || !codings.chunked) {
+        if (has_length || request.version() == "HTTP/1.0" || !codings.chunked) {
             return ParseError::malformed;
         }
         return codings.unsupported

@@ -1,4 +1,8 @@
+// ADR: service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md
+// ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
+// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
 // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+// Repair authorization: docs/reviews/2026-10-16-peer-assessment-repairs.md.
 // Behavior tests for complete request bodies, distinct from head-only parsing.
 #include "http_request_decoder.hpp"
 #include <algorithm>
@@ -45,7 +49,7 @@ void check_content_length() {
     const auto result = orange::http::parse_message(head + "helloNEXT");
     const auto *parsed = std::get_if<orange::http::ParsedMessage>(&result);
     check(parsed && parsed->body == "hello" && parsed->consumed == head.size() + 5 &&
-              parsed->request.target == "/api/echo",
+              parsed->request.target() == "/api/echo",
           "Content-Length includes exactly five body bytes");
     const auto partial = orange::http::parse_message(head + "hell");
     check(std::get_if<orange::http::ParseError>(&partial) &&
@@ -128,7 +132,7 @@ void check_chunked() {
     const auto outcome = orange::http::parse_message(raw + "NEXT");
     const auto *parsed = std::get_if<orange::http::ParsedMessage>(&outcome);
     check(parsed && parsed->body == "Wikipedia" && parsed->consumed == raw.size() &&
-              parsed->request.headers.size() == 1,
+              parsed->request.headers().size() == 1,
           "chunk sizes, quoted extensions and discarded trailers define the message boundary");
     const std::string binary("a\0b\r\n", 5);
     const auto bytes = orange::http::parse_message(
@@ -173,7 +177,7 @@ void check_fragments(const std::string &raw) {
         decoder.reset();
         const auto next = decoder.feed("GET /next HTTP/1.1\r\n\r\n");
         const auto *new_message = std::get_if<orange::http::ParsedMessage>(&next.outcome);
-        check(new_message && new_message->request.target == "/next" && new_message->body.empty(),
+        check(new_message && new_message->request.target() == "/next" && new_message->body.empty(),
               "reset starts an independent pipelined request");
     }
     orange::http::RequestDecoder decoder;
@@ -313,20 +317,104 @@ void check_head_boundaries() {
         }
     }
 }
-// Metadata is validated and discarded rather than charged against the body cap.
-void check_long_metadata() {
-    const auto raw = message("Transfer-Encoding: chunked\r\n",
-                             "0000000000000000000000000005;foo=\"" + std::string(20000, 'x') +
-                                 "\"\r\nhello\r\n0\r\nX: " + std::string(20000, 'y') + "\r\n\r\n");
-    orange::http::RequestDecoder decoder;
-    for (std::size_t i = 0; i < raw.size(); i += 17) {
-        const auto count = std::min<std::size_t>(17, raw.size() - i);
-        const auto result = decoder.feed(std::string_view(raw).substr(i, count));
-        check(result.consumed == count, "long metadata fragment advances without retaining text");
-        if (i + count == raw.size()) {
-            const auto *parsed = std::get_if<orange::http::ParsedMessage>(&result.outcome);
-            check(parsed && parsed->body == "hello" && parsed->consumed == raw.size(),
-                  "large extension and trailer preserve the decoded body and wire count");
+// The directly authorized repair bounds aggregate chunk framing and trailers
+// to 8 KiB, independently of decoded content (peer-assessment repair report).
+void check_metadata_limits() {
+    using orange::http::ParseError;
+    constexpr std::size_t cap = 8192;
+    const std::string fields = "Transfer-Encoding: chunked\r\n";
+    for (const auto &body :
+         std::array<std::string, 2>{"0;x=" + std::string(cap - 8, 'x') + "\r\n\r\n",
+                                    "0\r\nX:" + std::string(cap - 9, 'x') + "\r\n\r\n"}) {
+        const auto raw = message(fields, body);
+        const auto result = orange::http::parse_message(raw + "NEXT");
+        const auto *parsed = std::get_if<orange::http::ParsedMessage>(&result);
+        check(parsed && parsed->body.empty() && parsed->consumed == raw.size(),
+              "exact metadata cap completes without consuming pipelined input");
+        auto over = body;
+        over.insert(over.size() - 4, 1, 'x');
+        expect_error(message(fields, over), ParseError::chunk_metadata_too_long,
+                     "one metadata byte above the cap is rejected with HTTP 413");
+        orange::http::RequestDecoder decoder;
+        for (const char c : raw) {
+            const auto step = decoder.feed(std::string_view(&c, 1));
+            check(step.consumed == 1, "one-byte fragments preserve the metadata budget");
+        }
+        decoder.reset();
+        const auto again = decoder.feed(raw);
+        check(std::holds_alternative<orange::http::ParsedMessage>(again.outcome),
+              "reset restores a fresh per-request metadata budget");
+    }
+}
+// Many short trailers and chunks share one budget; splitting input cannot evade it.
+void check_aggregate_metadata() {
+    using orange::http::ParseError;
+    std::string chunks;
+    for (std::size_t i = 0; i < 1700; ++i) {
+        chunks += "1\r\nx\r\n";
+    }
+    std::string trailers = "0\r\n";
+    for (std::size_t i = 0; i < 2000; ++i) {
+        trailers += "X: y\r\n";
+    }
+    for (const auto &body : std::array<std::string, 2>{chunks + "0\r\n\r\n", trailers + "\r\n"}) {
+        const auto raw = message("Transfer-Encoding: chunked\r\n", body);
+        for (const std::size_t fragment : {std::size_t{1}, std::size_t{17}, raw.size()}) {
+            orange::http::RequestDecoder decoder;
+            bool rejected = false;
+            for (std::size_t offset = 0; offset < raw.size(); offset += fragment) {
+                const auto step = decoder.feed(std::string_view(raw).substr(offset, fragment));
+                if (const auto *error = std::get_if<ParseError>(&step.outcome)) {
+                    rejected = *error == ParseError::chunk_metadata_too_long;
+                    break;
+                }
+            }
+            check(rejected,
+                  "aggregate metadata is bounded across chunk, trailer and transport splits");
+            const auto sticky = decoder.feed("GET / HTTP/1.1\r\n\r\n");
+            check(sticky.consumed == 0 && std::get_if<ParseError>(&sticky.outcome) &&
+                      std::get<ParseError>(sticky.outcome) == ParseError::chunk_metadata_too_long,
+                  "metadata rejection remains sticky until reset");
+            decoder.reset();
+            const auto fresh = decoder.feed(message("Transfer-Encoding: chunked\r\n", "0\r\n\r\n"));
+            check(std::holds_alternative<orange::http::ParsedMessage>(fresh.outcome),
+                  "reset after rejection permits a fresh independent input stream");
+        }
+    }
+}
+// Pins the independent content and framing budgets, regardless of feed splitting.
+void check_joint_chunk_budgets() {
+    using orange::http::ParseError;
+    const std::string content(orange::http::request_body_cap, 'x');
+    for (const std::size_t chunk_size : {std::size_t{512}, std::size_t{1024}}) {
+        std::string body;
+        const std::string size_line = chunk_size == 512 ? "200\r\n" : "400\r\n";
+        for (std::size_t offset = 0; offset < content.size(); offset += chunk_size) {
+            body += size_line;
+            body.append(content, offset, chunk_size);
+            body += "\r\n";
+        }
+        body += "0\r\n\r\n";
+        const auto wire = message("Transfer-Encoding: chunked\r\n", body);
+        for (const std::size_t fragment : {std::size_t{17}, std::size_t{8192}, wire.size()}) {
+            orange::http::RequestDecoder decoder;
+            bool terminal = false;
+            for (std::size_t offset = 0; offset < wire.size(); offset += fragment) {
+                const auto step = decoder.feed(std::string_view(wire).substr(offset, fragment));
+                if (const auto *parsed = std::get_if<orange::http::ParsedMessage>(&step.outcome)) {
+                    check(chunk_size == 1024 && parsed->body == content &&
+                              parsed->consumed == wire.size(),
+                          "1 MiB in 1024-byte chunks fits both independent budgets");
+                    terminal = true;
+                } else if (const auto *error = std::get_if<ParseError>(&step.outcome)) {
+                    check(chunk_size == 512 && *error == ParseError::chunk_metadata_too_long,
+                          "1 MiB in 512-byte chunks exceeds the metadata budget");
+                    terminal = true;
+                }
+                if (terminal)
+                    break;
+            }
+            check(terminal, "joint-budget outcome is independent of transport feed sizes");
         }
     }
 }
@@ -392,7 +480,9 @@ int main() {
     check_allocation_failure();
     check_metadata_octets();
     check_head_boundaries();
-    check_long_metadata();
+    check_metadata_limits();
+    check_aggregate_metadata();
+    check_joint_chunk_budgets();
     check_seeded_roundtrips();
     std::printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

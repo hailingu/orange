@@ -1,4 +1,6 @@
-// Governed by docs/adr/ADR-0003-local-runtime-path.md.
+// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+// Governed by service/docs/adr/ADR-0001-http-message-test-decomposition.md
+// and docs/adr/ADR-0003-local-runtime-path.md.
 //
 // Unit suite for the orange HTTP wire-format layer. The harness is
 // hand-rolled on purpose: the default dependency set is the C++ standard
@@ -160,9 +162,9 @@ void check_parse_allocations(CheckReporter &reporter) {
     head += "\r\n";
     const auto complete = parse_counted(head + "body\r\nBad Header: ignored\r\n");
     const auto *parsed = std::get_if<orange::http::ParsedRequest>(&complete.outcome);
-    reporter.check(parsed && parsed->consumed == 146 && parsed->request.headers.size() == 16 &&
-                       complete.allocations <= 1,
-                   "sixteen short fields use at most one allocation and consume only the head");
+    reporter.check(parsed && parsed->consumed == 146 && parsed->request.headers().size() == 16 &&
+                       complete.allocations <= 2,
+                   "sixteen short fields use at most two allocations and consume only the head");
 
     const std::string long_target = "/" + std::string(64, 'a');
     const auto long_incomplete =
@@ -182,16 +184,17 @@ void check_deferred_field_copies(CheckReporter &reporter) {
     const auto owned = orange::http::parse_request(source);
     source.assign(source.size(), 'x');
     const auto *parsed = std::get_if<orange::http::ParsedRequest>(&owned);
-    reporter.check(parsed && parsed->request.method == "GET" &&
-                       parsed->request.target == "/owned" && parsed->request.version == "HTTP/1.1",
+    reporter.check(parsed && parsed->request.method() == "GET" &&
+                       parsed->request.target() == "/owned" &&
+                       parsed->request.version() == "HTTP/1.1",
                    "deferred request-line copies survive reuse of the input buffer");
-    reporter.check(parsed && parsed->request.headers.size() == 3 &&
-                       parsed->request.headers[0].name == "x-a" &&
-                       parsed->request.headers[0].value.empty() &&
-                       parsed->request.headers[1].name == "X-Note" &&
-                       parsed->request.headers[1].value == std::string(64, 'n') &&
-                       parsed->request.headers[2].name == "x-a" &&
-                       parsed->request.headers[2].value == "caf\xC3\xA9"sv,
+    reporter.check(parsed && parsed->request.headers().size() == 3 &&
+                       parsed->request.headers()[0].name == "x-a" &&
+                       parsed->request.headers()[0].value.empty() &&
+                       parsed->request.headers()[1].name == "X-Note" &&
+                       parsed->request.headers()[1].value == std::string(64, 'n') &&
+                       parsed->request.headers()[2].name == "x-a" &&
+                       parsed->request.headers()[2].value == "caf\xC3\xA9"sv,
                    "deferred fields keep empty, trimmed, duplicate, and obs-text values owned");
 
     std::string dense = "\r\nGET / HTTP/1.1\r\n";
@@ -201,9 +204,9 @@ void check_deferred_field_copies(CheckReporter &reporter) {
     dense += "\r\n";
     const auto fitted = parse_counted(dense);
     const auto *full = std::get_if<orange::http::ParsedRequest>(&fitted.outcome);
-    reporter.check(full && full->consumed == 8192 && full->request.headers.size() == 2043 &&
-                       full->request.headers.back().name == "a" &&
-                       full->request.headers.back().value.empty() && fitted.allocations <= 1,
+    reporter.check(full && full->consumed == 8192 && full->request.headers().size() == 2043 &&
+                       full->request.headers().back().name == "a" &&
+                       full->request.headers().back().value.empty() && fitted.allocations <= 2,
                    "shortest field lines fitting the head budget use bounded scratch offsets");
 }
 
@@ -222,8 +225,8 @@ void check_field_value_octets(CheckReporter &reporter) {
             const auto *parsed = std::get_if<orange::http::ParsedRequest>(&outcome);
             if (accepted) {
                 reporter.check(parsed && parsed->consumed == raw.size() &&
-                                   parsed->request.headers.size() == 1 &&
-                                   parsed->request.headers[0].value == value,
+                                   parsed->request.headers().size() == 1 &&
+                                   parsed->request.headers()[0].value == value,
                                "every allowed interior field octet is preserved");
             } else {
                 reporter.check(is_error(outcome, orange::http::ParseError::malformed),
@@ -246,8 +249,8 @@ void check_field_value_boundaries(CheckReporter &reporter) {
             const auto outcome = orange::http::parse_request(raw);
             const auto *parsed = std::get_if<orange::http::ParsedRequest>(&outcome);
             reporter.check(parsed && parsed->consumed == raw.size() - 4 &&
-                               parsed->request.headers.size() == 1 &&
-                               parsed->request.headers[0].value == value,
+                               parsed->request.headers().size() == 1 &&
+                               parsed->request.headers()[0].value == value,
                            "short and long obs-text values trim OWS and leave the body unread");
         }
         for (std::size_t position = 0; position < length; ++position) {
@@ -280,24 +283,24 @@ void check_ows_trimming(CheckReporter &reporter) {
             const auto outcome = orange::http::parse_request(raw);
             const auto *parsed = std::get_if<orange::http::ParsedRequest>(&outcome);
             reporter.check(parsed && parsed->consumed == raw.size() - 4 &&
-                               parsed->request.headers.size() == 1 &&
-                               parsed->request.headers[0].value == "v \t\xFF",
+                               parsed->request.headers().size() == 1 &&
+                               parsed->request.headers()[0].value == "v \t\xFF",
                            "surrounding OWS is removed while interior SP/HTAB and obs-text remain");
             const std::string empty = "GET / HTTP/1.1\r\nX:" + padding + "\r\n\r\n";
             const auto counted = parse_counted(empty);
             const auto *trimmed = std::get_if<orange::http::ParsedRequest>(&counted.outcome);
             reporter.check(trimmed && trimmed->consumed == empty.size() &&
-                               trimmed->request.headers.size() == 1 &&
-                               trimmed->request.headers[0].value.empty() &&
-                               counted.allocations <= 1,
-                           "all-OWS values become empty without adding allocations");
+                               trimmed->request.headers().size() == 1 &&
+                               trimmed->request.headers()[0].value.empty() &&
+                               counted.allocations <= 2,
+                           "all-OWS values become empty within the owned-storage allocation bound");
         }
     }
     const std::string fitted = "GET / HTTP/1.1\r\nX:" + std::string(8170, '\t') + "\r\n\r\n";
     const auto owned = orange::http::parse_request(fitted);
     const auto *parsed = std::get_if<orange::http::ParsedRequest>(&owned);
-    reporter.check(parsed && parsed->consumed == 8192 && parsed->request.headers.size() == 1 &&
-                       parsed->request.headers[0].value.empty(),
+    reporter.check(parsed && parsed->consumed == 8192 && parsed->request.headers().size() == 1 &&
+                       parsed->request.headers()[0].value.empty(),
                    "an all-OWS field can complete at the shared 8 KiB cap");
 }
 
@@ -315,13 +318,13 @@ void check_ows_edge_octets(CheckReporter &reporter) {
             const auto *parsed = std::get_if<orange::http::ParsedRequest>(&outcome);
             if (byte == 0x09 || byte == 0x20) {
                 reporter.check(parsed && parsed->consumed == raw.size() &&
-                                   parsed->request.headers.size() == 1 &&
-                                   parsed->request.headers[0].value.empty(),
+                                   parsed->request.headers().size() == 1 &&
+                                   parsed->request.headers()[0].value.empty(),
                                "SP and HTAB at either trimming boundary are OWS");
             } else if ((byte >= 0x21 && byte <= 0x7E) || byte >= 0x80) {
                 reporter.check(parsed && parsed->consumed == raw.size() &&
-                                   parsed->request.headers.size() == 1 &&
-                                   parsed->request.headers[0].value ==
+                                   parsed->request.headers().size() == 1 &&
+                                   parsed->request.headers()[0].value ==
                                        std::string(1, static_cast<char>(byte)),
                                "every non-OWS field-content octet stops trimming at both edges");
             } else {
@@ -332,13 +335,8 @@ void check_ows_edge_octets(CheckReporter &reporter) {
     }
 }
 
-} // namespace
-
-int main() {
-    using namespace std::string_view_literals;
-    CheckReporter reporter;
-
-    // --- incomplete: no line end yet, head budget not exhausted ----------
+// Keeps unfinished request lines distinct from rejected grammar or overflow.
+void check_incomplete_request_lines(CheckReporter &reporter) {
     reporter.check(is_error(orange::http::parse_request(""), orange::http::ParseError::incomplete),
                    "empty input is incomplete, not malformed");
     reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1"),
@@ -353,8 +351,10 @@ int main() {
     reporter.check(
         is_error(orange::http::parse_request("\r\n"), orange::http::ParseError::incomplete),
         "only empty lines so far is incomplete");
+}
 
-    // --- the request line overflows the head budget (RFC 9112 3) ---------
+// Checks which request-line field owns an exhausted head budget.
+void check_request_line_limits(CheckReporter &reporter) {
     // A grammar-valid prefix is too long rather than malformed: 501 for an
     // overlong method, 414 (MUST) for an overlong target, attributed to the
     // longer of the two once both have started.
@@ -382,8 +382,11 @@ int main() {
                                                         " HTTP/1.1\r\n"),
                             orange::http::ParseError::target_too_long),
                    "a request line ending one byte past the budget is target_too_long");
+}
 
-    // An overflowing prefix that already breaks the grammar stays malformed.
+// Keeps grammar errors authoritative even when the request line overflows.
+void check_malformed_request_line_overflow(CheckReporter &reporter) {
+    constexpr std::size_t cap = orange::http::header_block_cap;
     reporter.check(is_error(orange::http::parse_request("GE(T /" + std::string(cap, 'a')),
                             orange::http::ParseError::malformed),
                    "overflow after an invalid method byte is malformed");
@@ -401,39 +404,43 @@ int main() {
     reporter.check(
         is_error(orange::http::parse_request(empty_lines), orange::http::ParseError::malformed),
         "empty lines exhausting the budget are malformed, not a header overflow");
+}
 
-    // --- parses: fields, validation breadth, consumed bytes --------------
+// Checks owned request-line fields, accepted versions and leading empty lines.
+void check_request_line_fields(CheckReporter &reporter) {
     // The head is the request line AND its header block through the one
     // terminating empty line; a request line alone never completes a parse.
     const auto posted = orange::http::parse_request("POST /api/echo HTTP/1.1\r\n\r\n");
     reporter.check(parsed_of(posted).has_value(), "well-formed request line parses");
-    reporter.check(parsed_of(posted) && parsed_of(posted)->request.method == "POST",
+    reporter.check(parsed_of(posted) && parsed_of(posted)->request.method() == "POST",
                    "request-line method parses into its field");
-    reporter.check(parsed_of(posted) && parsed_of(posted)->request.target == "/api/echo",
+    reporter.check(parsed_of(posted) && parsed_of(posted)->request.target() == "/api/echo",
                    "request-line target parses into its field");
-    reporter.check(parsed_of(posted) && parsed_of(posted)->request.version == "HTTP/1.1",
+    reporter.check(parsed_of(posted) && parsed_of(posted)->request.version() == "HTTP/1.1",
                    "request-line version parses into its field");
     reporter.check(parsed_of(posted) && parsed_of(posted)->consumed == 27,
                    "consumed spans the request line and the terminating empty line");
-    reporter.check(parsed_of(posted) && parsed_of(posted)->request.headers.empty(),
+    reporter.check(parsed_of(posted) && parsed_of(posted)->request.headers().empty(),
                    "a head with no field lines collects an empty header list");
 
     const auto future = parsed_of(orange::http::parse_request("GET / HTTP/2.0\r\n\r\n"));
-    reporter.check(future && future->request.version == "HTTP/2.0",
+    reporter.check(future && future->request.version() == "HTTP/2.0",
                    "grammar-valid future version parses; serving policy is a later layer");
 
     const auto custom =
         parsed_of(orange::http::parse_request("!CUSTOM! /a%20b?q=1 HTTP/1.1\r\n\r\n"));
-    reporter.check(custom && custom->request.method == "!CUSTOM!",
+    reporter.check(custom && custom->request.method() == "!CUSTOM!",
                    "tchar-only custom method parses");
 
     const auto skipped = parsed_of(orange::http::parse_request("\r\nGET / HTTP/1.1\r\n\r\n"));
-    reporter.check(skipped && skipped->request.method == "GET",
+    reporter.check(skipped && skipped->request.method() == "GET",
                    "a leading empty line is ignored (RFC 9112 2.2)");
     reporter.check(skipped && skipped->consumed == 20,
                    "consumed includes the skipped leading empty line");
+}
 
-    // --- malformed: the bytes cannot be a request line --------------------
+// Rejects invalid request-line token structure, separators and protocol names.
+void check_malformed_request_lines(CheckReporter &reporter) {
     reporter.check(
         is_error(orange::http::parse_request("GET\r\n"), orange::http::ParseError::malformed),
         "one-token request line is malformed");
@@ -467,6 +474,11 @@ int main() {
     reporter.check(is_error(orange::http::parse_request("GET / http/1.1\r\n"),
                             orange::http::ParseError::malformed),
                    "HTTP-name is case-sensitive");
+}
+
+// Rejects control bytes and invalid URI octets or percent escapes in targets.
+void check_rejected_target_octets(CheckReporter &reporter) {
+    using namespace std::string_view_literals;
     // The fixture is a string_view literal with an explicit NUL byte: a
     // `\x00b` escape would swallow the 'b' as a hex digit (yielding VT), and
     // a plain const char* would be truncated at the NUL by strlen.
@@ -503,81 +515,99 @@ int main() {
     reporter.check(is_error(orange::http::parse_request("GET /a%2 HTTP/1.1\r\n"),
                             orange::http::ParseError::malformed),
                    "a truncated percent-encoding in a complete line is malformed");
+}
 
+// Covers the asterisk, absolute and authority request-target forms.
+void check_request_target_forms(CheckReporter &reporter) {
     const auto asterisk = parsed_of(orange::http::parse_request("OPTIONS * HTTP/1.1\r\n\r\n"));
-    reporter.check(asterisk && asterisk->request.target == "*", "asterisk-form target parses");
+    reporter.check(asterisk && asterisk->request.target() == "*", "asterisk-form target parses");
     const auto absolute = parsed_of(
         orange::http::parse_request("GET http://example.com:8080/a?b=c HTTP/1.1\r\n\r\n"));
-    reporter.check(absolute && absolute->request.target == "http://example.com:8080/a?b=c",
+    reporter.check(absolute && absolute->request.target() == "http://example.com:8080/a?b=c",
                    "absolute-form target parses");
     const auto authority =
         parsed_of(orange::http::parse_request("CONNECT example.com:443 HTTP/1.1\r\n\r\n"));
-    reporter.check(authority && authority->request.target == "example.com:443",
+    reporter.check(authority && authority->request.target() == "example.com:443",
                    "authority-form target parses");
+}
 
-    // --- the header block: fields, order, trimming, consumed -------------
+// Checks owned header fields and consumption through the terminating CRLF.
+void check_header_fields(CheckReporter &reporter) {
     const auto with_fields = parsed_of(orange::http::parse_request(
         "POST /api/echo HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nContent-Length: 5\r\n\r\n"));
     reporter.check(with_fields.has_value(), "a head with field lines parses");
-    reporter.check(with_fields && with_fields->request.headers.size() == 2,
+    reporter.check(with_fields && with_fields->request.headers().size() == 2,
                    "every field line is collected");
-    reporter.check(with_fields && with_fields->request.headers.size() == 2 &&
-                       with_fields->request.headers[0].name == "Host" &&
-                       with_fields->request.headers[0].value == "127.0.0.1:8080",
+    reporter.check(with_fields && with_fields->request.headers().size() == 2 &&
+                       with_fields->request.headers()[0].name == "Host" &&
+                       with_fields->request.headers()[0].value == "127.0.0.1:8080",
                    "field name and value parse into their owned copies");
-    reporter.check(with_fields && with_fields->request.headers.size() == 2 &&
-                       with_fields->request.headers[1].name == "Content-Length" &&
-                       with_fields->request.headers[1].value == "5",
+    reporter.check(with_fields && with_fields->request.headers().size() == 2 &&
+                       with_fields->request.headers()[1].name == "Content-Length" &&
+                       with_fields->request.headers()[1].value == "5",
                    "a second field line parses");
     reporter.check(with_fields && with_fields->consumed == 68,
                    "consumed spans the request line, both field lines, and the terminator");
+}
 
+// Keeps surrounding optional whitespace out of owned field values.
+void check_header_value_trimming(CheckReporter &reporter) {
     // Optional whitespace around a value is not part of it (RFC 9110 5.5).
     const auto trimmed = parsed_of(orange::http::parse_request(
         "GET / HTTP/1.1\r\nX-Pad:  spaced  \r\nX-Tab:\tvalue\t\r\nEmpty:\r\nOnly-OWS:   "
         "\r\n\r\n"));
-    reporter.check(trimmed && trimmed->request.headers.size() == 4,
+    reporter.check(trimmed && trimmed->request.headers().size() == 4,
                    "four field lines collect before the terminator");
-    reporter.check(trimmed && trimmed->request.headers.size() == 4 &&
-                       trimmed->request.headers[0].value == "spaced",
+    reporter.check(trimmed && trimmed->request.headers().size() == 4 &&
+                       trimmed->request.headers()[0].value == "spaced",
                    "OWS around a value is trimmed");
-    reporter.check(trimmed && trimmed->request.headers.size() == 4 &&
-                       trimmed->request.headers[1].value == "value",
+    reporter.check(trimmed && trimmed->request.headers().size() == 4 &&
+                       trimmed->request.headers()[1].value == "value",
                    "HTAB around a value is trimmed");
-    reporter.check(trimmed && trimmed->request.headers.size() == 4 &&
-                       trimmed->request.headers[2].value.empty() &&
-                       trimmed->request.headers[3].value.empty(),
+    reporter.check(trimmed && trimmed->request.headers().size() == 4 &&
+                       trimmed->request.headers()[2].value.empty() &&
+                       trimmed->request.headers()[3].value.empty(),
                    "a value of only OWS trims to the empty value");
+}
 
+// Preserves duplicate field names, received order and case without combining.
+void check_repeated_header_fields(CheckReporter &reporter) {
     const auto repeated = parsed_of(
         orange::http::parse_request("GET / HTTP/1.1\r\nx-a: 1\r\nX-B: 2\r\nx-a: 3\r\n\r\n"));
-    reporter.check(repeated && repeated->request.headers.size() == 3,
+    reporter.check(repeated && repeated->request.headers().size() == 3,
                    "duplicate field names stay separate entries in received order");
-    reporter.check(repeated && repeated->request.headers.size() == 3 &&
-                       repeated->request.headers[0].name == "x-a" &&
-                       repeated->request.headers[2].value == "3",
+    reporter.check(repeated && repeated->request.headers().size() == 3 &&
+                       repeated->request.headers()[0].name == "x-a" &&
+                       repeated->request.headers()[2].value == "3",
                    "field-name case is preserved as received");
-    reporter.check(repeated && repeated->request.headers.size() == 3 &&
-                       repeated->request.headers[1].name == "X-B" &&
-                       repeated->request.headers[1].value == "2",
+    reporter.check(repeated && repeated->request.headers().size() == 3 &&
+                       repeated->request.headers()[1].name == "X-B" &&
+                       repeated->request.headers()[1].value == "2",
                    "the middle field keeps its position and value");
-    reporter.check(repeated && repeated->request.headers.size() == 3 &&
-                       repeated->request.headers[2].name == "x-a",
+    reporter.check(repeated && repeated->request.headers().size() == 3 &&
+                       repeated->request.headers()[2].name == "x-a",
                    "the repeated name is preserved verbatim, not combined");
+}
 
+// Preserves internal spaces and obs-text bytes in accepted field values.
+void check_header_value_content(CheckReporter &reporter) {
+    using namespace std::string_view_literals;
     const auto agent = parsed_of(orange::http::parse_request(
         "GET / HTTP/1.1\r\nUser-Agent: orange study (loopback)\r\n\r\n"));
-    reporter.check(agent && !agent->request.headers.empty() &&
-                       agent->request.headers[0].value == "orange study (loopback)",
+    reporter.check(agent && !agent->request.headers().empty() &&
+                       agent->request.headers()[0].value == "orange study (loopback)",
                    "internal spaces inside a value are kept");
 
     constexpr std::string_view noted_line = "GET / HTTP/1.1\r\nX-Note: caf\xC3\xA9\r\n\r\n"sv;
     const auto noted = parsed_of(orange::http::parse_request(noted_line));
-    reporter.check(noted && !noted->request.headers.empty() &&
-                       noted->request.headers[0].value == "caf\xC3\xA9"sv,
+    reporter.check(noted && !noted->request.headers().empty() &&
+                       noted->request.headers()[0].value == "caf\xC3\xA9"sv,
                    "obs-text octets are allowed in a field value (RFC 9110 5.5)");
+}
 
-    // --- the header block overflows the remaining head budget (431) ------
+// Distinguishes valid head-cap boundaries from malformed overflowing fields.
+void check_header_limits(CheckReporter &reporter) {
+    constexpr std::size_t cap = orange::http::header_block_cap;
     reporter.check(
         is_error(orange::http::parse_request("GET / HTTP/1.1\r\nX-Pad: " + std::string(cap, 'a')),
                  orange::http::ParseError::headers_too_long),
@@ -605,8 +635,10 @@ int main() {
                                                         std::string(cap, 'a')),
                             orange::http::ParseError::malformed),
                    "a bare CR in an overflowing field tail is malformed");
+}
 
-    // --- the header block so far is incomplete ---------------------------
+// Requires both completed field lines and the terminating empty line.
+void check_incomplete_headers(CheckReporter &reporter) {
     reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\n"),
                             orange::http::ParseError::incomplete),
                    "a request line without its terminating empty line is incomplete");
@@ -616,8 +648,11 @@ int main() {
     reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\nHost: x\r\n"),
                             orange::http::ParseError::incomplete),
                    "a field block without its terminating empty line is incomplete");
+}
 
-    // --- malformed: the bytes cannot be a field line ---------------------
+// Rejects missing names/colons, obs-fold and forbidden field-value bytes.
+void check_malformed_header_lines(CheckReporter &reporter) {
+    using namespace std::string_view_literals;
     reporter.check(is_error(orange::http::parse_request("GET / HTTP/1.1\r\nNoColonHere\r\n\r\n"),
                             orange::http::ParseError::malformed),
                    "a field line without a colon is malformed");
@@ -654,7 +689,27 @@ int main() {
                                                         "b\r\n\r\n"),
                             orange::http::ParseError::malformed),
                    "DEL in a field value is rejected");
+}
 
+} // namespace
+
+// Runs each case family once, sharing failure reporting and CTest exit status.
+int main() {
+    CheckReporter reporter;
+    check_incomplete_request_lines(reporter);
+    check_request_line_limits(reporter);
+    check_malformed_request_line_overflow(reporter);
+    check_request_line_fields(reporter);
+    check_malformed_request_lines(reporter);
+    check_rejected_target_octets(reporter);
+    check_request_target_forms(reporter);
+    check_header_fields(reporter);
+    check_header_value_trimming(reporter);
+    check_repeated_header_fields(reporter);
+    check_header_value_content(reporter);
+    check_header_limits(reporter);
+    check_incomplete_headers(reporter);
+    check_malformed_header_lines(reporter);
     check_parse_allocations(reporter);
     check_deferred_field_copies(reporter);
     check_field_value_octets(reporter);

@@ -1,4 +1,6 @@
+// ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
 // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+// Performance authorization: docs/reviews/2026-10-16-http-performance.md.
 // Internal shared octet grammar for request heads, framing and trailers.
 #ifndef ORANGE_HTTP_SYNTAX_HPP
 #define ORANGE_HTTP_SYNTAX_HPP
@@ -93,9 +95,5 @@ constexpr bool is_token(std::string_view token) {
     return !token.empty() && std::all_of(token.begin(), token.end(), is_tchar);
 }
 
-// Validates a complete request line without constructing owned fields.
-[[nodiscard]] bool is_valid_request_line(std::string_view line);
-// Validates a nonempty complete field line, including the obs-fold prohibition.
-[[nodiscard]] bool is_valid_header_line(std::string_view line);
 } // namespace orange::http::detail
 #endif

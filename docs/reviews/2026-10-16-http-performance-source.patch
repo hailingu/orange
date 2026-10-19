@@ -1,0 +1,455 @@
+--- a/service/src/http_chunk_line.cpp
++++ b/service/src/http_chunk_line.cpp
+@@ -1,4 +1,5 @@
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
++// Performance authorization: docs/reviews/2026-10-16-http-performance.md.
+ #include "http_chunk_line.hpp"
+ #include "http_syntax.hpp"
+ namespace orange::http::detail {
+@@ -10,15 +11,18 @@
+     *this = ChunkLine{};
+     quota_ = quota;
+ }
++void ChunkLine::add_digit(char c) {
++    digit_seen_ = true;
++    const auto digit = static_cast<std::size_t>(is_digit(c) ? c - '0' : (c | 0x20) - 'a' + 10);
++    if (digit > quota_ || size_ > (quota_ - digit) / 16) {
++        oversized_ = true;
++    } else if (!oversized_) {
++        size_ = size_ * 16 + digit;
++    }
++}
+ ChunkLineResult ChunkLine::size_byte(char c) {
+     if (is_hexdig(c)) {
+-        digit_seen_ = true;
+-        const auto digit = static_cast<std::size_t>(is_digit(c) ? c - '0' : (c | 0x20) - 'a' + 10);
+-        if (digit > quota_ || size_ > (quota_ - digit) / 16) {
+-            oversized_ = true;
+-        } else if (!oversized_) {
+-            size_ = size_ * 16 + digit;
+-        }
++        add_digit(c);
+         return ChunkLineResult::pending;
+     }
+     if (!digit_seen_ || (!space(c) && c != ';' && c != '\r')) {
+@@ -111,4 +115,32 @@
+     }
+     return value_byte(c);
+ }
++ChunkLineStep ChunkLine::feed(std::string_view input) {
++    std::size_t consumed = 0;
++    while (consumed < input.size()) {
++        // Runs stay in one grammar state; only delimiters use byte transitions.
++        if (phase_ == Phase::size) {
++            while (consumed < input.size() && is_hexdig(input[consumed])) {
++                add_digit(input[consumed++]);
++            }
++        } else if (phase_ == Phase::name || phase_ == Phase::token_value) {
++            while (consumed < input.size() && is_tchar(input[consumed])) {
++                ++consumed;
++            }
++        } else if (phase_ == Phase::quoted_value) {
++            while (consumed < input.size() && input[consumed] != '"' && input[consumed] != '\\' &&
++                   is_field_octet(input[consumed])) {
++                ++consumed;
++            }
++        }
++        if (consumed == input.size()) {
++            break;
++        }
++        const auto result = feed(input[consumed++]);
++        if (result != ChunkLineResult::pending) {
++            return {consumed, result};
++        }
++    }
++    return {consumed, ChunkLineResult::pending};
++}
+ } // namespace orange::http::detail
+--- a/service/src/http_chunk_line.hpp
++++ b/service/src/http_chunk_line.hpp
+@@ -1,11 +1,18 @@
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
++// Performance authorization: docs/reviews/2026-10-16-http-performance.md.
+ // Internal constant-storage validation of streaming chunk-size metadata.
+ #ifndef ORANGE_HTTP_CHUNK_LINE_HPP
+ #define ORANGE_HTTP_CHUNK_LINE_HPP
+ #include <cstddef>
++#include <string_view>
+ namespace orange::http::detail {
+ // A chunk line is either pending, complete, invalid, or above the content quota.
+ enum class ChunkLineResult { pending, complete, malformed, too_large };
++// Number of supplied octets consumed, including a terminal delimiter or bad octet.
++struct ChunkLineStep {
++    std::size_t consumed;
++    ChunkLineResult result;
++};
+ // Validates one size line and ignores syntactically valid extensions. No
+ // extension text is retained, even when a quoted value spans many fragments.
+ class ChunkLine {
+@@ -14,6 +21,9 @@
+     void reset(std::size_t quota);
+     // Advances one metadata octet; complete includes the terminating CRLF.
+     [[nodiscard]] ChunkLineResult feed(char c);
++    // Advances a bounded input span, stopping at the first non-pending result.
++    // The caller supplies only bytes remaining inside its metadata budget.
++    [[nodiscard]] ChunkLineStep feed(std::string_view input);
+     // Returns the decoded chunk size after a complete size line.
+     [[nodiscard]] std::size_t size() const { return size_; }
+ 
+@@ -37,6 +47,8 @@
+     std::size_t quota_ = 0;
+     bool digit_seen_ = false;
+     bool oversized_ = false;
++    // Adds a known hexadecimal digit with the same overflow/quota rule on both paths.
++    void add_digit(char c);
+     // Handles the hexadecimal prefix without overflowing its bounded accumulator.
+     ChunkLineResult size_byte(char c);
+     // Handles extension separators and the end of a complete name/value.
+--- /dev/null
++++ b/service/src/http_head_fields.hpp
+@@ -0,0 +1,45 @@
++// Authorization: docs/reviews/2026-10-16-http-performance.md.
++// Internal validated offsets shared by complete and fragmented head construction.
++#ifndef ORANGE_HTTP_HEAD_FIELDS_HPP
++#define ORANGE_HTTP_HEAD_FIELDS_HPP
++#include "http_messages.hpp"
++#include <cstdint>
++#include <string_view>
++#include <vector>
++
++namespace orange::http::detail {
++// A field line needs at least four bytes; the head cap bounds count and offsets.
++struct HeaderFieldOffsets {
++    std::uint16_t name_begin;
++    std::uint16_t name_size;
++    std::uint16_t value_begin;
++    std::uint16_t value_size;
++};
++// Validated request-line slices; the version always occupies exactly eight bytes.
++struct RequestLineOffsets {
++    std::uint16_t method_begin;
++    std::uint16_t method_size;
++    std::uint16_t target_begin;
++    std::uint16_t target_size;
++    std::uint16_t version_begin;
++};
++// Empty leading lines stay pending; only an empty line after the request completes.
++enum class HeadLineResult { pending, complete, malformed };
++// Retains offsets, never borrowed views. Descriptor storage grows only for received
++// fields and is bounded by the decoder's head cap, rather than a per-connection
++// maximum-sized array. Allocation failures propagate to RequestDecoder's handler.
++class HeadFields {
++  public:
++    // Supplies one CRLF-stripped line at its absolute offset in a capped head.
++    [[nodiscard]] HeadLineResult append_line(std::string_view line, std::size_t begin);
++    // Constructs owned fields after append_line reports complete. The unchanged
++    // head must contain all supplied lines; no grammar scan is repeated here.
++    [[nodiscard]] ParsedRequest finish(std::string_view head, std::size_t consumed) const;
++
++  private:
++    RequestLineOffsets request_line_{};
++    bool request_line_seen_ = false;
++    std::vector<HeaderFieldOffsets> fields_;
++};
++} // namespace orange::http::detail
++#endif
+--- a/service/src/http_messages.cpp
++++ b/service/src/http_messages.cpp
+@@ -1,6 +1,8 @@
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
++// Performance authorization: docs/reviews/2026-10-16-http-performance.md.
+ 
+ #include "http_messages.hpp"
++#include "http_head_fields.hpp"
+ #include "http_syntax.hpp"
+ 
+ #include <algorithm>
+@@ -8,6 +10,7 @@
+ #include <cstdint>
+ #include <limits>
+ #include <optional>
++#include <span>
+ #include <string>
+ #include <string_view>
+ #include <utility>
+@@ -15,6 +18,7 @@
+ namespace orange::http {
+ namespace {
+ 
++using detail::HeaderFieldOffsets;
+ using detail::is_digit;
+ using detail::is_field_octet;
+ using detail::is_hexdig;
+@@ -202,16 +206,6 @@
+ struct HeaderBlock {
+     std::size_t consumed;
+     std::size_t field_count;
+-};
+-
+-// Compact, call-local slices of validated fields. A field line needs at
+-// least four bytes ("a:\r\n"), so the head budget bounds both the number of
+-// entries and every offset. No borrowed slice escapes into the result.
+-struct HeaderFieldOffsets {
+-    std::uint16_t name_begin;
+-    std::uint16_t name_size;
+-    std::uint16_t value_begin;
+-    std::uint16_t value_size;
+ };
+ 
+ // Borrowed validation results remain inside the parser; callers only receive
+@@ -307,17 +301,16 @@
+ // owned field is constructed on an incomplete or rejected head, so retries
+ // never repeat allocations. Recorded offsets avoid searching and trimming
+ // the same bytes again; order, duplicates, and received case are preserved.
+-ParsedRequest copy_header_block(std::string_view raw, const HeaderFields &fields,
+-                                const HeaderBlock &block) {
++ParsedRequest copy_header_block(std::string_view raw, std::span<const HeaderFieldOffsets> fields,
++                                std::size_t consumed) {
+     Request request;
+-    request.headers.reserve(block.field_count);
+-    for (std::size_t i = 0; i < block.field_count; ++i) {
+-        const HeaderFieldOffsets &field = fields[i];
++    request.headers.reserve(fields.size());
++    for (const HeaderFieldOffsets &field : fields) {
+         request.headers.push_back(
+             HeaderField{std::string(raw.substr(field.name_begin, field.name_size)),
+                         std::string(raw.substr(field.value_begin, field.value_size))});
+     }
+-    return ParsedRequest{std::move(request), block.consumed};
++    return ParsedRequest{std::move(request), consumed};
+ }
+ 
+ // Holds the bounded scratch offsets only while validating and copying one
+@@ -329,16 +322,54 @@
+     if (const auto *error = std::get_if<ParseError>(&block)) {
+         return *error;
+     }
+-    return copy_header_block(raw, fields, std::get<HeaderBlock>(block));
++    const auto ready = std::get<HeaderBlock>(block);
++    return copy_header_block(raw, std::span(fields.data(), ready.field_count), ready.consumed);
+ }
+ 
+ } // namespace
+ 
+ namespace detail {
+-bool is_valid_request_line(std::string_view line) {
+-    return validate_request_line(line).has_value();
+-}
+-bool is_valid_header_line(std::string_view line) { return validate_field_line(line).has_value(); }
++HeadLineResult HeadFields::append_line(std::string_view line, std::size_t begin) {
++    if (begin > header_block_cap - 2 || line.size() > header_block_cap - begin - 2) {
++        return HeadLineResult::malformed;
++    }
++    if (line.empty()) {
++        return request_line_seen_ ? HeadLineResult::complete : HeadLineResult::pending;
++    }
++    if (!request_line_seen_) {
++        const auto tokens = validate_request_line(line);
++        if (!tokens) {
++            return HeadLineResult::malformed;
++        }
++        request_line_ = {static_cast<std::uint16_t>(begin),
++                         static_cast<std::uint16_t>(tokens->method.size()),
++                         static_cast<std::uint16_t>(begin + tokens->method.size() + 1),
++                         static_cast<std::uint16_t>(tokens->target.size()),
++                         static_cast<std::uint16_t>(begin + line.size() - 8)};
++        request_line_seen_ = true;
++        return HeadLineResult::pending;
++    }
++    const auto field = validate_field_line(line);
++    if (!field) {
++        return HeadLineResult::malformed;
++    }
++    if (fields_.empty()) {
++        fields_.reserve(16);
++    }
++    fields_.push_back({static_cast<std::uint16_t>(begin),
++                       static_cast<std::uint16_t>(field->name.size()),
++                       static_cast<std::uint16_t>(
++                           begin + static_cast<std::size_t>(field->value.data() - line.data())),
++                       static_cast<std::uint16_t>(field->value.size())});
++    return HeadLineResult::pending;
++}
++ParsedRequest HeadFields::finish(std::string_view head, std::size_t consumed) const {
++    auto parsed = copy_header_block(head, fields_, consumed);
++    parsed.request.method = head.substr(request_line_.method_begin, request_line_.method_size);
++    parsed.request.target = head.substr(request_line_.target_begin, request_line_.target_size);
++    parsed.request.version = head.substr(request_line_.version_begin, 8);
++    return parsed;
++}
+ } // namespace detail
+ 
+ // Parses the CRLF-terminated request line `method SP request-target SP
+--- a/service/src/http_request_decoder.cpp
++++ b/service/src/http_request_decoder.cpp
+@@ -1,8 +1,10 @@
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
++// Performance authorization: docs/reviews/2026-10-16-http-performance.md.
+ // Repair authorization: docs/reviews/2026-10-16-peer-assessment-repairs.md.
+ #include "http_request_decoder.hpp"
+ #include "http_body_framing.hpp"
+ #include "http_chunk_line.hpp"
++#include "http_head_fields.hpp"
+ #include "http_syntax.hpp"
+ #include <algorithm>
+ #include <limits>
+@@ -28,7 +30,7 @@
+     TrailerPhase trailer_phase = TrailerPhase::start;
+     std::string head;
+     std::size_t line_start = 0;
+-    bool request_line_seen = false;
++    detail::HeadFields head_fields;
+     ParsedMessage message;
+     std::size_t remaining = 0;
+     std::size_t metadata_bytes = 0;
+@@ -58,8 +60,7 @@
+         }
+         head.clear();
+     }
+-    // Validates each completed fragmented head line once. The final head
+-    // parse constructs owned fields once and preserves the existing head API.
++    // Saves validated offsets so completion only constructs owned fields.
+     void head_line() {
+         const auto length = head.size() - line_start;
+         if (length < 2 || head[head.size() - 2] != '\r') {
+@@ -67,22 +68,11 @@
+             return;
+         }
+         const auto line = std::string_view(head).substr(line_start, length - 2);
++        const auto state = head_fields.append_line(line, line_start);
+         line_start = head.size();
+-        if (line.empty()) {
+-            if (request_line_seen) {
+-                auto parsed = parse_request(head);
+-                if (auto *failure = std::get_if<ParseError>(&parsed)) {
+-                    fail(*failure);
+-                } else {
+-                    start_body(std::move(std::get<ParsedRequest>(parsed)));
+-                }
+-            }
+-        } else if (!request_line_seen) {
+-            if (!detail::is_valid_request_line(line)) {
+-                fail(ParseError::malformed);
+-            }
+-            request_line_seen = true;
+-        } else if (!detail::is_valid_header_line(line)) {
++        if (state == detail::HeadLineResult::complete) {
++            start_body(head_fields.finish(head, head.size()));
++        } else if (state == detail::HeadLineResult::malformed) {
+             fail(ParseError::malformed);
+         }
+     }
+@@ -130,9 +120,10 @@
+         }
+         return count;
+     }
+-    // Advances the constant-storage chunk-line validator one metadata byte.
+-    void read_chunk_line(char c) {
+-        const auto result = chunk_line.feed(c);
++    // Advances a budget-bounded metadata span without retaining extension text.
++    std::size_t read_chunk_line(std::string_view input) {
++        const auto step = chunk_line.feed(input);
++        const auto result = step.result;
+         if (result == detail::ChunkLineResult::malformed) {
+             fail(ParseError::malformed);
+         } else if (result == detail::ChunkLineResult::too_large) {
+@@ -141,6 +132,7 @@
+             remaining = chunk_line.size();
+             phase = remaining == 0 ? Phase::trailers : Phase::chunk_data;
+         }
++        return step.consumed;
+     }
+     // Discards trailers while checking the same token/value octets as heads.
+     // Framing-sensitive fields cannot replace the already resolved head fields.
+@@ -181,20 +173,42 @@
+             break;
+         }
+     }
+-    // Consumes framing octets; chunk data itself takes the bulk content path.
+-    void read_metadata(char c) {
++    // Scans trailer runs in their current state; delimiters retain byte grammar.
++    std::size_t read_trailers(std::string_view input) {
++        std::size_t used = 0;
++        while (used < input.size() && phase == Phase::trailers) {
++            if (trailer_phase == TrailerPhase::name) {
++                while (used < input.size() && detail::is_tchar(input[used]))
++                    ++used;
++            } else if (trailer_phase == TrailerPhase::value) {
++                while (used < input.size() && detail::is_field_octet(input[used]))
++                    ++used;
++            }
++            if (used < input.size())
++                read_trailer(input[used++]);
++        }
++        return used;
++    }
++    // Bounds every scan before grammar inspection; exhaustion precedes bad bytes.
++    std::size_t read_metadata(std::string_view input) {
+         if (metadata_bytes == chunk_metadata_cap) {
+             fail(ParseError::chunk_metadata_too_long);
+-            return;
+-        }
+-        ++metadata_bytes;
++            return 1;
++        }
++        input = input.substr(0, std::min(input.size(), chunk_metadata_cap - metadata_bytes));
++        std::size_t count = 1;
++        const char c = input.front();
+         switch (phase) {
+         case Phase::chunk_line:
+-            read_chunk_line(c);
++            count = read_chunk_line(input);
+             break;
+         case Phase::chunk_cr:
+             if (c != '\r') {
+                 fail(ParseError::malformed);
++            } else if (input.size() >= 2 && input[1] == '\n') {
++                count = 2;
++                phase = Phase::chunk_line;
++                chunk_line.reset(request_body_cap - message.body.size());
+             } else {
+                 phase = Phase::chunk_lf;
+             }
+@@ -208,12 +222,14 @@
+             }
+             break;
+         case Phase::trailers:
+-            read_trailer(c);
++            count = read_trailers(input);
+             break;
+         default:
+             fail(ParseError::malformed);
+             break;
+         }
++        metadata_bytes += count;
++        return count;
+     }
+     // Counts only this message's wire bytes, including discarded metadata.
+     DecodeResult feed(std::string_view input) {
+@@ -231,7 +247,7 @@
+             } else if (phase == Phase::fixed || phase == Phase::chunk_data) {
+                 count = read_content(window);
+             } else {
+-                read_metadata(window.front());
++                count = read_metadata(window);
+             }
+             used += count;
+             message.consumed += count;
+--- a/service/src/http_syntax.hpp
++++ b/service/src/http_syntax.hpp
+@@ -1,4 +1,5 @@
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
++// Performance authorization: docs/reviews/2026-10-16-http-performance.md.
+ // Internal shared octet grammar for request heads, framing and trailers.
+ #ifndef ORANGE_HTTP_SYNTAX_HPP
+ #define ORANGE_HTTP_SYNTAX_HPP
+@@ -93,9 +94,5 @@
+     return !token.empty() && std::all_of(token.begin(), token.end(), is_tchar);
+ }
+ 
+-// Validates a complete request line without constructing owned fields.
+-[[nodiscard]] bool is_valid_request_line(std::string_view line);
+-// Validates a nonempty complete field line, including the obs-fold prohibition.
+-[[nodiscard]] bool is_valid_header_line(std::string_view line);
+ } // namespace orange::http::detail
+ #endif

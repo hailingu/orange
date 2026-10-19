@@ -1,4 +1,6 @@
+// ADR: service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md
 // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+// Performance authorization: docs/reviews/2026-10-16-http-performance.md.
 #include "http_chunk_line.hpp"
 #include "http_syntax.hpp"
 namespace orange::http::detail {
@@ -10,15 +12,18 @@ void ChunkLine::reset(std::size_t quota) {
     *this = ChunkLine{};
     quota_ = quota;
 }
+void ChunkLine::add_digit(char c) {
+    digit_seen_ = true;
+    const auto digit = static_cast<std::size_t>(is_digit(c) ? c - '0' : (c | 0x20) - 'a' + 10);
+    if (digit > quota_ || size_ > (quota_ - digit) / 16) {
+        oversized_ = true;
+    } else if (!oversized_) {
+        size_ = size_ * 16 + digit;
+    }
+}
 ChunkLineResult ChunkLine::size_byte(char c) {
     if (is_hexdig(c)) {
-        digit_seen_ = true;
-        const auto digit = static_cast<std::size_t>(is_digit(c) ? c - '0' : (c | 0x20) - 'a' + 10);
-        if (digit > quota_ || size_ > (quota_ - digit) / 16) {
-            oversized_ = true;
-        } else if (!oversized_) {
-            size_ = size_ * 16 + digit;
-        }
+        add_digit(c);
         return ChunkLineResult::pending;
     }
     if (!digit_seen_ || (!space(c) && c != ';' && c != '\r')) {
@@ -110,5 +115,33 @@ ChunkLineResult ChunkLine::feed(char c) {
         return separator(c);
     }
     return value_byte(c);
+}
+ChunkLineStep ChunkLine::feed(std::string_view input) {
+    std::size_t consumed = 0;
+    while (consumed < input.size()) {
+        // Runs stay in one grammar state; only delimiters use byte transitions.
+        if (phase_ == Phase::size) {
+            while (consumed < input.size() && is_hexdig(input[consumed])) {
+                add_digit(input[consumed++]);
+            }
+        } else if (phase_ == Phase::name || phase_ == Phase::token_value) {
+            while (consumed < input.size() && is_tchar(input[consumed])) {
+                ++consumed;
+            }
+        } else if (phase_ == Phase::quoted_value) {
+            while (consumed < input.size() && input[consumed] != '"' && input[consumed] != '\\' &&
+                   is_field_octet(input[consumed])) {
+                ++consumed;
+            }
+        }
+        if (consumed == input.size()) {
+            break;
+        }
+        const auto result = feed(input[consumed++]);
+        if (result != ChunkLineResult::pending) {
+            return {consumed, result};
+        }
+    }
+    return {consumed, ChunkLineResult::pending};
 }
 } // namespace orange::http::detail

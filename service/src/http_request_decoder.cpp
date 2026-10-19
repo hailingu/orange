@@ -1,7 +1,12 @@
+// ADR: service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md
+// ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
 // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+// Performance authorization: docs/reviews/2026-10-16-http-performance.md.
+// Repair authorization: docs/reviews/2026-10-16-peer-assessment-repairs.md.
 #include "http_request_decoder.hpp"
 #include "http_body_framing.hpp"
 #include "http_chunk_line.hpp"
+#include "http_head_fields.hpp"
 #include "http_syntax.hpp"
 #include <algorithm>
 #include <limits>
@@ -27,9 +32,10 @@ struct RequestDecoder::Impl {
     TrailerPhase trailer_phase = TrailerPhase::start;
     std::string head;
     std::size_t line_start = 0;
-    bool request_line_seen = false;
+    detail::HeadFields head_fields;
     ParsedMessage message;
     std::size_t remaining = 0;
+    std::size_t metadata_bytes = 0;
     detail::ChunkLine chunk_line;
     ParseError error = ParseError::malformed;
 
@@ -56,8 +62,7 @@ struct RequestDecoder::Impl {
         }
         head.clear();
     }
-    // Validates each completed fragmented head line once. The final head
-    // parse constructs owned fields once and preserves the existing head API.
+    // Saves validated offsets so completion only constructs owned fields.
     void head_line() {
         const auto length = head.size() - line_start;
         if (length < 2 || head[head.size() - 2] != '\r') {
@@ -65,22 +70,11 @@ struct RequestDecoder::Impl {
             return;
         }
         const auto line = std::string_view(head).substr(line_start, length - 2);
+        const auto state = head_fields.append_line(line, line_start);
         line_start = head.size();
-        if (line.empty()) {
-            if (request_line_seen) {
-                auto parsed = parse_request(head);
-                if (auto *failure = std::get_if<ParseError>(&parsed)) {
-                    fail(*failure);
-                } else {
-                    start_body(std::move(std::get<ParsedRequest>(parsed)));
-                }
-            }
-        } else if (!request_line_seen) {
-            if (!detail::is_valid_request_line(line)) {
-                fail(ParseError::malformed);
-            }
-            request_line_seen = true;
-        } else if (!detail::is_valid_header_line(line)) {
+        if (state == detail::HeadLineResult::complete) {
+            start_body(head_fields.finish(head, head.size()));
+        } else if (state == detail::HeadLineResult::malformed) {
             fail(ParseError::malformed);
         }
     }
@@ -128,9 +122,10 @@ struct RequestDecoder::Impl {
         }
         return count;
     }
-    // Advances the constant-storage chunk-line validator one metadata byte.
-    void read_chunk_line(char c) {
-        const auto result = chunk_line.feed(c);
+    // Advances a budget-bounded metadata span without retaining extension text.
+    std::size_t read_chunk_line(std::string_view input) {
+        const auto step = chunk_line.feed(input);
+        const auto result = step.result;
         if (result == detail::ChunkLineResult::malformed) {
             fail(ParseError::malformed);
         } else if (result == detail::ChunkLineResult::too_large) {
@@ -139,6 +134,7 @@ struct RequestDecoder::Impl {
             remaining = chunk_line.size();
             phase = remaining == 0 ? Phase::trailers : Phase::chunk_data;
         }
+        return step.consumed;
     }
     // Discards trailers while checking the same token/value octets as heads.
     // Framing-sensitive fields cannot replace the already resolved head fields.
@@ -179,15 +175,42 @@ struct RequestDecoder::Impl {
             break;
         }
     }
-    // Consumes framing octets; chunk data itself takes the bulk content path.
-    void read_metadata(char c) {
+    // Scans trailer runs in their current state; delimiters retain byte grammar.
+    std::size_t read_trailers(std::string_view input) {
+        std::size_t used = 0;
+        while (used < input.size() && phase == Phase::trailers) {
+            if (trailer_phase == TrailerPhase::name) {
+                while (used < input.size() && detail::is_tchar(input[used]))
+                    ++used;
+            } else if (trailer_phase == TrailerPhase::value) {
+                while (used < input.size() && detail::is_field_octet(input[used]))
+                    ++used;
+            }
+            if (used < input.size())
+                read_trailer(input[used++]);
+        }
+        return used;
+    }
+    // Bounds every scan before grammar inspection; exhaustion precedes bad bytes.
+    std::size_t read_metadata(std::string_view input) {
+        if (metadata_bytes == chunk_metadata_cap) {
+            fail(ParseError::chunk_metadata_too_long);
+            return 1;
+        }
+        input = input.substr(0, std::min(input.size(), chunk_metadata_cap - metadata_bytes));
+        std::size_t count = 1;
+        const char c = input.front();
         switch (phase) {
         case Phase::chunk_line:
-            read_chunk_line(c);
+            count = read_chunk_line(input);
             break;
         case Phase::chunk_cr:
             if (c != '\r') {
                 fail(ParseError::malformed);
+            } else if (input.size() >= 2 && input[1] == '\n') {
+                count = 2;
+                phase = Phase::chunk_line;
+                chunk_line.reset(request_body_cap - message.body.size());
             } else {
                 phase = Phase::chunk_lf;
             }
@@ -201,12 +224,14 @@ struct RequestDecoder::Impl {
             }
             break;
         case Phase::trailers:
-            read_trailer(c);
+            count = read_trailers(input);
             break;
         default:
             fail(ParseError::malformed);
             break;
         }
+        metadata_bytes += count;
+        return count;
     }
     // Counts only this message's wire bytes, including discarded metadata.
     DecodeResult feed(std::string_view input) {
@@ -224,7 +249,7 @@ struct RequestDecoder::Impl {
             } else if (phase == Phase::fixed || phase == Phase::chunk_data) {
                 count = read_content(window);
             } else {
-                read_metadata(window.front());
+                count = read_metadata(window);
             }
             used += count;
             message.consumed += count;
