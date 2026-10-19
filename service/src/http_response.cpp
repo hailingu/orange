@@ -56,21 +56,11 @@ std::string_view reason_phrase(unsigned int status) {
 // 15.3.5, 15.4.5): no body or framing field may follow.
 bool body_forbidden(unsigned int status) { return status < 200 || status == 204 || status == 304; }
 
-// ASCII case-insensitive equality for field names (RFC 9110 5.1); callers
-// of this helper pass a lowercase literal as the second argument.
-bool name_is(std::string_view name, std::string_view lowercase) {
-    return name.size() == lowercase.size() &&
-           std::equal(name.begin(), name.end(), lowercase.begin(), [](char left, char right) {
-               return left == right ||
-                      (left >= 'A' && left <= 'Z' && static_cast<char>(left - 'A' + 'a') == right);
-           });
-}
-
 // Field names whose wire form the encoder owns, so a response can never
 // carry two framings or two connection policies (RFC 9112 6.1, 7.1).
 bool encoder_owned(std::string_view name) {
-    return name_is(name, "content-length") || name_is(name, "transfer-encoding") ||
-           name_is(name, "connection");
+    return detail::iequals(name, "content-length") || detail::iequals(name, "transfer-encoding") ||
+           detail::iequals(name, "connection");
 }
 
 // Field-content octets only, without leading/trailing OWS the wire would

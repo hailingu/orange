@@ -37,6 +37,7 @@ enable_testing()
 add_library(orange_http
     src/http_messages.cpp
     src/http_response.cpp
+    src/http_server.cpp
     src/http_request_decoder.cpp
     src/http_body_framing.cpp
     src/http_chunk_line.cpp)
@@ -71,6 +72,11 @@ add_test(NAME http_request_storage_tests COMMAND http_request_storage_tests)
 add_executable(http_response_tests tests/http_response_tests.cpp)
 target_link_libraries(http_response_tests PRIVATE orange_http)
 add_test(NAME http_response_tests COMMAND http_response_tests)
+
+# The event loop is verified at the real socket boundary (ADR-0003 T-1).
+add_executable(http_server_tests tests/http_server_tests.cpp)
+target_link_libraries(http_server_tests PRIVATE orange_http)
+add_test(NAME http_server_tests COMMAND http_server_tests)
 
 # Opt-in timings use the same optimized library as the correctness suites.
 option(ORANGE_BUILD_BENCHMARKS "Build reproducible HTTP parser benchmarks" OFF)

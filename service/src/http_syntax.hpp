@@ -95,5 +95,24 @@ constexpr bool is_token(std::string_view token) {
     return !token.empty() && std::all_of(token.begin(), token.end(), is_tchar);
 }
 
+// Case-insensitive ASCII equality (RFC 9110 5.1: field names — and the
+// option tokens inside them, like connection options — are
+// case-insensitive). Both sides are folded to lowercase before comparing.
+constexpr bool iequals(std::string_view left, std::string_view right) {
+    if (left.size() != right.size())
+        return false;
+    for (std::size_t i = 0; i < left.size(); ++i) {
+        char a = left[i];
+        char b = right[i];
+        if (a >= 'A' && a <= 'Z')
+            a = static_cast<char>(a - 'A' + 'a');
+        if (b >= 'A' && b <= 'Z')
+            b = static_cast<char>(b - 'A' + 'a');
+        if (a != b)
+            return false;
+    }
+    return true;
+}
+
 } // namespace orange::http::detail
 #endif
