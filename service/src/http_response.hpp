@@ -6,6 +6,7 @@
 // after a 431/413.
 #ifndef ORANGE_HTTP_RESPONSE_HPP
 #define ORANGE_HTTP_RESPONSE_HPP
+#include "http_messages.hpp"
 #include <cstddef>
 #include <span>
 #include <string>
@@ -75,6 +76,18 @@ enum class ResponseError {
 // chunked body is the last chunk alone. Allocation failure returns
 // resource_exhausted instead of throwing across this boundary.
 [[nodiscard]] std::variant<std::string, ResponseError> write_response(const Response &response);
+
+// Maps one terminal parse outcome to the rejection response the connection
+// owes: malformed→400 (RFC 9112 2.2), method_too_long and
+// unsupported_transfer_coding→501, target_too_long→414,
+// headers_too_long→431 (RFC 6585 5), body_too_long and
+// chunk_metadata_too_long→413, resource_exhausted→500. Every result carries
+// Connection: close with no body and no framing field: after a terminal
+// error the message boundary is not reusable, so the caller completes this
+// response and closes. Passing incomplete is a caller defect answered
+// defensively as 400; the event loop feeds the decoder until a terminal
+// outcome instead.
+[[nodiscard]] Response error_response(ParseError error);
 
 } // namespace orange::http
 #endif // ORANGE_HTTP_RESPONSE_HPP

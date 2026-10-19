@@ -238,6 +238,42 @@ void check_allocation_failure() {
               *recovered == "HTTP/1.1 200 OK\r\nContent-Length: 15\r\n\r\n{\"status\":\"ok\"}",
           "the encoder serializes the same response after the fault clears");
 }
+
+// Every terminal parse error maps to its status with an empty closing
+// response, and the rejection statuses serialize the exact rejection wire.
+void check_error_responses() {
+    const struct {
+        orange::http::ParseError error;
+        unsigned int status;
+    } cases[] = {{orange::http::ParseError::malformed, 400},
+                 {orange::http::ParseError::method_too_long, 501},
+                 {orange::http::ParseError::target_too_long, 414},
+                 {orange::http::ParseError::headers_too_long, 431},
+                 {orange::http::ParseError::body_too_long, 413},
+                 {orange::http::ParseError::chunk_metadata_too_long, 413},
+                 {orange::http::ParseError::unsupported_transfer_coding, 501},
+                 {orange::http::ParseError::resource_exhausted, 500},
+                 {orange::http::ParseError::incomplete, 400}};
+    for (const auto &entry : cases) {
+        const Response response = orange::http::error_response(entry.error);
+        check(response.status == entry.status && response.close &&
+                  response.framing == BodyFraming::none && response.body.empty(),
+              "each parse error maps to its status with an empty closing response");
+    }
+    check(wire_bytes(orange::http::error_response(orange::http::ParseError::malformed)) ==
+              "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n",
+          "malformed serializes the exact 400 closing wire");
+    check(wire_bytes(orange::http::error_response(orange::http::ParseError::headers_too_long)) ==
+              "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\n\r\n",
+          "headers_too_long serializes the exact 431 closing wire");
+    check(wire_bytes(orange::http::error_response(orange::http::ParseError::body_too_long)) ==
+              "HTTP/1.1 413 Content Too Large\r\nConnection: close\r\n\r\n",
+          "body_too_long serializes the exact 413 closing wire");
+    check(wire_bytes(
+              orange::http::error_response(orange::http::ParseError::resource_exhausted)) ==
+              "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n",
+          "resource_exhausted serializes the exact 500 closing wire");
+}
 } // namespace
 // Executes the framing, phrase, rejection and fault-injection checks.
 int main() {
@@ -245,6 +281,7 @@ int main() {
     check_reason_phrases();
     check_rejections();
     check_allocation_failure();
+    check_error_responses();
     std::printf("%zu checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

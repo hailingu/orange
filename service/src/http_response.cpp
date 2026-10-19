@@ -193,4 +193,11 @@ std::variant<std::string, ResponseError> write_response(const Response &response
     return out;
 }
 
+// Wiring-only placeholder; the mapping contract is asserted red by
+// check_error_responses before the real table replaces this stub.
+Response error_response(ParseError error) {
+    (void)error;
+    return Response{};
+}
+
 } // namespace orange::http
