@@ -231,13 +231,143 @@ class RequestDecoder {
     std::unique_ptr<Impl> impl_;   // 摘录,略去其余成员
 ```
 
-(Pimpl idiom,`impl_` 指向前向声明的 `Impl`。)
+(Pimpl idiom,"pointer to implementation",别名 handle-body / Cheshire Cat:
+公共类只是"把手",真正的实现藏在指针对面。)
 
-- **编译防火墙**:`http_chunk_line.hpp` 等内部实现变化不触发使用方重编译。
-- **头文件干净**:复杂的 `ChunkLine`/`HeadFields` 状态机不出现在公共接口。
-- 细节: destructor 必须在 `.cpp` 里定义(此时 `Impl` 已完整),所以头文件
-  里只声明 `~RequestDecoder()`。拷贝被 `= delete`——每连接的解码器持有
-  独立状态,拷贝没有合理语义。
+### 7.1 `Impl` 里到底装了什么
+
+看一眼 `.cpp` 里的真实定义就能理解为什么值得藏起来——`Impl` 持有的是
+**一条连接解码过程中的全部可变状态**:
+
+```cpp
+// service/src/http_request_decoder.cpp(摘录,略去 trailer 相与辅助函数)
+struct RequestDecoder::Impl {
+    enum class Phase { head, fixed, chunk_line, chunk_data, chunk_cr,
+                       chunk_lf, trailers, complete, failed };
+    Phase phase = Phase::head;
+    std::string head;                // 未完成的头部缓冲(受 8 KiB 预算)
+    detail::HeadFields head_fields;  // 分片头部的偏移登记
+    detail::ChunkLine chunk_line;    // chunk 尺寸行状态机
+    ParsedMessage message;           // 半成品消息
+    std::size_t remaining = 0;       // 定长体剩余字节
+    std::size_t metadata_bytes = 0;  // 元数据预算记账
+    ParseError error = ParseError::malformed;
+};
+```
+
+这些成员的类型(`HeadFields`、`ChunkLine`)和它们的演化被完全挡在
+`http_request_decoder.hpp` 之外:公共头里连 `#include` 都不需要带它们。
+
+### 7.2 编译防火墙为什么有效
+
+- C++ 的编译模型是**文本包含**:`#include "x.hpp"` 把头文件原样抄进来。
+  即使成员是 `private`,它仍然出现在类定义里、参与对象布局——给私有
+  部分加一个字段,类的**定义**就变了,所有 include 过这个头的翻译单元
+  都得重编译。
+- Pimpl 之后,公共类的布局恒定为**一个 `unique_ptr`(加一个 bool,见
+  7.4)**,与 `Impl` 内部怎么增删成员完全无关。改 `Impl` 只重编译
+  `http_request_decoder.cpp` 一个文件。
+- 前提是**不完整类型(incomplete type)**能用:`struct Impl;` 只前向
+  声明,头文件里 `Impl` 是不完整的。标准设施里,`unique_ptr` 是为不完整
+  类型量身定制的通道——`sizeof(std::unique_ptr<Impl>)` 与 `Impl` 无关,
+  恒等于一个指针的大小;而按值持有 `Impl` 根本不可能(类布局需要
+  `sizeof(Impl)`)。
+- 附赠收益:**ABI 稳定**。库以二进制发布时,Pimpl 类的对象布局跨版本
+  不变,使用方不必因实现演进而重新编译(解释了为什么 Qt、OpenSSL 这类
+  C++/C 库的公共句柄全是这种形状)。
+
+### 7.3 `unique_ptr` 与不完整类型:三条特殊成员规则
+
+本仓库的写法就是教科书答案——头文件只**声明**特殊成员,定义放到
+`.cpp`(那里 `Impl` 已完整):
+
+```cpp
+// .hpp:  RequestDecoder() noexcept;   ~RequestDecoder();
+// .cpp:  RequestDecoder::RequestDecoder() noexcept = default;
+//        RequestDecoder::~RequestDecoder() = default;
+```
+
+- **为什么析构不能留在头文件**:默认删除器 `default_delete<Impl>` 执行
+  `delete p` 时需要 `sizeof(Impl)`(先析构再释放)。若析构函数在头文件
+  内隐式生成(或就地 `= default`),编译器就会在 `Impl` 不完整处实例化
+  它——直接编译错误("invalid application of 'sizeof' to an incomplete
+  type")。放到 `.cpp` 定义即解决,**`= default` 也可以,只要定义出现在
+  类型完整处**。
+- **构造函数同理**:即便什么都不做,也要在 `.cpp` 里出定义。
+- **移动语义的连锁反应**:显式声明了析构函数,隐式移动构造/移动赋值就
+  不再生成;加上 `RequestDecoder(const RequestDecoder &) = delete;`
+  ——这个类**既不可拷贝也不可移动**,只能原地使用。对"每连接恰好一个
+  解码器"的语义,这不是损失而是约束的正确形状(状态含在途请求,搬走
+  或复制都没有合理含义)。
+- **对照 `shared_ptr`**:它对不完整类型更宽容(删除器在**构造点**被
+  类型擦除捕获,只要构造时完整,销毁点可以不完整)——但代价是原子
+  引用计数、控制块分配、两倍指针体积。`unique_ptr` 在默认删除器下
+  **零开销**(大小就是一个裸指针),这才是 Pimpl 的标准搭配。
+
+### 7.4 懒分配与 `noexcept` 构造:真实代码的两个决策
+
+公共类其实有**两个**数据成员,而不是一个:
+
+```cpp
+std::unique_ptr<Impl> impl_;
+bool allocation_failed_ = false;
+```
+
+- **构造零分配**:`RequestDecoder() noexcept = default;` 让 `impl_`
+  初始为空——头文件注释 "Creates an idle decoder with no borrowed input
+  or body allocation" 是诚实的:构造函数真正 `noexcept`,不碰堆。
+- **分配推迟到第一次 `feed`**:`if (!impl_) impl_ = std::make_unique<Impl>();`,
+  并用 `try/catch` 把 `std::bad_alloc` 翻译成编码错误:
+
+  ```cpp
+  } catch (const std::bad_alloc &) {
+      allocation_failed_ = true;
+      impl_.reset();
+      return {0, ParseError::resource_exhausted};   // HTTP 500
+  }
+  ```
+
+  为什么标志放在 `Impl` **外面**:`bad_alloc` 发生后 `impl_` 已被清空,
+  失败状态必须存在**不需要分配就能表示**的地方——外层一个 `bool`。
+- 源码注释接着写道:"No usable input boundary survives a resource
+  failure. The caller must discard this connection's input rather than
+  retry the fragment."——分配失败与文法失败同样终局(与
+  [`parser-design.md`](parser-design.md) 第 3、5 节的粘性错误/丢弃记账
+  规则同一条纪律),`feed` 开头对 `allocation_failed_` 的检查保证它是
+  粘性的。
+- **`reset()` 复用分配**:`*impl_ = Impl{};` 就地用一个全新 `Impl`
+  覆盖状态,`Impl` 对象本身的堆内存不释放重建;若从未分配过,只清标志。
+- **`make_unique` 而不是裸 `new`**:C++14 起的标准做法,少写一次类型名,
+  且构造参数求值期间的异常不留泄漏窗口。
+
+### 7.5 `std::unique_ptr` 要点速览
+
+- **独占所有权**:同一时刻只有一个 `unique_ptr` 拥有对象;`move` 转移
+  所有权,`copy` 被删除;离开作用域自动 `delete`。
+- **零开销抽象**:默认删除器下 `sizeof(unique_ptr<T>) == sizeof(T*)`;
+  自定义**有状态**删除器会扩大对象(空函数对象走 EBO 抵消)。
+- 单对象 `unique_ptr<T>` 与数组 `unique_ptr<T[]>` 是两个特化,不要
+  混用;要动态数组时优先 `std::vector`。
+- **按值传参 = 转移所有权**(调用方必须 `std::move`);工厂函数按值返回
+  (配合 RVO/移动,零拷贝)。
+- 与 `shared_ptr`(共享所有权、原子计数)/`weak_ptr`(非拥有观察)构成
+  三档所有权模型;默认选 `unique_ptr`,确有多方持有需求才升级。
+
+### 7.6 代价与适用边界
+
+Pimpl 不是免费的:
+
+- **每次访问多一次指针间接**:`impl_->feed(...)` 先解一次指针才能摸到
+  状态——缓存上多一次潜在 miss,优化器也更难看穿。
+- **每实例一次堆分配**(本例靠懒分配把"空解码器"成本精确归零)。
+- 适用判断:公共头被**广泛 include**、接口窄而实现厚、追求编译隔离或
+  ABI 稳定的组件——`RequestDecoder` 全中(每连接一个对象、调用频率
+  等于网络 read 频率,间接成本无关紧要)。
+- 不适用:热内循环里的紧凑数据(例如第 6 节按值存放的查找表——它就是
+  要让编译器看穿一切)。
+
+一句话:**Pimpl 买的是"改实现不惊动使用方",付的是一次间接与一次分配**;
+对解析器这种"接口三个函数、实现一整个状态机"的组件,是最划算的交易。
 
 ## 8. 移动语义、SSO 与"偏移代替视图"
 
