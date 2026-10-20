@@ -1,6 +1,6 @@
 // ADR: docs/adr/ADR-0003-local-runtime-path.md
 // The loopback event loop (ADR-0003, subtask T-1): one thread multiplexes
-// a 127.0.0.1 listener and every accepted connection through poll(),
+// a 127.0.0.1 listener and every accepted connection through kqueue(),
 // driving readiness-based read/write state machines per connection. This
 // class creates no threads; callers that need the loop beside other work
 // own that decision (the test harness hosts the loop on one thread).
@@ -18,7 +18,7 @@ namespace orange::http {
 // Called on the loop thread only; it must not block on I/O.
 using RequestHandler = std::function<Response(const ParsedMessage &)>;
 
-// Owns the loopback listening descriptor and the single-threaded poll()
+// Owns the loopback listening descriptor and the single-threaded kqueue()
 // loop. Descriptors never leave this class; destruction closes whatever
 // is still open.
 class LoopbackServer {
