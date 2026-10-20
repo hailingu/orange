@@ -6,7 +6,7 @@
 [`AGENTS.md`](../../AGENTS.md), this file is written in English for agent
 interoperability.
 
-**Last reviewed**: 2026-10-14
+**Last reviewed**: 2026-10-20
 
 ## Required Reading
 
@@ -84,7 +84,7 @@ interoperability.
   documented lifetime.
 - Sockets and descriptors are wrapped in owning types whose destructors
   close them; a leak on an error path is a defect with a regression test.
-- The runtime concurrency model is the single-threaded `poll()` event loop
+- The runtime concurrency model is the single-threaded `kqueue()` event loop
   (ADR-0003): readiness-driven, non-blocking sockets, one connection state
   machine per descriptor. Introducing threads requires a governed revision
   that records lock ownership, ordering, contention, and failure behavior.
@@ -188,7 +188,7 @@ authority, with flagship precedent:
 ### Governance choices (not industry norms)
 
 Toolchain pinning and the exact verification-command shape, the
-single-threaded `poll()` event loop (an ADR-0003 accepted decision that
+single-threaded `kqueue()` event loop (an ADR-0003 accepted decision that
 satisfies CP.2 by construction), documentation-before-implementation and
 test-first development (`AGENTS.md` Core Rules), and the numeric guardrails
 inherited from the PlotWeave-calibrated baseline (ADR-0004 Q-1 owner
