@@ -166,18 +166,47 @@ HTTP/1.1 默认持久连接(keep-alive):一条连接上多个"请求-响应"顺�
 超时(声明的默认 5 秒,测试配 1 秒)关闭以回收描述符——空闲判定覆盖
 读与写两个方向。
 
-## 8. 已批准待实现(T-2/T-3,ADR-0003)
+## 8. 路由分发(T-2 第一级,已落地)
+
+解析回答"怎么读消息",序列化回答"怎么写响应",路由回答"这个请求归谁
+处理"——`service/src/routes.{hpp,cpp}` 的 `orange::http::handle_request()`
+(T-2 第一级台阶,红 `edc95cb` / 绿 `cac613c`)按 **method + 精确 target**
+分发,是 `serve_loopback` 的 `RequestHandler` 形状,可直接交给事件循环。
+这一级落地的规则与 RFC 依据:
+
+- **405 必须带 `Allow` 字段**(RFC 9110 15.5.6 是 MUST):对已识别但不
+  允许的方法答 `405 Method Not Allowed` 时,`Allow: GET` 列出该资源当前
+  支持的方法。RFC 9110 9.1 进一步建议:方法**未识别**(不是 token 集合里
+  的已知方法)应答 501 而非 405——orange 把"未识别方法答 501 还是 405"
+  记为 ADR-0003 的 T-2 待定 owner 决定,本台阶未决定(分发按已接受 Scope
+  的字面语义:已知路由上不允许的方法一律 405)。
+- **空体响应也要 `Content-Length: 0`**:keep-alive 连接上客户端靠成帧字段
+  定界响应(RFC 9112 6);既无 `Content-Length` 也无 `Transfer-Encoding`
+  的响应只能靠**关连接**定界,与 keep-alive 直接冲突。所以 404/405 的空体
+  用 `content_length` 成帧,而不是"没有体就不发成帧字段"。
+- **路径大小写敏感**(RFC 3986 6.2.1:大小写规范化只适用于 scheme 与
+  host):`/API/HEALTH` 是另一个资源,答 404——这不是 bug,是 URI 语义。
+- **分发是精确 origin-form 匹配**:`/api/health?x=1`、`/api/health/` 都是
+  不同 target。query 解析、非 origin-form target(authority-form 仅
+  CONNECT、asterisk-form 仅 OPTIONS,RFC 9112 3.2)与非 1.x 版本答 505,
+  同属 T-2 后续台阶(ADR-0003 变更日志记录的待定项)。
+- **health 响应形状**:200 + `Content-Type: application/json` + 精确体
+  `{"status":"ok"}`(15 字节),由 ADR-0003 Scope 固定;测试同时钉住完整
+  线字节,保证字段顺序、成帧与体一字不差。
+- 所有路由结果 `close == false`:有效请求保持 keep-alive(第 7 节),
+  拒绝后关闭只发生在 431/413/400 等终局错误上。
+
+## 9. 已批准待实现(其余 T-2/T-3,ADR-0003)
 
 以下协议行为还没有实现代码,引用的是 ADR-0003 的 Scope 与验收检查
-(响应**成帧**本身已在 T-1 落地,见第 6 节;这里缺的是路由与监听):
+(响应**成帧**已在 T-1 落地,见第 6 节;**路由分发第一级**已落地,见
+第 8 节;这里缺的是回显、静态服务与监听):
 
-- 路由与诊断端点:`GET /api/health` 返回 200 与精确体
-  `{"status":"ok"}`;`POST /api/echo` 用第 6 节的 chunked 编码回显
-  请求体;
-- 静态文件服务:小 MIME 表、单区间 Range 请求(206)与不可满足区间(416)、
-  405(方法不支持)/404(未知路径);
+- 诊断端点:`POST /api/echo` 用第 6 节的 chunked 编码回显请求体;
+- 静态文件服务:小 MIME 表、单区间 Range 请求(206)与不可满足区间(416);
 - TLS:`https://127.0.0.1:8443` 由锁版 OpenSSL 终止,首启生成自签名证书;
-  明文监听 `http://127.0.0.1:8080`。
+  明文监听 `http://127.0.0.1:8080`;双监听的集成套件与 curl 端到端检查
+  (AC-2/AC-7)。
 
 ## 延伸阅读
 
@@ -188,4 +217,4 @@ HTTP/1.1 默认持久连接(keep-alive):一条连接上多个"请求-响应"顺�
 - 代码入口:`parse_request`(`http_messages.cpp`)、
   `parse_message`/`RequestDecoder`(`http_request_decoder.cpp`)、
   `body_framing`/`ChunkLine`(`http_body_framing.cpp`/`http_chunk_line.cpp`)、
-  `write_response`(`http_response.cpp`)。
+  `write_response`(`http_response.cpp`)、`handle_request`(`routes.cpp`)。
