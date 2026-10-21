@@ -152,6 +152,17 @@ Darwin 的原生机制(`<sys/event.h>`),与 Linux `epoll` 同族:兴趣登记一
   标志,**macOS 没有**,等价物是每个接受的 socket 上
   `setsockopt(SOL_SOCKET, SO_NOSIGPIPE, 1)`——事件循环里必须做,否则
   一个提前断开的测试客户端就能带走整个服务;
+- **Nagle 算法与 TCP_NODELAY**:内核默认开启 Nagle——只要还有一个小段
+  未被对端确认,后续的小段就先攒着不发;而对端又默认**延迟 ACK**(等自己
+  有数据要回或定时器到期才确认)。两者叠加,HTTP 这种"小请求—小响应"的
+  keep-alive 交换会被卡住整整一个 ACK 定时器(经典的 write-write-read
+  停顿)。服务端在每个接受的 socket 上 `setsockopt(IPPROTO_TCP,
+  TCP_NODELAY, 1)` 关掉 Nagle,排队好的响应立刻出发。它的测试方式值得
+  记一笔:内核选项只能通过**描述符本身**观察,而把内部辅助函数暴露给
+  测试会违反"测试缝必须是边界"的规范——于是套件在**进程内**(事件循环
+  跑在测试二进制的一个线程上)用 `getpeername` 扫描描述符表,找到对端是
+  本客户端本地端口的那个 socket,即服务端那一侧,再 `getsockopt` 读选项;
+  先完成一次请求—响应,保证连接已被 accept 并配置完毕;
 - **每连接一个 `RequestDecoder`**:状态由解析器对象持有,事件循环只做
   搬运(见 [`parser-design.md`](parser-design.md) 第 7 节)。解码器类型
   刻意不可移动(声明析构抑制移动),而连接对象要随 vector 扩容/压缩而
