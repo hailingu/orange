@@ -41,7 +41,8 @@ class LoopbackServer {
     // Runs the event loop until stop loads true, then closes every owned
     // descriptor and returns 0; returns the errno of an unrecoverable
     // socket failure, or EINVAL when not bound or the handler is empty.
-    // Each accepted connection feeds received bytes to its own
+    // Each accepted connection is configured with TCP_NODELAY (Nagle's
+    // algorithm disabled) and feeds received bytes to its own
     // RequestDecoder; a complete message goes to handler and the
     // serialized response is queued; a terminal ParseError queues the
     // error_response rejection and closes after the flush; a request

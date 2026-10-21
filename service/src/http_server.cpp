@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <memory>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <string>
 #include <string_view>
 #include <sys/event.h>
@@ -91,6 +92,15 @@ int set_non_blocking(int fd) {
 int set_no_sigpipe(int fd) {
     const int on = 1;
     return ::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) < 0 ? errno : 0;
+}
+
+// Nagle's algorithm would hold a small segment until the peer
+// acknowledges the previous one; with the peer's delayed ACK that
+// stalls a keep-alive exchange for a full ACK timer, so responses
+// leave immediately instead.
+int set_no_delay(int fd) {
+    const int on = 1;
+    return ::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0 ? errno : 0;
 }
 
 // Per-filter kernel-interest state, tracked so the changelist emits only
@@ -321,7 +331,7 @@ void accept_incoming(int listen_fd, std::vector<Connection> &connections,
                 continue;
             return;
         }
-        if (set_non_blocking(fd) != 0 || set_no_sigpipe(fd) != 0) {
+        if (set_non_blocking(fd) != 0 || set_no_sigpipe(fd) != 0 || set_no_delay(fd) != 0) {
             ::close(fd);
             continue;
         }
