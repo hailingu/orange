@@ -40,7 +40,8 @@ add_library(orange_http
     src/http_server.cpp
     src/http_request_decoder.cpp
     src/http_body_framing.cpp
-    src/http_chunk_line.cpp)
+    src/http_chunk_line.cpp
+    src/routes.cpp)
 target_include_directories(orange_http PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # One executable per test suite; CTest judges each by its process exit status.
@@ -77,6 +78,11 @@ add_test(NAME http_response_tests COMMAND http_response_tests)
 add_executable(http_server_tests tests/http_server_tests.cpp)
 target_link_libraries(http_server_tests PRIVATE orange_http)
 add_test(NAME http_server_tests COMMAND http_server_tests)
+
+# Route dispatch is the first serving rung of ADR-0003 T-2.
+add_executable(http_routes_tests tests/http_routes_tests.cpp)
+target_link_libraries(http_routes_tests PRIVATE orange_http)
+add_test(NAME http_routes_tests COMMAND http_routes_tests)
 
 # Opt-in timings use the same optimized library as the correctness suites.
 option(ORANGE_BUILD_BENCHMARKS "Build reproducible HTTP parser benchmarks" OFF)
