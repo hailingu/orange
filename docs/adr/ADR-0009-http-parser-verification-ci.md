@@ -65,8 +65,12 @@ the cited report. Subtasks marked Complete describe actual exception execution.
 At drafting, Decision Status / Implementation Status were Proposed / Not Started.
 On 2026-10-16, @hailingu supplied exact `Approve` after the chat identified only
 this record; approval was registered at 2026-10-16T09:36:20Z. This record is now
-Accepted / In Progress. Hosted AC-3, its applicable risk observations and the
-declared immutable commit anchor remain outstanding. Approval of another record
+Accepted / In Progress. On 2026-10-21 the declared immutable commit anchor was
+bound to `34d598738631ece0ef6023c154fbf3ae52520296` — the commit that carries
+the workflow, its routing row and markers, and this record — with both of this
+record's touchpoint files unchanged since that anchor. Hosted AC-3 and its
+applicable risk observations remain outstanding, so Implementation Status stays
+In Progress. Approval of another record
 or permission to implement directly was not counted as approval of this one.
 The broader runtime and fixture-lifecycle records retain their existing statuses.
 
@@ -155,8 +159,8 @@ or `N/A — <specific reason>`.
 
 | Path | Stable symbol or contract anchor | Key code excerpt, when needed | Purpose | Source revision |
 | --- | --- | --- | --- | --- |
-| .github/workflows/http-performance.yml | on; permissions; concurrency; jobs.verify; steps | N/A — stable symbol or configuration key is sufficient | Events, least privilege, order, timeout, summary and cleanup | Pre-commit HEAD 1f876464862c69c5a54424d91fbfd6937983e23c plus exception workspace; per-file before/after SHA-256 in docs/reviews/2026-10-16-adr-backfill-evidence.json; add an immutable commit anchor before formal completion |
-| AGENTS.md | Scope Routing › .github/workflows/http-performance.yml | N/A — stable symbol or configuration key is sufficient | Required reading and non-interactive verification route | Pre-commit HEAD 1f876464862c69c5a54424d91fbfd6937983e23c plus exception workspace; per-file before/after SHA-256 in docs/reviews/2026-10-16-adr-backfill-evidence.json; add an immutable commit anchor before formal completion |
+| .github/workflows/http-performance.yml | on; permissions; concurrency; jobs.verify; steps | N/A — stable symbol or configuration key is sufficient | Events, least privilege, order, timeout, summary and cleanup | Immutable anchor commit `34d598738631ece0ef6023c154fbf3ae52520296` (carries this implemented source and its record marker; unchanged since that anchor); historical pre-commit HEAD `1f876464862c69c5a54424d91fbfd6937983e23c` plus exception workspace with per-file before/after SHA-256 in docs/reviews/2026-10-16-adr-backfill-evidence.json |
+| AGENTS.md | Scope Routing › .github/workflows/http-performance.yml | N/A — stable symbol or configuration key is sufficient | Required reading and non-interactive verification route | Immutable anchor commit `34d598738631ece0ef6023c154fbf3ae52520296` (carries this implemented source and its record marker; unchanged since that anchor); historical pre-commit HEAD `1f876464862c69c5a54424d91fbfd6937983e23c` plus exception workspace with per-file before/after SHA-256 in docs/reviews/2026-10-16-adr-backfill-evidence.json |
 
 **Migration and rollback strategy [Conditionally Required — this replaces or changes existing behavior]**: Remove or disable only this workflow and its routing row; keep benchmarks and parser changes intact. Do not push or dispatch as part of this documentation task. Any future remote verification must retain its run URL and inspect cleanup/permission outcomes before marking the remote check Pass.
 
@@ -210,7 +214,7 @@ is required if an implementation or acceptance condition changes.
 | ID | Item | Completion Criterion | Expected Evidence | Status | Actual Evidence |
 | --- | --- | --- | --- | --- | --- |
 | A-1 | ADR approved | Eligible @hailingu supplies exact Approve in the context of this one path; metadata records identity and offset timestamp | Approval metadata | Complete | @hailingu responded exactly Approve in the sole context of docs/adr/ADR-0009-http-parser-verification-ci.md; registered at 2026-10-16T09:36:20Z |
-| A-2 | Complete task delivered | All declared subtasks and applicable checks pass; formal lifecycle begins only after approval | Implementation Plan and Acceptance Checks | In Progress | T-1 and AC-1/AC-2 retain passing local implementation evidence; all 22 source/configuration fingerprints still match. Hosted AC-3 and its five applicable risk observations remain Not Started, and the touchpoint commit anchor is outstanding; formal completion is not claimed |
+| A-2 | Complete task delivered | All declared subtasks and applicable checks pass; formal lifecycle begins only after approval | Implementation Plan and Acceptance Checks | In Progress | T-1 and AC-1/AC-2 retain passing local implementation evidence; the pre-declared commit anchor is bound to `34d598738631ece0ef6023c154fbf3ae52520296` with both touchpoint files unchanged since that anchor (the only two repository-wide post-anchor changes, `service/CMakeLists.txt` via `87548eb`/`cf1eed6` and `service/src/http_syntax.hpp` via `cf1eed6`, are additive runtime-record changes under docs/adr/ADR-0003-local-runtime-path.md outside both touchpoints). Fresh HEAD `86161b0` confirmation: `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/http-performance.yml")'` exit 0; `ctest --test-dir service/build --output-on-failure` exit 0 with 7/7 suites; disposable Release `ORANGE_BUILD_BENCHMARKS=ON` CTest 8/8 including `http_parser_bench_cli`. Hosted AC-3 and its five applicable risk observations remain Not Started; formal completion is not claimed |
 | A-3 | Reciprocal ADD link synchronized, when applicable | N/A — maintenance creates no product-demand candidate | Architecture Source assessment | N/A — no ADD handoff | No ADD candidate selected or changed |
 | A-4 | Requirement levels satisfied | Every required section is complete and every conditional trigger assessed | Structured review in docs/reviews/2026-10-16-adr-backfill.md | Pass | Pass — structured review recorded in docs/reviews/2026-10-16-adr-backfill.md |
 | A-5 | Acceptance checks are decidable | Each row names one subtask, exact input, method, binary result and evidence | Structured check review in docs/reviews/2026-10-16-adr-backfill.md | Pass | Pass — structured review recorded in docs/reviews/2026-10-16-adr-backfill.md |
@@ -231,3 +235,4 @@ markers, and synchronize reciprocal supersession references in the same change.
 | --- | --- | --- |
 | 2026-10-16 | Backfill this one owner-waived implementation decision at the owner's request; preserve historical evidence and Proposed / Not Started until individual approval | @codex |
 | 2026-10-16 | Record exact Approve from @hailingu for this path alone at 2026-10-16T09:36:20Z; set Accepted / In Progress and complete A-1; preserve outstanding hosted AC-3, risk observations and pre-completion commit anchor; no decision scope or check changes and no remote execution | @codex |
+| 2026-10-21 | Bind the pre-declared immutable commit anchor to `34d598738631ece0ef6023c154fbf3ae52520296` for both touchpoints and record fresh HEAD YAML, suite and Release-driver confirmation in A-2; hosted AC-3 and its applicable risk observations stay Not Started and Implementation Status stays In Progress pending an authorized hosted run; no decision scope, contract, or check changes and no remote execution | @zcode |

@@ -44,6 +44,19 @@ does not extend a standing waiver, change the runtime/fixture records, or
 claim remote CI execution. Authorization, evidence
 and file coverage are collected in `docs/reviews/2026-10-16-adr-backfill.md`.
 
+On 2026-10-21, the pre-declared immutable commit anchor for all five backfilled
+records was bound to `34d598738631ece0ef6023c154fbf3ae52520296`, the commit that
+carries the implemented sources, their record markers, and the five records.
+`docs/adr/ADR-0008-http-parser-benchmarks.md`,
+`service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md`,
+`service/docs/adr/ADR-0003-fragmented-head-offsets.md`, and
+`service/docs/adr/ADR-0004-owned-request-storage.md` moved to `Complete` with
+fresh HEAD verification recorded in each record.
+`docs/adr/ADR-0009-http-parser-verification-ci.md` also received its anchor but
+remains `In Progress`: its hosted AC-3 verification and the five applicable
+hosted risk observations require an authorized remote Actions run that has not
+occurred.
+
 ## Active Records
 
 | Type | ID | Title | Decision Status | Implementation Status | Scope | Architecture Source | Path | Superseded By |
