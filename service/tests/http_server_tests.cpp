@@ -4,8 +4,8 @@
 // Connection: close, the idle timeout, the 431/413/400 rejection
 // lifecycle (exact response, EOF, no pipelined follow-up, reconnect
 // success), an unfinished request not blocking another connection,
-// request bodies reaching the handler in both framings, and the coded
-// port-conflict error.
+// request bodies reaching the handler in both framings, TCP_NODELAY on
+// accepted connections, and the coded port-conflict error.
 #include "http_server.hpp"
 #include <algorithm>
 #include <array>
@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <memory>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <string>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -282,6 +283,56 @@ void check_bodies_reach_handler(const TestServer &server, const std::vector<std:
     ::close(fd);
 }
 
+// Locates the loop's accepted descriptor for the client whose local
+// port is client_port: the loop runs in this process, so the server
+// side of that connection is the one connected socket whose peer is
+// the client. Kernel socket options are only observable through the
+// descriptor itself, so the test must find it in-process.
+int find_server_side(std::uint16_t client_port) {
+    const int table_size = ::getdtablesize();
+    for (int fd = 0; fd < table_size; ++fd) {
+        sockaddr_storage peer{};
+        socklen_t size = sizeof(peer);
+        if (::getpeername(fd, reinterpret_cast<sockaddr *>(&peer), &size) < 0)
+            continue;
+        if (peer.ss_family != AF_INET)
+            continue;
+        const auto *address = reinterpret_cast<const sockaddr_in *>(&peer);
+        if (address->sin_addr.s_addr == htonl(INADDR_LOOPBACK) &&
+            ntohs(address->sin_port) == client_port)
+            return fd;
+    }
+    return -1;
+}
+
+// Every accepted connection runs with Nagle's algorithm disabled, so a
+// queued response leaves without waiting for the peer's acknowledgment
+// of an earlier small segment.
+void check_no_delay(const TestServer &server) {
+    const int fd = connect_client(server.port());
+    check(fd >= 0, "no-delay client connects");
+    if (fd < 0)
+        return;
+    const std::string request = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+    std::string received;
+    check(send_all(fd, request) && recv_exact(fd, fixed_wire.size(), &received) &&
+              received == fixed_wire,
+          "the no-delay client completes one cycle, so its connection is accepted");
+    sockaddr_in local{};
+    socklen_t size = sizeof(local);
+    const int accepted = ::getsockname(fd, reinterpret_cast<sockaddr *>(&local), &size) == 0
+                             ? find_server_side(ntohs(local.sin_port))
+                             : -1;
+    check(accepted >= 0, "the loop's accepted descriptor for the client is found in-process");
+    int no_delay = 0;
+    socklen_t option_size = sizeof(no_delay);
+    check(accepted >= 0 &&
+              ::getsockopt(accepted, IPPROTO_TCP, TCP_NODELAY, &no_delay, &option_size) == 0 &&
+              no_delay != 0,
+          "an accepted connection has TCP_NODELAY enabled");
+    ::close(fd);
+}
+
 // A busy port produces a coded bind error rather than a silent
 // alternative port (ADR-0003 TN-2).
 void check_port_conflict(std::uint16_t port) {
@@ -306,6 +357,7 @@ int main() {
         check_rejections(server);
         check_two_connections(server);
         check_bodies_reach_handler(server, bodies.get());
+        check_no_delay(server);
         check_port_conflict(server.port());
         server.stop_and_join();
         check(server.serve_exit() == 0, "the loop exits cleanly through its stop flag");
