@@ -60,7 +60,7 @@ and file coverage are collected in `docs/reviews/2026-10-16-adr-backfill.md`.
 | Full ADR | ADR-0002 | Advance chunk metadata by bounded spans | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md` | None — not superseded |
 | Full ADR | ADR-0003 | Retain validated offsets for fragmented request heads | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0003-fragmented-head-offsets.md` | None — not superseded |
 | Full ADR | ADR-0009 | Disposable HTTP parser verification in CI | Accepted | In Progress | Project | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `docs/adr/ADR-0009-http-parser-verification-ci.md` | None — not superseded |
-| Full ADR | ADR-0004 | Own request text with offset descriptors | Accepted | In Progress | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0004-owned-request-storage.md` | None — not superseded |
+| Full ADR | ADR-0004 | Own request text with offset descriptors | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0004-owned-request-storage.md` | None — not superseded |
 
 ## Archived Records
 
