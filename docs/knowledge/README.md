@@ -14,7 +14,7 @@ orange 项目本身就把"边做边学"作为目标之一,这些笔记对应的�
 | 详解文件 | 主题域 | 覆盖的知识点 |
 | --- | --- | --- |
 | [`cpp-language.md`](cpp-language.md) | C++20 语言与标准库 | 标准锁定、`std::variant`/`std::monostate`、`std::string_view` 借用与悬垂(含返回值悬垂复现)、`std::span`、`std::ranges` 惰性视图、`[[nodiscard]]`、编译期查找表(`constexpr`)、Pimpl 与 `std::unique_ptr`(含"不可移动成员放可移动容器")、`OwnedFd` 移动专属 RAII 与 `std::exchange`、移动语义与 SSO、强异常安全的拷贝赋值、私有构造 + `friend` 的"可信构造边界"、有符号 `char` 陷阱、`std::to_chars` 无分配数字格式化、字面量十六进制转义与聚合部分初始化陷阱 |
-| [`http-protocol.md`](http-protocol.md) | HTTP/1.1 报文语法 | RFC 9112/9110/3986/6585 的报文文法:请求行、字段行与 token、OWS/obs-text/obs-fold、Content-Length 与 chunked 编码、chunk 扩展与 trailer、错误到状态码的映射(400/413/414/431/501)、响应序列化(`write_response`:状态行与 reason phrase、编码器独占成帧字段、响应侧 splitting 防线、`Connection: close`)、keep-alive、路由分发(`handle_request`:精确 origin-form 匹配、405 必带 `Allow`、空体也要 `Content-Length: 0`、路径大小写敏感)、TLS 监听(已批准待实现) |
+| [`http-protocol.md`](http-protocol.md) | HTTP/1.1 报文语法 | RFC 9112/9110/3986/6585 的报文文法:请求行、字段行与 token、OWS/obs-text/obs-fold、Content-Length 与 chunked 编码、chunk 扩展与 trailer、错误到状态码的映射(400/413/414/431/501)、响应序列化(`write_response`:状态行与 reason phrase、编码器独占成帧字段、响应侧 splitting 防线、`Connection: close`)、keep-alive、路由分发(`handle_request`:精确 origin-form 匹配、405 必带 `Allow`、空体也要 `Content-Length: 0`、路径大小写敏感、成帧无关的 chunked 回显)、TLS 监听(已批准待实现) |
 | [`parser-design.md`](parser-design.md) | 增量解析器设计 | 为什么要增量解析、显式状态机(`ChunkLine`/`HeadFields`)、错误分类学(`ParseError`)、粘性错误与 `reset`、三重字节预算(8 KiB 头 / 1 MiB 体 / 8 KiB chunk 元数据)、`consumed` 记账规则、分片不变性测试、偏移描述符代替保存视图、跨度推进(`feed(span)`)、解析与序列化共享同一字节文法表 |
 | [`network-programming.md`](network-programming.md) | 网络编程 | 回环绑定与安全边界、TCP socket 与 errno 风格错误通道、SO_REUSEADDR/临时端口/端口冲突编码错误、单线程事件循环 vs 每连接一线程、readiness 驱动读写状态机、poll 前身与 kqueue 现行实现的差异(内核常驻兴趣集、EVFILT_READ/WRITE、EV_ADD/ENABLE/DISABLE 增量维护、`struct kevent` 与 EV_SET 的 Darwin 陷阱、水平触发语义)、事件超时即停止延迟、背压读暂停、事件源与连接表对齐(ASan 抓到的越界)、SIGPIPE 与 SO_NOSIGPIPE、Nagle 算法与 TCP_NODELAY(含进程内描述符观测法)、队头阻塞、keep-alive 与空闲超时、拒绝后关闭(含 RST/FIN 细节)、两阶段 bind 测试法、SO_RCVTIMEO 客户端截止、TLS/OpenSSL 自签名证书、curl/lsof 端到端验证(TLS/路由为已批准待实现) |
 | [`build-and-toolchain.md`](build-and-toolchain.md) | 构建、工具链与编译 | CMake 语法与目标设计、`CMAKE_CXX_STANDARD` 三件套、out-of-source 构建、CTest、编译器警告策略、Debug/Release 与 `-O2 -DNDEBUG`、AddressSanitizer/UBSan、vcpkg 清单、clang-format、GitHub Actions 工作流写法、一次性验证输出清理 |
@@ -37,8 +37,8 @@ orange 项目本身就把"边做边学"作为目标之一,这些笔记对应的�
 | sanitizer、CI 一次性验证 | 项目 ADR-0009 | `.github/workflows/http-performance.yml` |
 | 测试分解与夹具治理 | service ADR-0001、项目 ADR-0007 | `tools/governance-validator/test/fixtures.mjs` |
 | `kqueue()` 事件循环与连接生命周期(poll 前身已迁移) | 项目 ADR-0003(T-1,已实现) | `service/src/http_server.hpp`(`LoopbackServer`、`serve_loopback`)、`service/src/http_response.cpp`(`error_response`) |
-| 路由分发:精确匹配、405 带 `Allow`、空体 `Content-Length: 0` | 项目 ADR-0003(T-2 第一级,已实现) | `service/src/routes.hpp`(`handle_request`)、`service/tests/http_routes_tests.cpp` |
-| TLS 监听、回显与静态服务 | 项目 ADR-0003(T-2/T-3,已批准待实现) | 规划锚点 `service/src/tls.cpp`;回显/静态/双监听集成待落地 |
+| 路由分发:精确匹配、405 带 `Allow`、空体 `Content-Length: 0`、成帧无关的 chunked 回显 | 项目 ADR-0003(T-2,health/echo 诊断路由已实现) | `service/src/routes.hpp`(`handle_request`)、`service/tests/http_routes_tests.cpp` |
+| TLS 监听与静态服务 | 项目 ADR-0003(T-2/T-3,已批准待实现) | 规划锚点 `service/src/tls.cpp`;静态/Range/双监听集成待落地 |
 
 ## 建议阅读顺序
 
@@ -55,7 +55,7 @@ orange 项目本身就把"边做边学"作为目标之一,这些笔记对应的�
   ADR 证据为准,本目录不承担同步义务。
 - 解析器、响应序列化与错误映射、单线程 `kqueue()` 事件循环(poll 前身经
   2026-10-20 失效性修订与重批准后迁移)对应 ADR-0003 的
-  T-1(已 Complete);路由分发第一级(health/405/404)于 2026-10-21 落地,
+  T-1(已 Complete);路由分发的 health/echo 诊断路由于 2026-10-21 落地,
   对应 T-2(In Progress)。网络编程一文中仍标注"待实现"的部分
-  (TLS、回显/静态服务、状态页)对应 T-2/T-3 后续台阶,引用的是该 ADR 的
+  (TLS、静态服务、状态页)对应 T-2/T-3 后续台阶,引用的是该 ADR 的
   Scope 与验收检查。
