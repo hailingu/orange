@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 namespace {
@@ -28,15 +29,19 @@ void check(bool condition, const char *description) {
     }
 }
 
-// One complete parsed message from its method and target; the optional owns
+// One complete parsed message from its full wire form; the optional owns
 // the message, so no view dangles into a variant temporary.
-std::optional<ParsedMessage> request_of(std::string_view method, std::string_view target) {
-    const auto wire =
-        std::string(method) + " " + std::string(target) + " HTTP/1.1\r\nHost: localhost\r\n\r\n";
+std::optional<ParsedMessage> message_of(std::string_view wire) {
     auto parsed = orange::http::parse_message(wire);
     if (auto *message = std::get_if<ParsedMessage>(&parsed))
         return std::move(*message);
     return std::nullopt;
+}
+
+// One bodyless request from its method and target.
+std::optional<ParsedMessage> request_of(std::string_view method, std::string_view target) {
+    return message_of(std::string(method) + " " + std::string(target) +
+                      " HTTP/1.1\r\nHost: localhost\r\n\r\n");
 }
 
 // The serialized wire bytes, or empty when the response does not serialize.
@@ -69,6 +74,51 @@ void check_health() {
                                "\r\n"
                                "{\"status\":\"ok\"}",
           "health wire bytes are exact");
+}
+
+// POST /api/echo answers the decoded request body through chunked framing,
+// whatever framing carried it and whatever bytes it contains.
+void check_echo() {
+    const std::pair<std::string_view, std::string_view> requests[] = {
+        {"POST /api/echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello", "hello"},
+        {"POST /api/echo HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n"
+         "5\r\nhello\r\n0\r\n\r\n",
+         "hello"},
+        {"POST /api/echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 7\r\n\r\nhe\r\nllo",
+         "he\r\nllo"},
+        {"POST /api/echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n", ""},
+    };
+    for (const auto &[wire, body] : requests) {
+        const auto request = message_of(wire);
+        check(request.has_value(), "echo request parses");
+        if (!request)
+            continue;
+        const Response response = handle_request(*request);
+        check(response.status == 200, "echo answers 200");
+        check(response.framing == BodyFraming::chunked, "echo frames its body with chunked");
+        check(response.body == body, "echo answers the decoded request body");
+        check(response.fields.empty(), "echo adds no fields");
+        check(response.close == false, "echo keeps the connection reusable");
+    }
+    const auto request =
+        message_of("POST /api/echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello");
+    if (request)
+        check(wire_of(handle_request(*request)) == "HTTP/1.1 200 OK\r\n"
+                                                   "Transfer-Encoding: chunked\r\n"
+                                                   "\r\n"
+                                                   "5\r\nhello\r\n0\r\n\r\n",
+              "echo wire bytes are exact");
+    for (const std::string_view method : {"GET", "PUT", "DELETE", "PATCH", "OPTIONS", "TRACE"}) {
+        const auto other = request_of(method, "/api/echo");
+        check(other.has_value(), "echo method request parses");
+        if (!other)
+            continue;
+        const Response response = handle_request(*other);
+        check(response.status == 405, "method not allowed on echo answers 405");
+        check(response.fields.size() == 1 && response.fields[0].name == "Allow" &&
+                  response.fields[0].value == "POST",
+              "echo 405 names Allow: POST");
+    }
 }
 
 // Methods not allowed on the declared route answer 405 with an Allow field.
@@ -124,6 +174,7 @@ void check_not_found() {
 // Executes the declared-route dispatch checks.
 int main() {
     check_health();
+    check_echo();
     check_method_not_allowed();
     check_not_found();
     std::printf("%zu checks, %d failures\n", checks, failures);
