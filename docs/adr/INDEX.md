@@ -73,8 +73,10 @@ On 2026-10-22, @hailingu supplied the exact `Approve` in the task chat and, in
 the required one-record clarification of that exchange, designated
 `service/docs/adr/ADR-0005-fixed-body-reserve.md` as the approval target; that
 record is now Accepted / Complete with fresh approval-HEAD verification
-recorded. `service/docs/adr/ADR-0006-static-rejection-wires.md` remains
-Proposed awaiting its own individual approval.
+recorded. `service/docs/adr/ADR-0006-static-rejection-wires.md` then received
+its own exact `Approve` from @hailingu in an exchange whose sole approval
+context was that record; it is likewise Accepted / Complete with fresh
+approval-HEAD verification recorded.
 
 ## Active Records
 
@@ -94,7 +96,7 @@ Proposed awaiting its own individual approval.
 | Full ADR | ADR-0009 | Disposable HTTP parser verification in CI | Accepted | In Progress | Project | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `docs/adr/ADR-0009-http-parser-verification-ci.md` | None — not superseded |
 | Full ADR | ADR-0004 | Own request text with offset descriptors | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0004-owned-request-storage.md` | None — not superseded |
 | Full ADR | ADR-0005 | Reserve the declared fixed body length once | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0005-fixed-body-reserve.md` | None — not superseded |
-| Full ADR | ADR-0006 | Answer rejections with precomputed static wires | Proposed | Not Started | Service internal — service | N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability | `service/docs/adr/ADR-0006-static-rejection-wires.md` | None — not superseded |
+| Full ADR | ADR-0006 | Answer rejections with precomputed static wires | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability | `service/docs/adr/ADR-0006-static-rejection-wires.md` | None — not superseded |
 
 ## Archived Records
 
