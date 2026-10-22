@@ -273,6 +273,22 @@ void check_error_responses() {
               "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n",
           "resource_exhausted serializes the exact 500 closing wire");
 }
+// Every precomputed rejection wire is byte-identical to serializing the
+// response the error maps to, so the static path can never drift.
+void check_error_wires() {
+    const orange::http::ParseError errors[] = {
+        orange::http::ParseError::incomplete, orange::http::ParseError::malformed,
+        orange::http::ParseError::method_too_long, orange::http::ParseError::target_too_long,
+        orange::http::ParseError::headers_too_long, orange::http::ParseError::body_too_long,
+        orange::http::ParseError::chunk_metadata_too_long,
+        orange::http::ParseError::unsupported_transfer_coding,
+        orange::http::ParseError::resource_exhausted};
+    for (const auto error : errors) {
+        const auto serialized = wire_bytes(orange::http::error_response(error));
+        check(serialized && *serialized == orange::http::error_wire(error),
+              "precomputed rejection wires match the serializer byte for byte");
+    }
+}
 } // namespace
 // Executes the framing, phrase, rejection and fault-injection checks.
 int main() {
@@ -281,6 +297,7 @@ int main() {
     check_rejections();
     check_allocation_failure();
     check_error_responses();
+    check_error_wires();
     std::printf("%zu checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }
