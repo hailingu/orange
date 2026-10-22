@@ -292,6 +292,48 @@ void check_error_wires() {
               "precomputed rejection wires match the serializer byte for byte");
     }
 }
+// The append-form serializer must emit the same bytes as the owning form,
+// preserve existing destination content, and leave the destination unchanged
+// on validation or allocation failure.
+void check_write_into() {
+    const std::array<ResponseField, 1> json_type{{{"Content-Type", "application/json"}}};
+    const Response shapes[] = {
+        with_fields(200, BodyFraming::content_length, "{\"status\":\"ok\"}", json_type),
+        plain(200, BodyFraming::none, ""),
+        plain(200, BodyFraming::content_length, ""),
+        plain(200, BodyFraming::chunked, "he\r\nllo"),
+        plain(200, BodyFraming::chunked, ""),
+        plain(431, BodyFraming::none, "", true),
+        plain(599, BodyFraming::none, "")};
+    for (const Response &response : shapes) {
+        const auto expected = wire_bytes(response);
+        std::string out = "queued:";
+        const auto failed = orange::http::write_response_into(response, out);
+        check(expected && !failed && out == "queued:" + *expected,
+              "write_response_into appends the exact wire after existing content");
+    }
+    const Response invalid[] = {plain(99, BodyFraming::none, ""),
+                                plain(204, BodyFraming::none, "x"),
+                                plain(200, BodyFraming::none, "x")};
+    for (const Response &response : invalid) {
+        std::string out = "untouched";
+        const auto failed = orange::http::write_response_into(response, out);
+        check(failed && out == "untouched", "rejected input leaves the destination unchanged");
+    }
+    std::string out = "stable";
+    bool threw = false;
+    try {
+        fail_next_allocation = true;
+        const auto failed =
+            orange::http::write_response_into(plain(200, BodyFraming::chunked, "hello"), out);
+        check(failed && *failed == ResponseError::resource_exhausted && out == "stable",
+              "allocation failure returns resource_exhausted and changes nothing");
+    } catch (const std::bad_alloc &) {
+        threw = true;
+    }
+    fail_next_allocation = false;
+    check(!threw, "write_response_into does not throw across its boundary");
+}
 } // namespace
 // Executes the framing, phrase, rejection and fault-injection checks.
 int main() {
@@ -301,6 +343,7 @@ int main() {
     check_allocation_failure();
     check_error_responses();
     check_error_wires();
+    check_write_into();
     std::printf("%zu checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }
