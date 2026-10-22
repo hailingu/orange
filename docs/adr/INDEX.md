@@ -57,6 +57,16 @@ remains `In Progress`: its hosted AC-3 verification and the five applicable
 hosted risk observations require an authorized remote Actions run that has not
 occurred.
 
+On 2026-10-22, the same owner instructed in the performance task chat
+“先挑选一个执行优化，然后和现有的bench mark对比。在优化前，先将未提交的内容提交”,
+and then “补充这个ADR后，进行计划内的下一轮优化”. Under the same exception
+pattern as above, the fixed-body reservation was implemented directly
+(red `ae95ecc`, green `b419a80`, formatting `9e96ef6`) and the follow-up
+optimization round was authorized. This authorization permits drafting the
+retrospective records alongside non-terminal ADRs; it neither accepts them —
+individual approval is still required — nor changes the general policy.
+The reservation record is `service/docs/adr/ADR-0005-fixed-body-reserve.md`.
+
 ## Active Records
 
 | Type | ID | Title | Decision Status | Implementation Status | Scope | Architecture Source | Path | Superseded By |
@@ -74,6 +84,7 @@ occurred.
 | Full ADR | ADR-0003 | Retain validated offsets for fragmented request heads | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0003-fragmented-head-offsets.md` | None — not superseded |
 | Full ADR | ADR-0009 | Disposable HTTP parser verification in CI | Accepted | In Progress | Project | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `docs/adr/ADR-0009-http-parser-verification-ci.md` | None — not superseded |
 | Full ADR | ADR-0004 | Own request text with offset descriptors | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0004-owned-request-storage.md` | None — not superseded |
+| Full ADR | ADR-0005 | Reserve the declared fixed body length once | Proposed | Not Started | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0005-fixed-body-reserve.md` | None — not superseded |
 
 ## Archived Records
 
