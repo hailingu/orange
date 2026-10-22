@@ -80,8 +80,10 @@ approval-HEAD verification recorded. Later the same day, the owner instructed
 “挑选一个执行优化，然后和现有的bench mark对比。在优化前，先将未提交的内容提交”,
 authorizing the append-form response-serialization round under the same pattern
 (red `2be8eaa`, green `5b404c3`); its record is
-`service/docs/adr/ADR-0007-append-form-response-serialization.md`, Proposed
-awaiting individual approval.
+`service/docs/adr/ADR-0007-append-form-response-serialization.md`. The owner
+then supplied the exact `Approve` in an exchange whose sole approval context
+was that record; it is now Accepted / Complete with fresh approval-HEAD
+verification recorded.
 
 ## Active Records
 
@@ -102,7 +104,7 @@ awaiting individual approval.
 | Full ADR | ADR-0004 | Own request text with offset descriptors | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0004-owned-request-storage.md` | None — not superseded |
 | Full ADR | ADR-0005 | Reserve the declared fixed body length once | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0005-fixed-body-reserve.md` | None — not superseded |
 | Full ADR | ADR-0006 | Answer rejections with precomputed static wires | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability | `service/docs/adr/ADR-0006-static-rejection-wires.md` | None — not superseded |
-| Full ADR | ADR-0007 | Serialize responses straight into the outgoing backlog | Proposed | Not Started | Service internal — service | N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability | `service/docs/adr/ADR-0007-append-form-response-serialization.md` | None — not superseded |
+| Full ADR | ADR-0007 | Serialize responses straight into the outgoing backlog | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability | `service/docs/adr/ADR-0007-append-form-response-serialization.md` | None — not superseded |
 
 ## Archived Records
 
