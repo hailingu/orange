@@ -2,16 +2,16 @@
 
 ## Metadata [Required]
 
-- **Decision Status**: Proposed
-- **Implementation Status**: Not Started
+- **Decision Status**: Accepted
+- **Implementation Status**: Complete
 - **Date**: 2026-10-22
 - **Author**: @zcode
 - **Decision Owner**: @hailingu
 - **Required Approver**: @hailingu
 - **Record Scope**: Service internal — service
-- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: N/A — no approval received
-- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: N/A — no approval received
-- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: N/A — no approval received
+- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: @hailingu
+- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: 2026-10-22T02:15:57Z
+- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Approve
 - **Rejector [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
 - **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
 - **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
@@ -53,7 +53,9 @@ A fragmented fixed-length request body regrew its owned buffer geometrically: ea
 
 On 2026-10-22, owner @hailingu instructed in the task chat: “先挑选一个执行优化，然后和现有的bench mark对比。在优化前，先将未提交的内容提交”, and then “补充这个ADR后，进行计划内的下一轮优化”. The first instruction selected and authorized this optimization under the same scoped exception pattern recorded in `docs/adr/INDEX.md` for 2026-10-15/2026-10-16; the second authorizes this backfill. The temporary exception permits this record to coexist with non-terminal ADRs; it does not change repository-wide serialization policy.
 
-This record was drafted **after** the owner-waived implementation. Its checks make the proposal reviewable now; they are not represented as pre-implementation ADR acceptance. Subtasks marked Complete describe actual exception execution. At drafting, Decision Status / Implementation Status are Proposed / Not Started awaiting individual approval. The red/green evidence lives in commits `ae95ecc` (failing allocation test) and `b419a80` (implementation, fixture, and CLI contract), with `9e96ef6` carrying a machine-formatting-only follow-up. The broader runtime and CI records retain their existing statuses.
+This record was drafted **after** the owner-waived implementation. Its checks make the proposal reviewable now; they are not represented as pre-implementation ADR acceptance. Subtasks marked Complete describe actual exception execution. At drafting, Decision Status / Implementation Status were Proposed / Not Started. The red/green evidence lives in commits `ae95ecc` (failing allocation test) and `b419a80` (implementation, fixture, and CLI contract), with `9e96ef6` carrying a machine-formatting-only follow-up. The broader runtime and CI records retain their existing statuses.
+
+On 2026-10-22, @hailingu supplied the exact `Approve` in this task chat and, in the same exchange's required one-record clarification, designated this record as the approval target; approval was registered at 2026-10-22T02:15:57Z. Approval of the sibling record or permission to implement directly was not counted as approval of this one. The implementation commits cited in the touchpoints were already immutable at approval, and fresh verification at the approval HEAD (`e93f0cd`) passed: `ctest --test-dir service/build --output-on-failure` 8/8 suites, `http_request_storage_tests` printing 4 ordinary allocations, `http_response_tests` 60 checks / 0 failures. The only change to the measured parser or benchmark sources since the paired comparison is the clang-format rewrap in `9e96ef6`; no semantic revision intervened. Implementation Status became Complete in the same change.
 
 ## Scope [Required]
 
@@ -227,18 +229,18 @@ condition changes.
 
 | ID | Item | Completion Criterion | Expected Evidence | Status | Actual Evidence |
 | --- | --- | --- | --- | --- | --- |
-| A-1 | ADR approved | Eligible @hailingu supplies exact Approve in the context of this one path; metadata records identity and offset timestamp | Approval metadata | Not Started | Pending — awaiting the required approver's response |
-| A-2 | Complete task delivered | All declared subtasks and applicable checks pass; formal lifecycle begins only after approval | Implementation Plan and Acceptance Checks | Not Started | Historical exception execution recorded above; formal completion follows approval |
+| A-1 | ADR approved | Eligible @hailingu supplies exact Approve in the context of this one path; metadata records identity and offset timestamp | Approval metadata | Complete | @hailingu responded exactly Approve in this task chat and designated this record in the required one-record clarification; registered at 2026-10-22T02:15:57Z |
+| A-2 | Complete task delivered | All declared subtasks and applicable checks pass; formal lifecycle begins only after approval | Implementation Plan and Acceptance Checks | Complete | T-1/T-2 and AC-1 through AC-5 retain passing evidence; fresh approval-HEAD (`e93f0cd`) verification: ctest 8/8, storage test prints 4 ordinary allocations, response suite 60 checks / 0 failures |
 | A-3 | Reciprocal ADD link synchronized, when applicable | N/A — maintenance creates no product-demand candidate | Architecture Source assessment | N/A — no ADD handoff | No ADD candidate selected or changed |
 | A-4 | Requirement levels satisfied | Every required section is complete and every conditional trigger assessed | Structured document review at drafting | Complete | Pass — structured review at drafting on 2026-10-22 |
 | A-5 | Acceptance checks are decidable | Each row names one subtask, exact input, method, binary result and evidence | Structured check review at drafting | Complete | Pass — structured review at drafting on 2026-10-22 |
 | A-6 | Engineering exceptions governed, when applicable | All triggered exceptions have rule, owner, controls, lifecycle and evidence; otherwise reasoned N/A | Engineering Exceptions subsection | Complete | N/A assessed — no engineering exception applies |
 | A-7 | Contract and baseline risks covered, when applicable | All clause IDs map to explicit checks and all five baseline risks are assessed | Traceability and Risk Coverage Matrix above | Complete | All four clauses mapped; five risk rows assessed with historical Pass/N/A evidence |
-| A-8 | Governance validation passed | Repository validator exits 0 with no record, index, lifecycle or cross-reference diagnostic | npm run validate --prefix tools/governance-validator | Complete | Drafting-stage validation exits 0 on 2026-10-22 |
+| A-8 | Governance validation passed | Repository validator exits 0 with no record, index, lifecycle or cross-reference diagnostic | npm run validate --prefix tools/governance-validator | Complete | Drafting-stage and completion-stage validations exit 0 on 2026-10-22; validator suite 303/303 |
 
 ## Archival [Conditionally Required — Decision Status is `Rejected`, or Decision Status is `Deprecated` or `Superseded` and Implementation Status is final]
 
-Inactive future-lifecycle guidance — this Proposed record is not retired.
+Inactive future-lifecycle guidance — this Accepted record is not retired.
 When the archival trigger applies, move this record to `archive/`
 in its own ADR root, retain its filename, update its index row and all file
 markers, and synchronize reciprocal supersession references in the same change.
@@ -248,3 +250,4 @@ markers, and synchronize reciprocal supersession references in the same change.
 | Date | Change | Author |
 | --- | --- | --- |
 | 2026-10-22 | Backfill this one owner-waived implementation decision at the owner's request; preserve historical red/green and measurement evidence and hold Proposed / Not Started until individual approval | @zcode |
+| 2026-10-22 | Register @hailingu's exact Approve designated to this record at 2026-10-22T02:15:57Z; set Accepted / Complete with fresh approval-HEAD verification recorded; complete A-1 and A-2; synchronize the index row; no decision scope or check changes | @zcode |
