@@ -533,6 +533,42 @@ void append_number(std::string &out, std::size_t value, int base) {
   `plain(status, framing, body, close)` 与 `with_fields(...)`,套件里
   再无部分初始化,可读性反而更好。
 
+## 14. 成员函数尾置 `const`:三个容易混淆的位置
+
+`service/src/http_head_fields.hpp` 里的一对声明:
+
+```cpp
+[[nodiscard]] HeadLineResult append_line(std::string_view line, std::size_t begin);      // 写状态
+[[nodiscard]] ParsedRequest finish(std::string_view head, std::size_t consumed) const;   // 只读
+```
+
+`finish` 末尾的 `const` 是**常量成员函数**限定,与另外两个"const"位置
+是三回事:
+
+```cpp
+const ParsedRequest f() const;   // 前置 const:返回值是 const(按值返回时通常不这么写)
+ParsedRequest f() const;         // 尾置 const:函数不修改 *this(finish 用的)
+ParsedRequest f() final;         // final:禁止虚函数重写(与 const 无关)
+```
+
+尾置 `const` 产生两个编译器强制的效果:
+
+1. **函数体内不许写成员变量**:隐式 `this` 从 `HeadFields*` 变成
+   `const HeadFields*`,对成员赋值直接编译错误(除非成员声明了
+   `mutable`)。`append_line`(积累 `request_line_`/`fields_` 解析
+   状态)因此不带 const,`finish`(只读已有偏移、构造新的
+   `ParsedRequest`)带——限定符把"写阶段/读阶段"的分工写进了类型,
+   编译器替你监督;
+2. **`const` 对象上也能调用**:拿到 `const HeadFields&` 时只能调用带
+   限定的成员函数,漏写 const 的"只读"函数在 const 对象上直接编译
+   不过。
+
+配套细节:尾置 const 是**函数签名的一部分**——`f()` 与 `f() const`
+可以构成重载(典型如迭代器的 `begin()`/`begin() const`);基类虚函数
+带 const 时,重写版本必须同样带 const。`HeadFields` 没有虚函数,重写
+本就无从谈起;与"不可重写"相关的关键字是 `override`(标记重写)与
+`final`(禁止重写)。
+
 ## 延伸阅读
 
 - cppreference:`std::variant`、`std::string_view` 生命周期 hazards、

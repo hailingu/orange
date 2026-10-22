@@ -187,6 +187,124 @@ connections.size()`,只服务"poll 时已存在"的连接,新连接等下一轮�
 版天然保持同一不变量:变更表在循环顶构建,本轮 accept 的新连接尚无
 注册的过滤器,事件要到下一轮才来。
 
+### 调度单位是事件,不是连接
+
+"多个连接同时到达,循环是排队处理吗?"——是,但排队的单位是**事件**
+而非**连接**,这个区分正是它不慢的原因(见下节)。现行 `serve()` 里能
+数出三层串行:
+
+1. **批间**:`kevent()` 一次带回最多 `event_capacity`(=64)个就绪
+   事件,处理完这一批才回去等下一批;
+2. **批内**:对就绪数组逐项分派,轮到连接 A 就把它的 `recv`、解码、
+   handler、响应入队一口气做完,才轮到 B——B 的字节在轮到它之前躺在
+   内核 socket 缓冲区里,不丢、也不被 A 碰到;
+3. **连接内**:`drive_messages` 的 while 循环反复 `feed()`——一次
+   `recv` 可能压着几条管线化请求,逐条"解出 → 处理 → `reset()`"。
+
+两个容易误解的点:
+
+- **handler 不在"后面",它在 feed 循环里内联同步执行**:`feed()` 返回
+  完整消息的下一行就是 `handler(message)`——同一线程、同一调用栈,
+  异常就地转 500(`append_response` 的 catch)。不存在"先解码一批、
+  再统一跑业务"的阶段,跨连接也完全串行(A 的 handler 先于 B 的解码);
+  单线程模型里没有 worker 线程或任务队列可以交接;
+- **真正推迟的只有 socket 写**:响应字节先入连接的 `outgoing` 队列,
+  整个读 pass 结束后,写 pass 才统一 `send()` 冲刷。分离的理由:读
+  pass 里刚排入的字节恰好由本轮写 pass 冲刷(顺序保证),读 pass 里
+  死掉的连接按 fd 查找自动跳过;顺带把管线化的多个响应攒在一起冲,
+  摊薄系统调用次数。
+
+所以"几十个连接同时在被服务"是宏观描述:微观上每条连接的一生被切成
+微秒级碎片,与其他连接交错推进;连接的**等待**(等下一批字节、等 TCP
+传输)发生在内核里,不占循环一纳秒 CPU——循环只在"有活干"时被唤醒。
+术语:**并发但不并行**(concurrent, not parallel);每连接的
+`RequestDecoder` 就是连接被挂起时"保存的执行状态",等价于协作式多
+任务。第 4 节的队头阻塞由此天然满足:A 的"等字节"是 A 自己连接上的
+状态,不是循环的阻塞。
+
+### 单线程的吞吐账与两个软肋
+
+"顺序处理会慢吗?"算一笔:一条请求的全部服务端工作是 `recv`(系统
+调用,µs 级)→ ≤8 KiB 头扫描(亚 µs)→ 路由匹配(字符串比较,ns
+级)→ 序列化(亚 µs)→ `send`(µs 级),合计**几微秒/请求**,单核
+理论十几万 req/s——瓶颈先撞到内核网络栈与系统调用,而不是"只有一个
+线程"。对比线程-per-连接:零锁(单执行流 + 每连接独立 decoder = 无
+共享可变状态)、无上下文切换、cache 友好(热数据不随线程漂移)、内存
+省(每连接一个小 `Connection` 结构,而不是每线程 8 MiB 栈)。Redis
+核心路径单线程、nginx 单 worker 服务 10 万级并发连接,都是这套模型
+天花板的实证。
+
+两个真实的软肋,与行业解法对齐:
+
+| 软肋 | 表现 | 解法 | 行业实例 |
+| --- | --- | --- | --- |
+| 慢 handler | handler 跑多久,`kevent` 就多久得不到调用,所有连接一起停 | 重活丢线程池,完成后把响应交回循环写出 | Netty `addLast(businessGroup, …)`、Tomcat Executor |
+| 单线程用不满多核 | 一个线程最多吃满一个核 | **N 个事件循环,各自拥有连接子集**(不是给共享状态加锁) | nginx `worker_processes auto`、Netty workerGroup、Tomcat 多 Poller |
+
+行业模型对照(定位 orange 的位置):
+
+- **Netty**:boss 组(通常 1 线程)只做 accept;workerGroup 的 N 个
+  线程各是一个事件循环,一条连接注册进某个 worker 后终生不搬家——
+  boss/worker 分工是**多核分片**,worker 内部仍是纯正的单线程循环;
+  业务线程池是显式接线的第三件事(`pipeline.addLast(businessGroup,
+  name, handler)`),默认不存在——handler 默认跑在 worker 循环里,
+  与 orange 现状相同;
+- **Tomcat(Spring Boot 内嵌)**:Acceptor(1 线程)→ Poller(NIO
+  selector,1-2 线程)→ Executor 线程池(默认 `maxThreads=200`)。
+  Executor 存在的主因是 Servlet 是**同步阻塞**编程模型:Controller
+  等 JDBC/RPC 的几百毫秒里线程 park 睡觉(不烧 CPU)、醒来继续——
+  线程池吸收的主要是**等待**而非 CPU;线程数超过核数,对纯 CPU 负载
+  完全无效;
+- **Redis 6.0 的 io-threads 不是分片**:只把 read/write 系统调用
+  并行化,命令执行仍单线程串行,与"N 个独立事件循环"是两回事;
+- **orange 现状** = Netty 把 boss、一个 worker、business 全压进一个
+  线程的形态;handler 纯内存、微秒级,单循环是匹配范围的选择(源码
+  注释自己写明 loopback 小连接数)。
+
+### SO_REUSEPORT:N 个事件循环的分片机制(扩展视野,未落地)
+
+orange 现在是单 listener(一次 `bind` + `listen`)。真要吃满多核,
+标准路是把 `serve()` 原样复制 N 份、每份一个线程,每条连接**终生只
+属于其中一个循环**——分派由内核完成,用户态零锁:
+
+```
+客户端 SYN (192.168.1.5:54321 → :8080)
+        │ 内核按四元组哈希选一个 listen socket   ← 分片动作发生在内核
+        ├──────────┬──────────┬──────────┐
+        ▼          ▼          ▼          ▼
+    socket-1    socket-2   socket-3   socket-4   ← SO_REUSEPORT:4 个 socket 绑同一端口
+   [线程1: 自己的 kqueue + connections + decoder]
+   [线程2 …]  [线程3 …]  [线程4 …]
+```
+
+机制要点:
+
+- **默认规则是"一个端口一个 socket"**:第二个 socket `bind` 同端口
+  报 `EADDRINUSE`。`SO_REUSEPORT`(Linux 3.9 引入,BSD 系更早;
+  Darwin 亦有实现,行为细节与 Linux 有差异)是**全或无的显式豁免**:
+  组内**所有** socket 都要在 `bind` 之前设置,Linux 还要求同一
+  effective UID——防止别的进程抢绑你的服务端口;
+- **做分配的不是 `listen()`,也不是任何用户态代码**:内核 TCP 栈在
+  SYN 到达时对四元组(源 IP、源端口、目的 IP、目的端口)做哈希,把
+  连接放进选中的 socket 的 accept 队列;`listen()` 只负责把队列建
+  起来。没有用户态调度器、没有共享的"待分配连接队列",因此没有锁;
+- **四元组在连接生命周期内不变** → 同一连接的所有包哈希恒定,永远
+  落同一个 socket、同一个线程。这是"连接不迁移、分片后依然零锁"的
+  机制根源;不同连接(源端口不同)被哈希摊开到各线程;
+- **与 SO_REUSEADDR 一字之差,两回事**:REUSEADDR 解决**重启**时
+  上一进程 TIME_WAIT 残留端口不让绑的问题(第 2 节已在用);
+  REUSEPORT 允许多个**活跃** listener 共存并分片;
+- **历史**:reuseport 之前 nginx 用 `accept_mutex`——N 个 worker
+  抢一把锁去 accept,惊群与锁竞争都是开销;内核按流哈希分队列后这些
+  消失。Linux 4.11+ 还能挂 BPF 程序自定义分配策略(比如按负载而非
+  哈希);
+- **进程还是线程**:nginx 选 worker **进程**是为了故障隔离(一个
+  worker 崩,master 拉起,其余不受影响),代价是内存不共享;线程版
+  共享地址空间更轻,但一个段错误全军覆没;
+- **代价**:分片按连接不按请求,哈希可能不均(大流量连接全压一个
+  分片),keep-alive 让归属固化。先跑到单循环瓶颈、再分片,是性能
+  工程的一般纪律——对 orange,这也是典型的"需要新 ADR"的决策点。
+
 ## 4. 队头阻塞与 AC-7
 
 单线程事件循环必须避免:一个连接上的**未完成请求**(客户端只发了一半)
@@ -278,7 +396,9 @@ ADR-0003(CC-5):431/413 拒绝响应带 `Connection: close`,**响应写完即
 ## 延伸阅读
 
 - man pages:`kqueue(2)`、`kevent(2)`、`poll(2)`、`socket(2)`、`accept(2)`、
-  `recv(2)`(注意 EAGAIN/EWOULDBLOCK 段落);
+  `recv(2)`(注意 EAGAIN/EWOULDBLOCK 段落);Linux 手册 `socket(7)` 的
+  SO_REUSEPORT 段(与 Darwin `socket` 手册对照)、nginx 文档
+  `worker_processes`/`accept_mutex` 与 Netty `EventLoopGroup` 指南;
 - 《TCP/IP 详解 卷1》第17-22章( TCP 连接管理到拥塞控制);
 - C10K 文档(事件驱动并发的经典论述);
 - OpenSSL 官方 `SSL_accept`/non-blocking BIO 指南;
