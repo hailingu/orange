@@ -85,6 +85,9 @@ void corpus() {
     const auto fixtures = orange::bench::fixtures();
     std::vector<std::string> seeds;
     for (const auto &fixture : fixtures) {
+        // respond fixtures carry response body content, not parser input.
+        if (fixture.mode == orange::bench::Mode::respond)
+            continue;
         observe(fixture.wire, fixture.wire.size() / 2);
         if (fixture.wire.size() <= orange::http::header_block_cap)
             seeds.push_back(fixture.wire);

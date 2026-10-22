@@ -5,7 +5,12 @@
 #ifndef ORANGE_HTTP_PARSER_WORKLOADS_HPP
 #define ORANGE_HTTP_PARSER_WORKLOADS_HPP
 #include "http_request_decoder.hpp"
+// The response serializer postdates the 2026-10-16 anchor revision; the guard
+// lets this same driver compile against it for cross-revision comparison.
+#if __has_include("http_response.hpp")
 #include "http_response.hpp"
+#define ORANGE_BENCH_RESPONSE 1
+#endif
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -98,27 +103,33 @@ inline std::vector<Case> fixtures() {
         many_ows += "X: " + std::string(400, ' ') + "v" + std::string(400, '\t') + "\r\n";
     many_ows += "\r\n";
     const std::string metadata = "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n";
-    return {{"head_long_values_16", long_values, Mode::head, 16, 0, 10000},
-            {"head_short_fields_1000", short_fields, Mode::head, 1000, 0, 200000},
-            {"head_ows_7800", ows, Mode::head, 1, 0, 10000},
-            {"head_ows_8_fields", many_ows, Mode::head, 8, 0, 10000},
-            {"head_one_short_field", "GET / HTTP/1.1\r\nX-A: a\r\n\r\n", Mode::head, 1, 0, 1000},
-            {"head_minimal", minimal, Mode::head, 0, 0, 500},
-            {"head_realistic_434", realistic, Mode::head, 9, 0, 5000},
-            {"head_full_8192", full, Mode::head, 409, 0, 100000},
-            {"head_decoder_whole", realistic, Mode::message, 9, 0, 10000},
-            {"head_decoder_feed17", realistic, Mode::fragmented, 9, 0, 20000},
-            {"echo_chunked_1024", chunked(1024, 1024), Mode::message, 1, 1024, 10000},
-            {"respond_echo_chunked_1024", std::string(1024, 'x'), Mode::respond, 0, 0, 10000},
-            {"body_1m_chunk1024", chunked(1048576, 1024), Mode::message, 1, 1048576, 500000},
-            {"body_1m_chunk16384", chunked(1048576, 16384), Mode::message, 1, 1048576, 500000},
-            {"body_1m_fixed_feed16384", fixed(1048576), Mode::fragmented, 1, 1048576, 500000, false,
-             16384},
-            {"extension_7000", metadata + "0;x=" + std::string(7000, 'x') + "\r\n\r\n",
-             Mode::message, 1, 0, 200000},
-            {"trailer_7000", metadata + "0\r\nX: " + std::string(7000, 'x') + "\r\n\r\n",
-             Mode::message, 1, 0, 200000},
-            {"head_cr_dense", "GET /" + std::string(8187, '\r'), Mode::head, 0, 0, 20000, true}};
+    std::vector<Case> cases = {
+        {"head_long_values_16", long_values, Mode::head, 16, 0, 10000},
+        {"head_short_fields_1000", short_fields, Mode::head, 1000, 0, 200000},
+        {"head_ows_7800", ows, Mode::head, 1, 0, 10000},
+        {"head_ows_8_fields", many_ows, Mode::head, 8, 0, 10000},
+        {"head_one_short_field", "GET / HTTP/1.1\r\nX-A: a\r\n\r\n", Mode::head, 1, 0, 1000},
+        {"head_minimal", minimal, Mode::head, 0, 0, 500},
+        {"head_realistic_434", realistic, Mode::head, 9, 0, 5000},
+        {"head_full_8192", full, Mode::head, 409, 0, 100000},
+        {"head_decoder_whole", realistic, Mode::message, 9, 0, 10000},
+        {"head_decoder_feed17", realistic, Mode::fragmented, 9, 0, 20000},
+        {"echo_chunked_1024", chunked(1024, 1024), Mode::message, 1, 1024, 10000},
+        {"body_1m_chunk1024", chunked(1048576, 1024), Mode::message, 1, 1048576, 500000},
+        {"body_1m_chunk16384", chunked(1048576, 16384), Mode::message, 1, 1048576, 500000},
+        {"body_1m_fixed_feed16384", fixed(1048576), Mode::fragmented, 1, 1048576, 500000, false,
+         16384},
+        {"extension_7000", metadata + "0;x=" + std::string(7000, 'x') + "\r\n\r\n", Mode::message,
+         1, 0, 200000},
+        {"trailer_7000", metadata + "0\r\nX: " + std::string(7000, 'x') + "\r\n\r\n", Mode::message,
+         1, 0, 200000},
+        {"head_cr_dense", "GET /" + std::string(8187, '\r'), Mode::head, 0, 0, 20000, true}};
+#ifdef ORANGE_BENCH_RESPONSE
+    // Respond cases exist only when the linked revision ships the serializer.
+    cases.push_back(
+        {"respond_echo_chunked_1024", std::string(1024, 'x'), Mode::respond, 0, 0, 10000});
+#endif
+    return cases;
 }
 // Uses the same result observation for old and compact owned representations.
 template <class T> std::size_t field_count(const T &request) {
@@ -134,6 +145,7 @@ inline std::uint64_t digest(const orange::http::ParsedMessage &parsed) {
                                 : static_cast<unsigned char>(parsed.body.front()) +
                                       static_cast<unsigned char>(parsed.body.back()));
 }
+#ifdef ORANGE_BENCH_RESPONSE
 // Serializes with the append form when the linked library revision provides
 // it, else the owning form plus a copy. The unqualified call keeps the lookup
 // dependent, so one byte-identical driver compiles against both revisions.
@@ -147,6 +159,7 @@ template <class R> void serialize_adaptive(const R &response, std::string &out) 
         }
     }
 }
+#endif
 // Includes construction, parsing, result observation and destruction per request.
 inline std::uint64_t run(const Case &fixture) {
     if (fixture.mode == Mode::head) {
@@ -161,6 +174,7 @@ inline std::uint64_t run(const Case &fixture) {
         const auto *parsed = std::get_if<orange::http::ParsedMessage>(&result);
         return parsed ? digest(*parsed) : 0;
     }
+#ifdef ORANGE_BENCH_RESPONSE
     if (fixture.mode == Mode::respond) {
         // respond cases carry the echo response body content in `wire`.
         const orange::http::Response response{
@@ -171,6 +185,7 @@ inline std::uint64_t run(const Case &fixture) {
                            : out.size() + static_cast<unsigned char>(out.front()) +
                                  static_cast<unsigned char>(out.back());
     }
+#endif
     orange::http::RequestDecoder decoder;
     for (std::size_t offset = 0; offset < fixture.wire.size(); offset += fixture.feed) {
         const auto result =
