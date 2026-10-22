@@ -24,7 +24,7 @@
 - **Blocker And Evidence [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
 - **Blocker Owner [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
 - **Blocker Exit Or Recheck Criterion [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
-- **Related [Optional]**: docs/adr/ADR-0003-local-runtime-path.md; service/docs/adr/ADR-0005-fixed-body-reserve.md
+- **Related [Optional]**: docs/adr/ADR-0003-local-runtime-path.md; service/docs/adr/ADR-0005-fixed-body-reserve.md; docs/reviews/2026-10-22-http-performance.md
 - **Architecture Source [Conditionally Required — product demand]**: N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability
 - **Supersedes [Conditionally Required — this ADR replaces another]**: None
 - **Superseded By [Conditionally Required — this ADR is replaced]**: None — not superseded
@@ -243,3 +243,4 @@ markers, and synchronize reciprocal supersession references in the same change.
 | --- | --- | --- |
 | 2026-10-22 | Backfill this one owner-waived implementation decision at the owner's request; preserve historical red/green evidence and hold Proposed / Not Started until individual approval | @zcode |
 | 2026-10-22 | Register @hailingu's exact Approve supplied in this record's sole approval context at 2026-10-22T02:25:35Z; set Accepted / Complete with fresh approval-HEAD verification recorded; complete A-1 and A-2; synchronize the index row; no decision scope or check changes | @zcode |
+| 2026-10-22 | Link the consolidated docs/reviews/2026-10-22-http-performance.md in Related as evidence metadata; no decision content, scope, or check changes | @zcode |
