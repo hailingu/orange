@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <new>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace {
@@ -106,6 +107,39 @@ void check_padding_storage() {
     check(parsed && fields(parsed->request)[0].value == "v" && allocations <= 1,
           "a tiny field surrounded by discarded OWS needs at most one allocation");
 }
+// Fixed framing declares the exact body length, so fragmented delivery
+// must reserve body storage once rather than regrow it geometrically per
+// fragment; every allocation site on that path stays a coded outcome.
+void check_fixed_body_allocations() {
+    const std::size_t body_size = 262145;
+    const std::string wire = "POST / HTTP/1.1\r\nContent-Length: " + std::to_string(body_size) +
+                             "\r\n\r\n" + std::string(body_size, 'x');
+    orange::http::RequestDecoder decoder;
+    allocations = 0;
+    counting = true;
+    bool completed = false;
+    for (std::size_t offset = 0; offset < wire.size(); offset += 4096) {
+        const auto result = decoder.feed(std::string_view(wire).substr(offset, 4096));
+        if (const auto *parsed = std::get_if<orange::http::ParsedMessage>(&result.outcome))
+            completed = parsed->body.size() == body_size;
+    }
+    counting = false;
+    const std::size_t total = allocations;
+    std::printf("fragmented fixed body: %zu ordinary allocations\n", total);
+    check(completed && total <= 6, "a fragmented fixed-length body reserves body storage once");
+    for (std::size_t step = 1; step <= total; ++step) {
+        orange::http::RequestDecoder failing;
+        fail_at = step;
+        bool reported = false;
+        for (std::size_t offset = 0; offset < wire.size() && !reported; offset += 4096) {
+            const auto result = failing.feed(std::string_view(wire).substr(offset, 4096));
+            const auto *error = std::get_if<orange::http::ParseError>(&result.outcome);
+            reported = error && *error == orange::http::ParseError::resource_exhausted;
+        }
+        fail_at = 0;
+        check(reported, "fixed-body allocation failure returns resource_exhausted");
+    }
+}
 // Moves must preserve short inline strings and heap-backed data alike.
 void check_moves() {
     for (const auto &wire : {std::string("GET / HTTP/1.1\r\n\r\n"),
@@ -202,6 +236,7 @@ int main() {
     check_allocations();
     check_copies();
     check_padding_storage();
+    check_fixed_body_allocations();
     check_moves();
     check_reset();
     check_failures();
