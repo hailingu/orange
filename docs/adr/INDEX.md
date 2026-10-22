@@ -66,6 +66,9 @@ optimization round was authorized. This authorization permits drafting the
 retrospective records alongside non-terminal ADRs; it neither accepts them —
 individual approval is still required — nor changes the general policy.
 The reservation record is `service/docs/adr/ADR-0005-fixed-body-reserve.md`.
+The follow-up round served terminal rejections from precomputed static wires
+(red `2f53c85`, green `1b638ba`); its record is
+`service/docs/adr/ADR-0006-static-rejection-wires.md`.
 
 ## Active Records
 
@@ -85,6 +88,7 @@ The reservation record is `service/docs/adr/ADR-0005-fixed-body-reserve.md`.
 | Full ADR | ADR-0009 | Disposable HTTP parser verification in CI | Accepted | In Progress | Project | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `docs/adr/ADR-0009-http-parser-verification-ci.md` | None — not superseded |
 | Full ADR | ADR-0004 | Own request text with offset descriptors | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0004-owned-request-storage.md` | None — not superseded |
 | Full ADR | ADR-0005 | Reserve the declared fixed body length once | Proposed | Not Started | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0005-fixed-body-reserve.md` | None — not superseded |
+| Full ADR | ADR-0006 | Answer rejections with precomputed static wires | Proposed | Not Started | Service internal — service | N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability | `service/docs/adr/ADR-0006-static-rejection-wires.md` | None — not superseded |
 
 ## Archived Records
 
