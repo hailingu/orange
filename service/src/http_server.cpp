@@ -42,10 +42,6 @@ constexpr int event_capacity = 64;
 constexpr std::size_t read_pause_cap = 1024 * 1024;
 // Listen backlog; loopback single-user traffic (ADR-0003 connection model).
 constexpr int listen_backlog = 16;
-// Rejected or failing responses fall back to this precomputed wire form
-// when even the serializer cannot allocate.
-constexpr std::string_view internal_error_wire =
-    "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n";
 
 // True for the two errno values that mean "try again later".
 bool would_block() { return errno == EAGAIN || errno == EWOULDBLOCK; }
@@ -155,8 +151,8 @@ bool requests_close(const Request &request) {
     return false;
 }
 
-// Appends the serialized response to the outgoing backlog, or the
-// precomputed 500 closing wire when serialization cannot proceed.
+// Appends the serialized response to the outgoing backlog, falling back to
+// the precomputed 500 closing wire when serialization cannot allocate.
 void queue_response(Connection &connection, const Response &response) {
     auto wire = write_response(response);
     if (const auto *bytes = std::get_if<std::string>(&wire)) {
@@ -165,7 +161,14 @@ void queue_response(Connection &connection, const Response &response) {
             connection.closing_after_flush = true;
         return;
     }
-    connection.outgoing += internal_error_wire;
+    connection.outgoing += error_wire(ParseError::resource_exhausted);
+    connection.closing_after_flush = true;
+}
+
+// Appends the precomputed closing wire for one terminal parse error. The
+// static wire never allocates, so the rejection path stays infallible.
+void queue_rejection(Connection &connection, ParseError error) {
+    connection.outgoing += error_wire(error);
     connection.closing_after_flush = true;
 }
 
@@ -177,7 +180,8 @@ void append_response(Connection &connection, const ParsedMessage &message,
     try {
         response = handler(message);
     } catch (...) {
-        response = error_response(ParseError::resource_exhausted);
+        queue_rejection(connection, ParseError::resource_exhausted);
+        return;
     }
     response.close = response.close || requests_close(message.request);
     queue_response(connection, response);
@@ -196,8 +200,8 @@ void drive_messages(Connection &connection, const RequestHandler &handler) {
             continue;
         }
         if (auto *error = std::get_if<ParseError>(&result.outcome)) {
-            queue_response(connection, error_response(*error));
-            connection.closing_after_flush = true;
+            queue_rejection(connection, *error);
+            return;
         }
         return;
     }

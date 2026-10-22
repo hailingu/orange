@@ -277,9 +277,12 @@ void check_error_responses() {
 // response the error maps to, so the static path can never drift.
 void check_error_wires() {
     const orange::http::ParseError errors[] = {
-        orange::http::ParseError::incomplete, orange::http::ParseError::malformed,
-        orange::http::ParseError::method_too_long, orange::http::ParseError::target_too_long,
-        orange::http::ParseError::headers_too_long, orange::http::ParseError::body_too_long,
+        orange::http::ParseError::incomplete,
+        orange::http::ParseError::malformed,
+        orange::http::ParseError::method_too_long,
+        orange::http::ParseError::target_too_long,
+        orange::http::ParseError::headers_too_long,
+        orange::http::ParseError::body_too_long,
         orange::http::ParseError::chunk_metadata_too_long,
         orange::http::ParseError::unsupported_transfer_coding,
         orange::http::ParseError::resource_exhausted};

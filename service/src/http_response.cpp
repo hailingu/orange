@@ -168,7 +168,44 @@ void serialize(const Response &response, std::string &out) {
     }
 }
 
+// Precomputed closing wires: the exact bytes write_response produces for
+// error_response of the matching parse errors, without allocating per
+// rejection. check_error_wires pins them against the serializer.
+constexpr std::string_view bad_request_wire =
+    "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n";
+constexpr std::string_view content_too_large_wire =
+    "HTTP/1.1 413 Content Too Large\r\nConnection: close\r\n\r\n";
+constexpr std::string_view uri_too_long_wire =
+    "HTTP/1.1 414 URI Too Long\r\nConnection: close\r\n\r\n";
+constexpr std::string_view headers_too_large_wire =
+    "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\n\r\n";
+constexpr std::string_view internal_error_wire =
+    "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n";
+constexpr std::string_view not_implemented_wire =
+    "HTTP/1.1 501 Not Implemented\r\nConnection: close\r\n\r\n";
+
 } // namespace
+
+std::string_view error_wire(ParseError error) {
+    switch (error) {
+    case ParseError::malformed:
+    case ParseError::incomplete:
+        return bad_request_wire;
+    case ParseError::method_too_long:
+    case ParseError::unsupported_transfer_coding:
+        return not_implemented_wire;
+    case ParseError::target_too_long:
+        return uri_too_long_wire;
+    case ParseError::headers_too_long:
+        return headers_too_large_wire;
+    case ParseError::body_too_long:
+    case ParseError::chunk_metadata_too_long:
+        return content_too_large_wire;
+    case ParseError::resource_exhausted:
+        return internal_error_wire;
+    }
+    return bad_request_wire;
+}
 
 std::variant<std::string, ResponseError> write_response(const Response &response) {
     if (const auto invalid = validate(response))

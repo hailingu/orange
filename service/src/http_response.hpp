@@ -77,6 +77,13 @@ enum class ResponseError {
 // resource_exhausted instead of throwing across this boundary.
 [[nodiscard]] std::variant<std::string, ResponseError> write_response(const Response &response);
 
+// The precomputed closing wire for a terminal parse error: byte-identical to
+// write_response(error_response(error)) — status line, Connection: close, and
+// the terminating empty line — but held in static storage, so a rejection
+// never allocates. The event loop appends these bytes and closes after the
+// flush; the response suite pins the equality for every ParseError value.
+[[nodiscard]] std::string_view error_wire(ParseError error);
+
 // Maps one terminal parse outcome to the rejection response the connection
 // owes: malformed→400 (RFC 9112 2.2), method_too_long and
 // unsupported_transfer_coding→501, target_too_long→414,
