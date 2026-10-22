@@ -58,6 +58,11 @@ struct RequestDecoder::Impl {
             phase = Phase::chunk_line;
             chunk_line.reset(request_body_cap);
         } else {
+            // Fixed framing already bounded this exact length against
+            // request_body_cap, so reserve it once instead of regrowing
+            // geometrically across transport fragments; chunked totals
+            // are unknown, so chunk appends stay geometric.
+            message.body.reserve(remaining);
             phase = remaining == 0 ? Phase::complete : Phase::fixed;
         }
         head.clear();

@@ -24,6 +24,9 @@ struct Case {
     std::size_t content = 0;
     double limit_ns = 5000;
     bool malformed = false;
+    // Transport feed size for fragmented delivery; 17 exercises the
+    // smallest grammar cursors, larger slices mirror the recv buffer.
+    std::size_t feed = 17;
 };
 // Expected observations come from fixture facts, independently of parser output.
 inline std::uint64_t expected_result(const Case &fixture) {
@@ -43,6 +46,11 @@ inline std::string chunked(std::size_t bytes, std::size_t chunk_size) {
         wire += "\r\n";
     }
     return wire + "0\r\n\r\n";
+}
+// Encodes a known all-'x' body with an exact Content-Length declaration.
+inline std::string fixed(std::size_t bytes) {
+    return "POST / HTTP/1.1\r\nContent-Length: " + std::to_string(bytes) + "\r\n\r\n" +
+           std::string(bytes, 'x');
 }
 // Fixed-size fixtures make revisions comparable without timing input generation.
 inline std::vector<Case> fixtures() {
@@ -87,6 +95,8 @@ inline std::vector<Case> fixtures() {
             {"echo_chunked_1024", chunked(1024, 1024), Mode::message, 1, 1024, 10000},
             {"body_1m_chunk1024", chunked(1048576, 1024), Mode::message, 1, 1048576, 500000},
             {"body_1m_chunk16384", chunked(1048576, 16384), Mode::message, 1, 1048576, 500000},
+            {"body_1m_fixed_feed16384", fixed(1048576), Mode::fragmented, 1, 1048576, 500000,
+             false, 16384},
             {"extension_7000", metadata + "0;x=" + std::string(7000, 'x') + "\r\n\r\n",
              Mode::message, 1, 0, 200000},
             {"trailer_7000", metadata + "0\r\nX: " + std::string(7000, 'x') + "\r\n\r\n",
@@ -122,8 +132,9 @@ inline std::uint64_t run(const Case &fixture) {
         return parsed ? digest(*parsed) : 0;
     }
     orange::http::RequestDecoder decoder;
-    for (std::size_t offset = 0; offset < fixture.wire.size(); offset += 17) {
-        const auto result = decoder.feed(std::string_view(fixture.wire).substr(offset, 17));
+    for (std::size_t offset = 0; offset < fixture.wire.size(); offset += fixture.feed) {
+        const auto result =
+            decoder.feed(std::string_view(fixture.wire).substr(offset, fixture.feed));
         if (const auto *parsed = std::get_if<orange::http::ParsedMessage>(&result.outcome)) {
             return digest(*parsed);
         }
