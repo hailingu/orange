@@ -1,5 +1,19 @@
 # HTTP Transport Performance Work — 2026-10-22
 
+## Measured Revisions
+
+Every number in this report belongs to an explicit commit, unlike the
+2026-10-16 report, which predates that convention:
+
+- **Before (the 2026-10-16 version)**: `34d598738631ece0ef6023c154fbf3ae52520296`
+  — the anchor commit carrying the October parser work.
+- **After (the 2026-10-22 version)**: `ee42431`'s source tree — production
+  sources byte-identical to the last optimization commit `5b404c3`; the bench
+  driver additionally carries the cross-revision adaptation that lets one
+  byte-identical driver compile against both revisions.
+- Environment: Apple clang 21.0.0 (clang-2100.3.34.2), arm64, macOS 27.0.1,
+  CMake 4.2.3, Release `-O2 -DNDEBUG`, no LTO, benchmark driver without IPO.
+
 ## Authorization And Scope
 
 The repository owner authorized three optimization rounds in the performance
@@ -9,11 +23,10 @@ instruction for the third round. These extend the scoped exception pattern
 recorded in `docs/adr/INDEX.md` (2026-10-15/2026-10-16): implementation
 precedes individual record approval, and every round is backfilled as a
 retrospective Full ADR. The governing records are
-`service/docs/adr/ADR-0005-fixed-body-reserve.md` (Accepted / Complete),
-`service/docs/adr/ADR-0006-static-rejection-wires.md` (Accepted / Complete),
-and `service/docs/adr/ADR-0007-append-form-response-serialization.md`
-(Proposed at this writing; its numbers are the historical exception execution
-cited there).
+`service/docs/adr/ADR-0005-fixed-body-reserve.md`,
+`service/docs/adr/ADR-0006-static-rejection-wires.md`, and
+`service/docs/adr/ADR-0007-append-form-response-serialization.md`, all
+Accepted / Complete on the same day.
 
 All three rounds preserve the HTTP grammar, error precedence, owned results,
 pipeline boundaries, sticky failures, the independent 8 KiB head / 1 MiB
@@ -21,134 +34,98 @@ content / 8 KiB chunk-metadata limits, and the close-after-rejection
 lifecycle. No dependency, target CPU intrinsic, build-flag, or LTO change was
 introduced. Server socket throughput remains outside measurement.
 
-## Extended Measurement Dimensions
+## Extended Coverage Vs The 2026-10-16 Report
 
-The 2026-10-16 report measured parser latency only. This round set extends
-coverage because the work added capabilities:
+The October report measured parser latency over sixteen fixtures. The code
+has since gained the response layer (the serializer first appears in
+`87548eb`, 2026-10-19 — after the October anchor), so this report extends the
+measured dimensions:
 
-1. **Latency per fixture** (unchanged method): median of five per-run medians,
-   alternating old/new executable order.
-2. **Allocation calls and requested bytes per fixture** (now headline
-   evidence): `http_parser_allocations` runs the identical workloads in a
-   separate executable; both reservation rounds are allocation-motivated, so
-   counts are reported beside latency.
-3. **Response serialization** (new `respond` mode): the benchmark now covers
-   the outbound half of the per-request path, not just parsing; the driver
-   adapts to the linked library revision through a dependent-lookup template,
-   keeping one byte-identical driver source for both revisions.
+1. **Latency per fixture** (unchanged method): median of five per-run
+   medians, alternating old/new executable order.
+2. **Allocation calls and requested bytes per fixture** (headline evidence):
+   `http_parser_allocations` runs the identical workloads in a separate
+   executable.
+3. **Response serialization** (new `respond` mode): covers the outbound half
+   of the per-request path. This dimension has no October counterpart — the
+   serializer did not exist at the anchor — so the fixture reports the
+   current revision only.
 4. **Transport feed size** (new `Case::feed`): fragmented delivery was fixed
-   at 17 bytes; it is now parameterized, and the 16 KiB value mirrors the
-   event loop's recv buffer.
+   at 17 bytes; it is now parameterized, and 16 KiB mirrors the event loop's
+   recv buffer. The fixed-body fixture uses it.
 5. **Per-request path accounting** (analysis, not measurement): user-space
-   body copies and heap allocations per echo request, before and after the
-   three rounds.
+   body copies and heap allocations per echo request.
 
-The fixture set grew sixteen to eighteen: `body_1m_fixed_feed16384` (round 1)
-and `respond_echo_chunked_1024` (round 3); the CLI contract count was pinned
-at each step.
+The fixture set grew sixteen to eighteen: `body_1m_fixed_feed16384` and
+`respond_echo_chunked_1024`; the CLI contract count was pinned at each step.
+The driver detects the linked revision (`__has_include` plus dependent
+lookup), so the October build reports seventeen fixtures and the current
+build eighteen from one byte-identical driver source.
 
-## Predetermined Verification
+## Results — 2026-10-16 vs 2026-10-22
 
-- Every new or changed behavior lands test-first: the failing check is
-  observed before its implementation (red commits below).
-- Retention rule inherited from the October work: keep an optimization only
-  with a measured improvement beyond run-to-run noise on the target fixture
-  and no repeatable >15% regression on any pre-existing fixture.
-- Rejection wires must stay byte-identical to the serializer's output for
-  every `ParseError` value.
-- Append-form serialization must equal the owning form byte for byte,
-  preserve existing destination content, and leave the destination unchanged
-  on validation or allocation failure.
-- Correctness suites, sanitizer suites, governance validation, and formatting
-  checks all pass; disposable build trees are deleted after retaining results.
+Same-day paired comparison of the two measured revisions, five alternating
+run pairs, median of per-run medians:
 
-## Results
-
-### Round 1 — reserve the declared fixed body length (ADR-0005)
-
-`start_body` now reserves the exact, cap-bounded Content-Length once instead
-of regrowing geometrically across transport fragments. Apple clang 21.0.0
-(clang-2100.3.34.2), arm64, macOS 27.0.1, `-O2 -DNDEBUG`, no LTO; five
-alternating pairs; values are the median of the five per-run medians.
-
-| Fixture | Before | After | Change |
+| Fixture | 10-16 (`34d5987`) | 10-22 (`ee42431`) | Change |
 | --- | ---: | ---: | ---: |
-| head_long_values_16 | 310.7 ns | 313.3 ns | +0.8% |
-| head_short_fields_1000 | 7,940.9 ns | 7,911.4 ns | -0.4% |
-| head_ows_7800 | 407.7 ns | 406.5 ns | -0.3% |
-| head_ows_8_fields | 445.5 ns | 450.7 ns | +1.2% |
-| head_one_short_field | 52.8 ns | 52.7 ns | -0.2% |
-| head_minimal | 19.3 ns | 19.4 ns | +0.4% |
-| head_realistic_434 | 187.7 ns | 183.1 ns | -2.4% |
-| head_full_8192 | 5,173.9 ns | 5,067.9 ns | -2.0% |
-| head_decoder_whole | 223.7 ns | 222.6 ns | -0.5% |
-| head_decoder_feed17 | 795.1 ns | 787.0 ns | -1.0% |
-| echo_chunked_1024 | 178.8 ns | 177.6 ns | -0.7% |
-| body_1m_chunk1024 | 44,065.8 ns | 43,752.6 ns | -0.7% |
-| body_1m_chunk16384 | 29,165.4 ns | 29,460.4 ns | +1.0% |
-| **body_1m_fixed_feed16384** | **43,913.4 ns** | **16,729.9 ns** | **-61.9%** |
-| extension_7000 | 1,943.2 ns | 1,955.8 ns | +0.6% |
-| trailer_7000 | 1,957.7 ns | 1,941.9 ns | -0.8% |
-| head_cr_dense | 154.5 ns | 151.9 ns | -1.7% |
+| head_long_values_16 | 315.9 ns | 315.6 ns | -0.1% |
+| head_short_fields_1000 | 7,954.6 ns | 7,981.2 ns | +0.3% |
+| head_ows_7800 | 408.0 ns | 407.8 ns | -0.1% |
+| head_ows_8_fields | 446.3 ns | 448.4 ns | +0.5% |
+| head_one_short_field | 53.6 ns | 54.2 ns | +1.2% |
+| head_minimal | 19.7 ns | 20.4 ns | +3.5% |
+| head_realistic_434 | 187.7 ns | 188.6 ns | +0.5% |
+| head_full_8192 | 5,127.4 ns | 5,245.9 ns | +2.3% |
+| head_decoder_whole | 234.2 ns | 227.9 ns | -2.7% |
+| head_decoder_feed17 | 794.4 ns | 782.3 ns | -1.5% |
+| echo_chunked_1024 | 180.0 ns | 176.9 ns | -1.7% |
+| body_1m_chunk1024 | 44,247.4 ns | 43,552.4 ns | -1.6% |
+| body_1m_chunk16384 | 28,874.0 ns | 29,760.9 ns | +3.1% |
+| **body_1m_fixed_feed16384** | **44,628.6 ns** | **17,512.8 ns** | **-60.8%** |
+| extension_7000 | 1,978.1 ns | 1,964.6 ns | -0.7% |
+| trailer_7000 | 1,957.4 ns | 1,962.5 ns | +0.3% |
+| head_cr_dense | 153.8 ns | 154.2 ns | +0.2% |
+| respond_echo_chunked_1024 | N/A — no serializer at the anchor | 53.9 ns | new dimension |
 
-Per-run medians for the target fixture do not overlap: baseline 42,553–47,129
-ns, optimized 16,257–16,981 ns. Allocation measurement on the same pair:
-`body_1m_fixed_feed16384` drops 11 to 4 ordinary calls and 4,173,088 to
-1,048,872 requested bytes; all other fixture counts are unchanged and
-checksums agree on all seventeen fixtures.
+Per-run medians for the target fixture do not overlap: October
+44,280–46,324 ns, current 16,553–18,767 ns. Every October fixture that the
+rounds did not target stays within ±3.5% — noise and link-layout level, far
+inside the ±15% retention guard; the fixtures' code paths are untouched by
+the rounds, which is exactly why their drift bounds the measurement noise.
 
-Memory-profile disclosure: a declared length is now committed up front, still
-bounded by the existing 1 MiB body cap per message.
+Allocation measurement on the same revisions: `body_1m_fixed_feed16384`
+drops 11 to 4 ordinary calls and 4,173,088 to 1,048,872 requested bytes; all
+other shared fixtures' counts and bytes are unchanged; result checksums agree
+on every shared fixture.
 
-### Round 2 — precomputed static rejection wires (ADR-0006)
+Parser-equivalence streams are byte-identical across the two revisions:
+95,480 semantic cases, fixed seed `0x53544F52`.
 
-Terminal rejections are answered from six `constexpr` wires via `error_wire`,
-and the event loop's rejection, handler-failure, and serializer-fallback
-paths append them directly. This is a cold path by design, so no latency
-fixture claims a win; the evidence is structural: nine byte-equality pins
-against `write_response(error_response(...))` (one per `ParseError` value),
-the elimination of a file-local duplicate 500 wire, and a rejection path that
-cannot allocate beyond the outgoing buffer's own growth.
+## Per-Round Attribution
 
-### Round 3 — append-form response serialization (ADR-0007)
+Each round's own paired measurement (same-driver, against its immediate
+parent state) attributes the cross-version totals:
 
-`write_response_into` serializes straight into the caller's buffer;
-`write_response` delegates to it, and `queue_response` no longer builds a
-per-response temporary or copies it wholesale. Same machine, flags, and
-pairing method as round 1.
+| Round | Commits (red / green) | Change | Round-local target evidence |
+| --- | --- | --- | --- |
+| 1 — reserve the declared fixed body (ADR-0005) | `ae95ecc` / `b419a80` (+ format `9e96ef6`) | One reservation replaces geometric regrowth for fixed framing | 43,913 → 16,730 ns (-61.9%); 11 → 4 calls / 4,173,088 → 1,048,872 bytes |
+| 2 — precomputed static rejection wires (ADR-0006) | `2f53c85` / `1b638ba` | Rejection path allocates nothing; six compile-time wires | Cold path, no latency claim; nine byte-equality pins against the serializer |
+| 3 — append-form response serialization (ADR-0007) | `2be8eaa` / `5b404c3` | The per-response temporary string and its full-wire copy removed | 91.0 → 52.7 ns (-42.1%); 2 → 1 calls / 2,176 → 1,088 bytes |
 
-| Fixture | Before | After | Change |
-| --- | ---: | ---: | ---: |
-| head_long_values_16 | 307.3 ns | 314.1 ns | +2.2% |
-| head_short_fields_1000 | 7,953.0 ns | 7,931.2 ns | -0.3% |
-| head_ows_7800 | 406.3 ns | 410.0 ns | +0.9% |
-| head_ows_8_fields | 446.4 ns | 449.0 ns | +0.6% |
-| head_one_short_field | 53.6 ns | 54.2 ns | +1.1% |
-| head_minimal | 19.2 ns | 19.6 ns | +1.7% |
-| head_realistic_434 | 183.4 ns | 183.0 ns | -0.2% |
-| head_full_8192 | 5,069.8 ns | 5,090.9 ns | +0.4% |
-| head_decoder_whole | 221.9 ns | 223.4 ns | +0.7% |
-| head_decoder_feed17 | 756.3 ns | 768.0 ns | +1.5% |
-| echo_chunked_1024 | 176.5 ns | 176.4 ns | -0.0% |
-| **respond_echo_chunked_1024** | **91.0 ns** | **52.7 ns** | **-42.1%** |
-| body_1m_chunk1024 | 43,461.9 ns | 43,217.8 ns | -0.6% |
-| body_1m_chunk16384 | 28,407.9 ns | 28,621.3 ns | +0.8% |
-| body_1m_fixed_feed16384 | 16,678.8 ns | 16,570.7 ns | -0.6% |
-| extension_7000 | 1,939.2 ns | 1,947.8 ns | +0.4% |
-| trailer_7000 | 1,937.8 ns | 1,942.7 ns | +0.2% |
-| head_cr_dense | 153.3 ns | 153.7 ns | +0.2% |
+Round 2 is invisible to the latency benchmark by design (rejections are a
+cold path); its evidence is the byte-equality pin and the eliminated
+allocation. Round 3's target fixture measures the exact per-request
+serialization pattern the event loop performs.
 
-Per-run medians for the target fixture do not overlap: baseline 88.9–98.6 ns,
-optimized 52.4–53.1 ns. Allocation measurement: `respond_echo_chunked_1024`
-drops 2 to 1 calls and 2,176 to 1,088 requested bytes; all other counts
-unchanged; checksums agree on all eighteen fixtures.
-
-### Per-request path accounting (analysis)
+## Per-Request Path Accounting (Analysis)
 
 For one echo request through the event loop, user-space body copies and heap
-allocations, derived from the source — not separately measured:
+allocations, derived from the source — not separately measured. "Before the
+rounds" is the source state at `0c776ca`; the anchor revision predates the
+response layer entirely.
 
-| Stage | Before the three rounds | After |
+| Stage | Before the rounds | After the rounds |
 | --- | --- | --- |
 | recv buffer → `incoming` | 1 copy | 1 copy (unchanged; a direct-feed path remains future work) |
 | `incoming` → decoded body | 1 copy, geometric regrowth (~8 allocs per 1 MiB in 16 KiB feeds) | 1 copy, one reserved allocation for fixed framing |
@@ -159,12 +136,12 @@ allocations, derived from the source — not separately measured:
 
 | Preserved contract | Executed evidence | Result |
 | --- | --- | --- |
-| Decoded bytes, consumed accounting, error precedence, pipeline suffix, reset | `http_parser_equivalence` streams byte-identical over 95,480 semantic cases (round 1 pair) | Pass |
+| Decoded bytes, consumed accounting, error precedence, pipeline suffix, reset | Equivalence streams byte-identical over 95,480 semantic cases across `34d5987` and `ee42431` | Pass |
 | Fixed-body allocation bound and failure channel | Red `ae95ecc` (11 allocations observed failing the bound), green `b419a80` (4 allocations); fail-at-every-site injection returns `resource_exhausted` | Pass |
 | Rejection wires byte-identical per `ParseError` | Red `2f53c85` (missing-API build failure), green `1b638ba` (60 checks, 0 failures) | Pass |
 | Append-form equality, prefix preservation, unchanged-on-failure, fault injection | Red `2be8eaa` (missing-API build failure), green `5b404c3` (72 checks, 0 failures) | Pass |
 | Socket-level serving lifecycle | Real-socket `http_server_tests` green at every green commit | Pass |
-| Benchmark CLI contract | Seventeen-, then eighteen-fixture contract passes in the Release trees | Pass |
+| Benchmark CLI contract | Seventeen-, then eighteen-fixture contract passes in the Release trees; Release ctest 9/9 at the After revision | Pass |
 
 | Baseline risk dimension | Assessment and owning boundary | Result |
 | --- | --- | --- |
@@ -172,21 +149,21 @@ allocations, derived from the source — not separately measured:
 | Timeout and deadline | N/A — no I/O, clock, or deadline behavior changed in any round | N/A |
 | Cancellation and interruption | Sticky failure after `bad_alloc` verified at every allocation site of the reserved path; close-after-flush unchanged on all rejection paths | Pass |
 | Resource bounds and backpressure | Reservation bounded by the pre-validated 1 MiB body cap; rejection path allocation-free; respond fixture allocations halved | Pass |
-| Framework or trust-boundary rejection | Over-cap and malformed inputs keep their classifications (equivalence corpus, decoder suites); serializer rejections unchanged (response suite) | Pass |
+| Framework or trust-boundary rejection | Over-cap and malformed inputs keep their classifications (cross-revision equivalence corpus, decoder suites); serializer rejections unchanged (response suite) | Pass |
 
 ## Verification And Reproduction
 
-- Environment: Apple clang 21.0.0 (clang-2100.3.34.2), arm64, macOS 27.0.1,
-  CMake 4.2.3; Release `-O2 -DNDEBUG`; benchmark driver without IPO.
-- Method: for each measured round, a disposable copy of the final source tree
-  with exactly that round's production patch reversed served as baseline; the
-  benchmark driver source was byte-identical across the pair (revision
-  adaptation via dependent lookup); five alternating run pairs; medians of
-  per-run medians; unrelated load minimized.
+- Method: the October revision was checked out as a detached worktree at
+  `34d5987` and overlaid with the byte-identical current bench driver (the
+  driver adapts to the revision through `__has_include` and dependent
+  lookup); both trees built Release with the documented flags; five
+  alternating run pairs; medians of per-run medians; unrelated load
+  minimized. Per-round measurements used the same pairing against each
+  round's parent state with the production patch reversed.
 - Routed Debug trio at every green commit: 8/8 suites, zero warnings
-  (`b419a80`, `1b638ba`, `5b404c3`). Release tree for round 3: 9/9 including
-  the eighteen-fixture CLI contract.
-- ASan/UBSan at HEAD `5b404c3`: 8/8 with `ASAN_OPTIONS=detect_leaks=0
+  (`b419a80`, `1b638ba`, `5b404c3`). Release tree at the After revision:
+  9/9 including the eighteen-fixture CLI contract.
+- ASan/UBSan at the After revision: 8/8 with `ASAN_OPTIONS=detect_leaks=0
   UBSAN_OPTIONS=halt_on_error=1` (Apple ASan does not support LeakSanitizer
   here; no leak-detection claim).
 - clang-format `--dry-run --Werror` clean on every touched C++ file;
@@ -194,18 +171,21 @@ allocations, derived from the source — not separately measured:
   validator suite 303/303 at each record change.
 - Commit ledger: red `ae95ecc` / green `b419a80` / format `9e96ef6` (round 1);
   red `2f53c85` / green `1b638ba` (round 2); red `2be8eaa` / green `5b404c3`
-  (round 3); records `a9720e2`, `e93f0cd`, `4b3aa17`; approvals `c0493fe`,
-  `3dd3bcb`, `acb1a50`.
+  (round 3); driver adaptation `ee42431`; records `a9720e2`, `e93f0cd`,
+  `4b3aa17`; approvals `c0493fe`, `3dd3bcb`, `acb1a50`, `5a16465`.
 - All disposable build and comparison trees were deleted after retaining
-  these results. Reproduce any round per `service/bench/README.md`.
+  these results. Reproduce per `service/bench/README.md`; reconstruct the
+  October baseline with a detached worktree at `34d5987` plus the current
+  `service/bench/` overlaid verbatim.
 
 ## Known Limitations
 
-- Numbers are single-machine, same-day, hot-cache comparisons; each round's
-  baseline is its own parent state, so cross-round and cross-day absolute
-  latencies are not comparable.
-- Response serialization is measured at the unit level (the exact per-request
-  pattern), not through sockets; server throughput remains unmeasured.
+- Each table is a same-day paired comparison; absolute latencies are not
+  comparable across days or machines. The October report's own numbers were
+  workspace-measured and not commit-anchored; this report anchors both ends,
+  and future reports are expected to do the same.
+- `respond_echo_chunked_1024` measures the serialization unit pattern, not a
+  socket round trip; server throughput remains unmeasured.
 - Round 2 has no latency claim by design.
-- The October report's absolute numbers predate these changes and describe
-  that day's machine state; use today's README procedure for fresh numbers.
+- The ±3.5% drift on untouched fixtures bounds this machine's noise level;
+  smaller effects are not resolvable with this method.
