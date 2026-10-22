@@ -5,6 +5,7 @@
 #ifndef ORANGE_HTTP_PARSER_WORKLOADS_HPP
 #define ORANGE_HTTP_PARSER_WORKLOADS_HPP
 #include "http_request_decoder.hpp"
+#include "http_response.hpp"
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -13,8 +14,9 @@
 #include <vector>
 namespace orange::bench {
 using orange::http::ParseError;
-// Separates complete head, complete message and transport-fragment delivery.
-enum class Mode { head, message, fragmented };
+// Separates complete head, complete message, transport-fragment delivery and
+// response serialization.
+enum class Mode { head, message, fragmented, respond };
 // Expected sizes and error are independent fixture facts, never parser output.
 struct Case {
     std::string name;
@@ -28,8 +30,22 @@ struct Case {
     // smallest grammar cursors, larger slices mirror the recv buffer.
     std::size_t feed = 17;
 };
+// Fixed echo response wire layout: the 17-byte status line, the 28-byte
+// Transfer-Encoding line, the 2-byte head terminator, the hex chunk-size
+// line, the content, its CRLF, and the 5-byte last chunk.
+inline std::size_t echo_response_wire_size(std::size_t content) {
+    std::size_t hex_digits = 1;
+    for (std::size_t n = content; n >= 16; n /= 16) {
+        ++hex_digits;
+    }
+    return 17 + 28 + 2 + hex_digits + 2 + content + 2 + 5;
+}
 // Expected observations come from fixture facts, independently of parser output.
 inline std::uint64_t expected_result(const Case &fixture) {
+    if (fixture.mode == Mode::respond) {
+        // The respond digest observes the wire size plus its 'H' and final LF.
+        return echo_response_wire_size(fixture.wire.size()) + 72 + 10;
+    }
     return fixture.malformed ? 1
                              : fixture.wire.size() + fixture.headers + fixture.content +
                                    (fixture.content == 0 ? 0 : 240);
@@ -93,6 +109,7 @@ inline std::vector<Case> fixtures() {
             {"head_decoder_whole", realistic, Mode::message, 9, 0, 10000},
             {"head_decoder_feed17", realistic, Mode::fragmented, 9, 0, 20000},
             {"echo_chunked_1024", chunked(1024, 1024), Mode::message, 1, 1024, 10000},
+            {"respond_echo_chunked_1024", std::string(1024, 'x'), Mode::respond, 0, 0, 10000},
             {"body_1m_chunk1024", chunked(1048576, 1024), Mode::message, 1, 1048576, 500000},
             {"body_1m_chunk16384", chunked(1048576, 16384), Mode::message, 1, 1048576, 500000},
             {"body_1m_fixed_feed16384", fixed(1048576), Mode::fragmented, 1, 1048576, 500000, false,
@@ -117,6 +134,19 @@ inline std::uint64_t digest(const orange::http::ParsedMessage &parsed) {
                                 : static_cast<unsigned char>(parsed.body.front()) +
                                       static_cast<unsigned char>(parsed.body.back()));
 }
+// Serializes with the append form when the linked library revision provides
+// it, else the owning form plus a copy. The unqualified call keeps the lookup
+// dependent, so one byte-identical driver compiles against both revisions.
+template <class R> void serialize_adaptive(const R &response, std::string &out) {
+    if constexpr (requires { write_response_into(response, out); }) {
+        (void)write_response_into(response, out);
+    } else {
+        auto result = orange::http::write_response(response);
+        if (const auto *bytes = std::get_if<std::string>(&result)) {
+            out += *bytes;
+        }
+    }
+}
 // Includes construction, parsing, result observation and destruction per request.
 inline std::uint64_t run(const Case &fixture) {
     if (fixture.mode == Mode::head) {
@@ -130,6 +160,16 @@ inline std::uint64_t run(const Case &fixture) {
         const auto result = orange::http::parse_message(fixture.wire);
         const auto *parsed = std::get_if<orange::http::ParsedMessage>(&result);
         return parsed ? digest(*parsed) : 0;
+    }
+    if (fixture.mode == Mode::respond) {
+        // respond cases carry the echo response body content in `wire`.
+        const orange::http::Response response{
+            200, orange::http::BodyFraming::chunked, fixture.wire, {}, false};
+        std::string out;
+        serialize_adaptive(response, out);
+        return out.empty() ? 0
+                           : out.size() + static_cast<unsigned char>(out.front()) +
+                                 static_cast<unsigned char>(out.back());
     }
     orange::http::RequestDecoder decoder;
     for (std::size_t offset = 0; offset < fixture.wire.size(); offset += fixture.feed) {

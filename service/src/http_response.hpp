@@ -8,6 +8,7 @@
 #define ORANGE_HTTP_RESPONSE_HPP
 #include "http_messages.hpp"
 #include <cstddef>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -76,6 +77,15 @@ enum class ResponseError {
 // chunked body is the last chunk alone. Allocation failure returns
 // resource_exhausted instead of throwing across this boundary.
 [[nodiscard]] std::variant<std::string, ResponseError> write_response(const Response &response);
+
+// Appends one complete response's wire bytes to `out` under the same
+// validation and framing contract as write_response, so a caller with a
+// persistent queue (the event loop's outgoing backlog) skips the per-response
+// temporary string and its copy. Validation or allocation failure returns the
+// ResponseError and leaves `out` unchanged; nothing throws across this
+// boundary.
+[[nodiscard]] std::optional<ResponseError> write_response_into(const Response &response,
+                                                               std::string &out);
 
 // The precomputed closing wire for a terminal parse error: byte-identical to
 // write_response(error_response(error)) — status line, Connection: close, and

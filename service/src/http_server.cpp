@@ -151,18 +151,16 @@ bool requests_close(const Request &request) {
     return false;
 }
 
-// Appends the serialized response to the outgoing backlog, falling back to
-// the precomputed 500 closing wire when serialization cannot allocate.
+// Serializes the response straight into the outgoing backlog, falling back
+// to the precomputed 500 closing wire when validation or allocation fails.
 void queue_response(Connection &connection, const Response &response) {
-    auto wire = write_response(response);
-    if (const auto *bytes = std::get_if<std::string>(&wire)) {
-        connection.outgoing += *bytes;
-        if (response.close)
-            connection.closing_after_flush = true;
+    if (write_response_into(response, connection.outgoing)) {
+        connection.outgoing += error_wire(ParseError::resource_exhausted);
+        connection.closing_after_flush = true;
         return;
     }
-    connection.outgoing += error_wire(ParseError::resource_exhausted);
-    connection.closing_after_flush = true;
+    if (response.close)
+        connection.closing_after_flush = true;
 }
 
 // Appends the precomputed closing wire for one terminal parse error. The

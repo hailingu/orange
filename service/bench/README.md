@@ -26,17 +26,20 @@ observes each result and is emitted after timing. Fixture construction and
 one validation pass occur outside timing. Each measured request includes
 decoder construction (where applicable), result materialization, observation
 and destruction. `head_*` without `decoder` uses `parse_request`; message and
-decoder cases use fresh decoders, not capacity-retaining reset loops.
+decoder cases use fresh decoders, not capacity-retaining reset loops; respond
+cases serialize one caller-built chunked echo response per iteration, with the
+append form used when the linked library revision provides it.
 
-Seventeen fixtures cover an 18-byte minimal head; a 434-byte, nine-field head;
+Eighteen fixtures cover an 18-byte minimal head; a 434-byte, nine-field head;
 an 8,192-byte, 409-field head; the same 434-byte head through a whole-input
-decoder and 17-byte feeds; a 1 KiB chunked echo; 1 MiB content in 1 KiB and
-16 KiB HTTP chunks; 1 MiB fixed Content-Length content in 16 KiB transport
-feeds; a 7,000-byte token extension; a 7,000-byte trailer value;
-and an 8 KiB malformed CR-dense head. HTTP chunk size and transport feed size
-are different variables. Five storage diagnostics add 16 long values, 1,000
-short fields, 7,800 OWS octets, eight OWS-padded fields, and one short field.
-All successful fixtures fit the existing budgets.
+decoder and 17-byte feeds; a 1 KiB chunked echo; one chunked echo-response
+serialization; 1 MiB content in 1 KiB and 16 KiB HTTP chunks; 1 MiB fixed
+Content-Length content in 16 KiB transport feeds; a 7,000-byte token
+extension; a 7,000-byte trailer value; and an 8 KiB malformed CR-dense head.
+HTTP chunk size and transport feed size are different variables. Five storage
+diagnostics add 16 long values, 1,000 short fields, 7,800 OWS octets, eight
+OWS-padded fields, and one short field. All successful fixtures fit the
+existing budgets.
 
 `http_parser_allocations` runs the identical workloads in a separate executable,
 reporting ordinary `operator new` calls and total requested bytes per request,

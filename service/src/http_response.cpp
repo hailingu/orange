@@ -208,16 +208,27 @@ std::string_view error_wire(ParseError error) {
 }
 
 std::variant<std::string, ResponseError> write_response(const Response &response) {
-    if (const auto invalid = validate(response))
-        return *invalid;
     std::string out;
+    if (const auto failed = write_response_into(response, out)) {
+        return *failed;
+    }
+    return out;
+}
+
+std::optional<ResponseError> write_response_into(const Response &response, std::string &out) {
+    if (const auto invalid = validate(response)) {
+        return *invalid;
+    }
     try {
-        out.reserve(wire_size(response));
+        // Reserve once against the precomputed wire size: the serialize pass
+        // then appends without reallocating, and a reserve throw leaves the
+        // caller's buffer untouched.
+        out.reserve(out.size() + wire_size(response));
         serialize(response, out);
     } catch (const std::bad_alloc &) {
         return ResponseError::resource_exhausted;
     }
-    return out;
+    return std::nullopt;
 }
 
 // The rejection each terminal parse error owes the connection. The status
