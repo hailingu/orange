@@ -80,7 +80,13 @@ clock-batching, receive-buffer, sendmsg and storage-recycling candidates
 (“S3、S4，S5 是有价值的，其他的反对”), requesting one measured rerun. This
 extends the same waived transport slice once more, including the bounded
 decoder-contract addition of a derived close flag; individual acceptance
-remains outstanding.
+remains outstanding. On 2026-10-28, after the full SB-6 rerun, the owner
+requested applying the three internal micro-tunings (“按照你的建议微调更新一次，
+并再次测试一轮”): field-name length pre-filtering in `detail::head_policy`,
+skipping the second `kevent` write-pass scan before the first `EVFILT_WRITE`
+index, and sampling `steady_clock::now()` once per `read_connection` /
+`write_connection` drain rather than on every 16 KiB slice. Individual
+acceptance remains outstanding.
 
 ## Scope [Required]
 
@@ -187,9 +193,11 @@ specifies unchanged udata and automatic removal of descriptor events on close.
   splice(end, list, prev(end)) form hits the standard's position == ++i
   undefined case on every single-connection touch.
 - **KS-10**: Resolve the request's Connection: close option (RFC 9110 7.6.1)
-  in the same single validated-field pass that resolves body framing, and
-  carry it on ParsedMessage.close; the event loop performs no second header
-  scan at response time.
+  in the same single validated-field pass that resolves body framing (pre-filtered
+  by exact field-name length 10/14/17), and carry it on ParsedMessage.close;
+  the event loop performs no second header scan at response time, skips the
+  write-pass scan up to the first EVFILT_WRITE index, and samples the activity
+  clock once per non-empty read/write drain rather than per 16 KiB slice.
 
 
 ### Consequences [Required]
@@ -248,7 +256,10 @@ docs/reviews/2026-10-22-http-performance-source.patch;
 docs/reviews/2026-10-22-kqueue-udata.patch;
 docs/reviews/2026-10-22-kqueue-udata-evidence.json;
 docs/reviews/2026-10-23-head-policy-interest-shortcircuit.patch;
-docs/reviews/2026-10-23-head-policy-interest-shortcircuit-evidence.json.
+docs/reviews/2026-10-23-head-policy-interest-shortcircuit-evidence.json;
+docs/reviews/2026-10-28-http-performance.md;
+docs/reviews/2026-10-28-http-performance-evidence.json;
+docs/reviews/2026-10-28-micro-tuning.patch.
 
 ### Stable Implementation Touchpoints [Conditionally Required — source or configuration implementation]
 
@@ -368,6 +379,7 @@ index, and preserve reciprocal supersession paths when applicable.
 
 | Date | Change | Author |
 | --- | --- | --- |
+| 2026-10-28 | Fold the owner-requested micro-tunings (head_policy length switch, first_write batch index and once-per-drain activity timestamp) into T-4 / KS-10 and record the 2026-10-28 SB-6 rerun evidence; approval pending | @codex |
 | 2026-10-23 | Extend the waived transport slice with the owner-selected short circuits KS-8/KS-9/KS-10, subtask T-4 and AC-9..AC-11; measured round retained on structural grounds with disclosed noise-level results; approval pending | @k3 |
 | 2026-10-23 | Extend waived lifecycle scope to dirty work, ordered expiry and retired-only reclamation; keep fresh clocks/capacity64; approval pending | @codex |
 | 2026-10-22 | Backfill the owner-waived performance task, then extend the same transport slice for the owner-requested stable-udata dispatch rerun; individual approval still outstanding | @codex |
