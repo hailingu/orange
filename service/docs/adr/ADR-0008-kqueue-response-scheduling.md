@@ -80,7 +80,12 @@ clock-batching, receive-buffer, sendmsg and storage-recycling candidates
 (“S3、S4，S5 是有价值的，其他的反对”), requesting one measured rerun. This
 extends the same waived transport slice once more, including the bounded
 decoder-contract addition of a derived close flag; individual acceptance
-remains outstanding. On 2026-10-28, after the full SB-6 rerun, the owner
+remains outstanding. Later on 2026-10-28 the owner re-selected the
+receive-buffer candidate previously rejected on 2026-10-23 (“只执行
+receive-buffer（16→64 KiB）这个优化，其他的不动，然后再做一轮测试，更新benchmark
+文件”), widening the receive window from 16 KiB to 64 KiB as KS-11 with one
+focused suite and a measured five-group rerun; no other rejected candidate is
+reopened, and individual acceptance remains outstanding. On 2026-10-28, after the full SB-6 rerun, the owner
 requested applying the three internal micro-tunings (“按照你的建议微调更新一次，
 并再次测试一轮”): field-name length pre-filtering in `detail::head_policy`,
 skipping the second `kevent` write-pass scan before the first `EVFILT_WRITE`
@@ -95,9 +100,9 @@ immediate nonblocking send after read, stable kqueue udata dispatch, batch-safe
 connection ownership, dirty interest work, activity-ordered idle expiry,
 deferred reclamation, interest-transition gating before dirty queueing,
 identity tail-splice skipping, single-pass head policy classification carrying
-the Connection: close option on ParsedMessage, and regression tests. The
-decoder contract gains one derived boolean; there is no new public serving
-option and no grammar decision.
+the Connection: close option on ParsedMessage, the owner-reselected 64 KiB
+receive window, and regression tests. The decoder contract gains one derived
+boolean; there is no new public serving option and no grammar decision.
 
 Out of scope: EV_CLEAR, production threads, body pooling, TLS and remote CI.
 Fresh successful-I/O timestamps and event_capacity64 remain. Batch-send
@@ -158,7 +163,8 @@ specifies unchanged udata and automatic removal of descriptor events on close.
 
 - **KS-1**: After a read queues output, attempt nonblocking send before the
   next kevent wait. Retain unsent bytes/offset and arm EVFILT_WRITE if blocked.
-- **KS-2**: Feed recv's at-most-16-KiB window directly; consume every pipeline
+- **KS-2**: Feed recv's bounded transport window directly (16 KiB initially,
+  64 KiB since KS-11); consume every pipeline
   suffix by advancing a string_view in the same call. Do not allocate a
   separate connection input-staging string or shift each consumed prefix.
 - **KS-3**: Preserve wire bytes and response order, rejection closure, peer
@@ -198,6 +204,12 @@ specifies unchanged udata and automatic removal of descriptor events on close.
   the event loop performs no second header scan at response time, skips the
   write-pass scan up to the first EVFILT_WRITE index, and samples the activity
   clock once per non-empty read/write drain rather than per 16 KiB slice.
+- **KS-11**: Drain each readiness receive through a 64 KiB window (widened from
+  16 KiB by the owner's 2026-10-28 re-selection, overturning the 2026-10-23
+  rejection of this one candidate), so a coalesced peer write crosses the
+  socket boundary in fewer recv calls. No client, framing, cap, staging or
+  backpressure behavior changes; the buffer stays a bounded per-drain stack
+  window.
 
 
 ### Consequences [Required]
@@ -224,7 +236,10 @@ longer queue, unlink and rebuild no-op interest transitions. Its measured
 throughput and worker-CPU changes are within run noise on every scenario
 (disclosed, not claimed as gains); the removals are retained because each
 eliminated step is provably dead work, and KS-9 additionally removes a
-standards-undefined splice edge.
+standards-undefined splice edge. The receive-window round (KS-11) grows the
+per-drain stack window from 16 KiB to 64 KiB, adds no allocation, and its
+measured five-group rerun is recorded in the 2026-10-28 report; gains or
+noise there are disclosed per scenario, not generalized.
 
 ## Implementation Plan [Required]
 
@@ -239,7 +254,7 @@ receive staging or a mandatory extra wait before sending.
 | T-1 | Deliver direct input and immediate-send path | http_server.cpp/.hpp and focused scheduling/input tests | Complete | Historical exception: KS-1 wire Pass/wait Fail becomes Pass/Pass; KS-2 staging-band allocations 1 becomes 0 with body Pass |
 | T-2 | Verify lifecycle and measured retention | Extended server tests; full suites; report/evidence | Complete | Historical exception: Debug 10/10, Release 12/12, sanitizer 10/10; 48 socket checks; all eight median throughput ratios >= 0.85 |
 | T-3 | Deliver event-proportional management and batch-safe direct dispatch | http_server.cpp; ConnectionStore; lifecycle/dispatch tests; same-driver controls | Complete | Historical exception: wire Pass / stable_udata Fail becomes Pass / Pass with 161 registrations and same-batch hints; Debug 11/11, Release 13/13, ASan/UBSan 11/11; five 2000-ms pairs, 18,457,885 responses, zero errors; all eight median ratios >= 0.85; udata evidence JSON and patch retained. 10-23: dirty/order mutants rejected; lifecycle tests green; split-process scaling controls and full checks retained in 10-23 evidence |
-| T-4 | Deliver interest gating, tail-touch skip and single-pass head policy | http_server.cpp; http_connection_store.cpp; http_body_framing.cpp/.hpp; http_request_decoder.cpp/.hpp; decoder/store tests | Complete | Historical exception: decoder suite compile-red on missing ParsedMessage.close, then green with option-list/case/OWS/duplicate/fragment/reset pins; store tail-touch order pin; Debug 12/12, Release 15/15, ASan/UBSan 12/12; parser guard 18/18; equivalence 68,241,183 bytes byte-identical; allocation calls unchanged with +8 requested bytes per decoder fixture; five alternating 2000-ms groups over ten scenarios, 18,628,104 responses, zero errors; short-circuit evidence JSON and patch retained |
+| T-4 | Deliver interest gating, tail-touch skip, single-pass head policy and the 64 KiB receive window | http_server.cpp; http_connection_store.cpp; http_body_framing.cpp/.hpp; http_request_decoder.cpp/.hpp; decoder/store/receive tests | Complete | Historical exception: decoder suite compile-red on missing ParsedMessage.close, then green with option-list/case/OWS/duplicate/fragment/reset pins; store tail-touch order pin; Debug 12/12, Release 15/15, ASan/UBSan 12/12; parser guard 18/18; equivalence 68,241,183 bytes byte-identical; allocation calls unchanged with +8 requested bytes per decoder fixture; five alternating 2000-ms groups over ten scenarios, 18,628,104 responses, zero errors; short-circuit evidence JSON and patch retained. 10-28 window round: KS-11 pin red at HEAD (data_receives=5, window64k=Fail) then green (wire/body/window64k Pass), Debug 13/13, Release 16/16, ASan/UBSan 13/13, five-group ten-scenario paired rerun retained in the 10-28 report round 3 |
 
 **Affected paths**: service/src/http_server.cpp; service/src/http_server.hpp;
 service/src/http_connection_store.cpp; service/src/http_body_framing.cpp;
@@ -249,6 +264,7 @@ service/tests/http_server_tests.cpp; service/tests/http_server_scheduling_tests.
 service/tests/http_server_input_tests.cpp; service/tests/http_server_dispatch_tests.cpp;
 service/tests/http_connection_store_tests.cpp;
 service/tests/http_request_decoder_tests.cpp;
+service/tests/http_server_receive_tests.cpp;
 service/CMakeLists.txt.
 **Affected evidence files**: docs/reviews/2026-10-22-http-performance.md;
 docs/reviews/2026-10-22-http-performance-evidence.json;
@@ -289,6 +305,13 @@ Short-circuit round touchpoints:
 `orange::http::ParsedMessage::close` in `service/src/http_request_decoder.hpp`.
 Source revision: 10-23 head-policy/interest short-circuit patch, SHA-256
 `e6e95ac2b0f31ea5924728482ee335c690be815399c74fe7ec6cbeeb14e3c3b6`.
+Receive-window round touchpoints:
+`orange::http::(anonymous namespace)::receive_window` and
+`orange::http::(anonymous namespace)::read_connection` in
+`service/src/http_server.cpp`; `::recv`; `::main` in
+`service/tests/http_server_receive_tests.cpp`. Source revision: 10-28
+receive-window patch and SHA-256 manifest recorded in
+`docs/reviews/2026-10-28-http-performance.md`.
 
 **Migration and rollback strategy [Conditionally Required — this replaces or changes existing behavior]**:
 No data migration. Revert only this record's production patch to restore staging
@@ -329,6 +352,7 @@ span and nesting are reviewed instead.
 | KS-8 | This record, Decision | Interest work queued only on a real wanted-versus-tracked transition, via one shared predicate | AC-9; AC-10 | Deterministic inspection that the guard and emitter share the predicate; full real-socket suites exercising backpressure, slow-reader and close transitions that must still re-arm filters |
 | KS-9 | This record, Decision | Identity tail splice skipped; no position == ++i splice | AC-9; AC-10 | Store tail-touch order pin; ASan/UBSan suites |
 | KS-10 | This record, Decision | Close option resolved in the single framing pass on ParsedMessage.close; no response-time header scan | AC-9; AC-11 | Decoder close-option suite (list, case, OWS, duplicates, fragments, reset); real-socket Connection: close lifecycle; byte-identical equivalence stream |
+| KS-11 | This record, Decision | One-write 64 KiB body drained in at most three data receives; no framing, cap, staging or backpressure change | AC-12; AC-13 | Receive-window suite red at the 16 KiB window and green at 64 KiB; full routed suites and five-group paired rerun |
 
 ## Risk Coverage Matrix [Conditionally Required — source or configuration implementation]
 
@@ -337,7 +361,7 @@ span and nesting are reviewed instead.
 | concurrency and ordering | Pipeline crosses multiple recv windows while other clients progress | Socket transport | 512-pipeline, slow-reader and dispatch-lifetime tests | Every response exact and ordered; active peer progresses; old batch events cannot route to replacement connections | AC-3; AC-5; AC-7; AC-8 | Pass | Historical suites plus current list reordering/retirement and sanitized dispatch; short-circuit round keeps the same suites and wire-exact bench green |
 | timeout and deadline | Touched oldest node; exact expiry; stalled output | ConnectionStore/socket lifecycle | Synthetic monotonic deadline unit cases and real slow-reader/idle tests | Touched node moves behind older peer; exact-boundary expiry without early close; active peer progresses | AC-3; AC-7; AC-8 | Pass | 10-23 unit, mutation and full socket evidence; tail-touch skip keeps the pinned deadline order in AC-9 |
 | cancellation and interruption | Allocation failure, peer close, stop flag | Connection-local I/O | Existing decoder fault injection and shutdown/EOF tests; sanitizer suite | Coded failure or connection-local close; no dangling recv views; clean stop | AC-2; AC-3; AC-7; AC-8 | Pass | Current lifecycle owner, real socket and ASan/UBSan evidence, rerun for the short-circuit round |
-| resource bounds and backpressure | 1 MiB fragmented input, output becomes blocked | Decoder and output queue | Allocation probe and three queued large responses | Zero staging-band allocations; body intact; blocked bytes eventually delivered | AC-2; AC-3; AC-8 | Pass | KS-2 and current slow-reader/scaling checks; AC-10 shows allocation call counts unchanged |
+| resource bounds and backpressure | 1 MiB fragmented input, output becomes blocked | Decoder and output queue | Allocation probe and three queued large responses | Zero staging-band allocations; body intact; blocked bytes eventually delivered | AC-2; AC-3; AC-8 | Pass | KS-2 and current slow-reader/scaling checks; AC-10 shows allocation call counts unchanged; the KS-11 window keeps caps, staging and backpressure byte-identical with only the per-drain stack window widened |
 | framework or trust-boundary rejection | Malformed/over-cap input followed by pipeline suffix | Actual parser and sockets | Existing 400/413/431 rejection lifecycle checks | Exact rejection, EOF, no follow-up response; reconnect succeeds | AC-3; AC-8 | Pass | Current real-socket rejection checks; close-option rejection lifecycle unchanged under the fused single pass (AC-11) |
 
 ## Acceptance Checks [Required]
@@ -355,6 +379,8 @@ span and nesting are reviewed instead.
 | AC-9 | T-4 | Close option and tail-touch behavior pass | Decoder close-option fixtures; store tail-order pin; routed suites | http_request_decoder_tests; http_connection_store_tests; full Debug/Release/ASan/UBSan CTest | Decoder suite compiles only with the new member and exits0; every option-list/case/OWS/duplicate/fragment/reset pin passes; store order preserved; all suites exit0 | Red/green and suite logs | Pass | Compile red on missing close member, then green; 12/12, 15/15, 12/12 in the three trees |
 | AC-10 | T-4 | Wire semantics and lifecycle unchanged | Byte-identical drivers; five alternating groups over ten scenarios; parser equivalence and allocations | http_server_bench --duration-ms 2000; http_parser_equivalence; http_parser_allocations | Zero socket/wire/deadline errors; every median rps ratio >= 0.85; equivalence stream byte-identical with the recorded SHA-256; allocation call counts unchanged | Raw runs, hashes and allocation report | Pass | 18,628,104 responses, zero errors; smallest median change -2.2% with mixed pairs disclosed; 68,241,183-byte stream identical; calls unchanged, +8 requested bytes per decoder fixture disclosed |
 | AC-11 | T-4 | Real-socket close lifecycle still honored | Connection: close request over the event loop | http_server_tests close case | Response carries Connection: close and the connection then EOFs | Suite log | Pass | Existing real-socket close check passes unchanged against the fused flag |
+| AC-12 | T-4 | One-write 64 KiB body drains in at most three data receives | New receive suite at HEAD (red) and at the widened window (green) | ctest -R ^http_server_receive_tests$ | Exit 0; wire=Pass; body=Pass; window64k=Pass | Red/green diagnostic | Pass | Red at HEAD prints data_receives=5 window64k=Fail with wire/body Pass; green prints all three Pass |
+| AC-13 | T-4 | Measured retention holds with the widened window | Five alternating 2000-ms groups, ten scenarios, HEAD build versus widened build, identical driver and flags | http_server_bench --duration-ms 2000 (default8 plus explicit idle512/idle2048) | Zero socket/wire/deadline errors; every scenario median rps ratio (widened/HEAD) >= 0.85; paired signs and syscalls disclosed | Raw runs and summary in the 10-28 report round 3 | Pass | Five complete groups retained; zero errors; ratios and paired changes recorded in the 10-28 report round 3 |
 
 ## Completion Checklist [Required]
 
@@ -379,6 +405,7 @@ index, and preserve reciprocal supersession paths when applicable.
 
 | Date | Change | Author |
 | --- | --- | --- |
+| 2026-10-28 | Record the owner's re-selection of the receive-buffer candidate as KS-11 with the 64 KiB window, subtask T-4 extension, AC-12/AC-13 and the round-3 measured rerun; approval pending | @zcode |
 | 2026-10-28 | Fold the owner-requested micro-tunings (head_policy length switch, first_write batch index and once-per-drain activity timestamp) into T-4 / KS-10 and record the 2026-10-28 SB-6 rerun evidence; approval pending | @codex |
 | 2026-10-23 | Extend the waived transport slice with the owner-selected short circuits KS-8/KS-9/KS-10, subtask T-4 and AC-9..AC-11; measured round retained on structural grounds with disclosed noise-level results; approval pending | @k3 |
 | 2026-10-23 | Extend waived lifecycle scope to dirty work, ordered expiry and retired-only reclamation; keep fresh clocks/capacity64; approval pending | @codex |

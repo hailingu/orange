@@ -11,6 +11,106 @@ only with comparable process scope and fixture state; the process-lifetime
 high-water marks here do not establish server memory savings. These directions
 do not establish statistical significance.
 
+## Follow-Up: 64 KiB Receive Window (Round 3) — 2026-10-28
+
+Following Round 2, the owner re-selected the receive-buffer candidate that had
+been rejected on 2026-10-23, as the only overturned item (`"只执行
+receive-buffer（16→64 KiB）这个优化，其他的不动，然后再做一轮测试，更新benchmark
+文件"`). Under `ADR-0008` KS-11, `read_connection`'s per-drain receive window
+grows from 16 KiB to 64 KiB (`orange::http::(anonymous namespace)::receive_window`);
+nothing else changes — client write sizes, framing, caps, staging, backpressure
+and the dirty/interest machinery are untouched.
+
+A new focused suite (`http_server_receive_tests`, interposing `recv` on the
+server thread like the KS-1 scheduling pattern) pins the contract first:
+**red** at HEAD prints `data_receives=5 window64k=Fail` (a one-write 64 KiB
+body needs at least `ceil(65579/16384) = 5` data receives under the 16 KiB
+window); **green** with the widened window prints `data_receives=2` with
+`wire/body/window64k` all Pass.
+
+### Measurement And Controls (Round 3)
+
+Two server variants compiled with identical Release `-O2 -DNDEBUG` flags and
+byte-identical driver sources: **Pre-window** (`4e6c154` archive of HEAD) and
+**Windowed** (worktree plus
+[`2026-10-28-receive-window.patch`](2026-10-28-receive-window.patch), SHA-256
+`dc1c96631ecfeab5f91873fc94cb8ee66455e6650f0597cfe59b8f9d623f1090`, committed
+as `cfdce4a`; only `http_server.cpp` differs in the linked library). Five sequential groups
+alternated forward and reverse order over all ten scenarios (2000-ms windows).
+This round ran on a busier host than Round 2 — absolute throughput baselines
+are lower across the board (for example `health_c1` ≈ 29k versus ≈ 32k), so
+cross-round absolute comparison is not claimed; the paired same-window design
+carries the evidence. Two `health_idle2048` invocations (one per variant) hit
+`ECONNRESET` (`errno=54`) during connection-burst setup — the same known
+listen-backlog setup race Round 1 recorded for the Poll control — and were
+discarded and re-executed cleanly per the established audit practice. Across
+the ten complete paired reports, **16,324,499 measured responses** validated
+with zero socket, wire, or deadline errors.
+
+### Real-Socket Results (Round 3: Pre-window / Windowed)
+
+| Scenario | Pre-window req/s ↑ | Windowed req/s ↑ | Throughput change ↑ | Pre-window CPU µs/req ↓ | Windowed CPU µs/req ↓ | CPU change ↓ | Pre-window syscalls/req ↓ | Windowed syscalls/req ↓ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| health_c1 | 29,416 | 29,505 | +0.3% | 10.25 | 10.19 | -0.6% | 3.000 | 3.000 |
+| health_c8 | 80,843 | 83,684 | +3.5% | 8.82 | 8.74 | -0.9% | 2.925 | 2.928 |
+| health_c64 | 87,868 | 88,979 | +1.3% | 8.17 | 7.97 | -2.5% | 2.809 | 2.842 |
+| health_idle64 | 28,481 | 30,318 | +6.5% | 10.58 | 10.26 | -3.1% | 3.000 | 3.000 |
+| health_pipeline16 | 402,133 | 435,039 | +8.2% | 0.82 | 0.80 | -2.7% | 0.188 | 0.188 |
+| echo_1k_c1 | 28,565 | 28,463 | -0.4% | 10.49 | 10.26 | -2.2% | 3.000 | 3.000 |
+| echo_1k_c8 | 82,618 | 79,774 | -3.4% | 9.05 | 9.06 | +0.1% | 2.934 | 2.927 |
+| echo_1m_c1 | 4,038 | 4,477 | **+10.9%** | 154.94 | 137.98 | **-10.9%** | **67.024** | **19.989** |
+| health_idle512 | 30,435 | 29,637 | -2.6% | 9.72 | 10.19 | +4.8% | 3.000 | 3.000 |
+| health_idle2048 | 28,367 | 27,788 | -2.0% | 10.07 | 10.40 | +3.3% | 3.000 | 3.000 |
+
+| Scenario | Pre-window req/s range ↑ | Windowed req/s range ↑ | Five paired Windowed/Pre-window changes ↑ |
+| --- | ---: | ---: | --- |
+| health_c1 | 27,510–30,507 | 28,511–31,120 | +4.0%, -3.3%, +8.4%, -3.1%, +4.5% |
+| health_c8 | 73,037–87,231 | 72,633–88,384 | +10.3%, -4.1%, -0.1%, +1.5%, -0.6% |
+| health_c64 | 78,596–92,173 | 78,158–92,323 | +1.6%, -3.5%, +3.9%, +3.5%, -0.6% |
+| health_idle64 | 26,222–30,485 | 28,639–31,303 | +9.9%, +6.2%, -0.5%, +0.0%, +19.0% |
+| health_pipeline16 | 369,431–428,229 | 396,972–444,210 | +3.2%, +1.6%, +7.8%, +7.5%, +10.5% |
+| echo_1k_c1 | 26,722–29,847 | 27,539–30,888 | +4.8%, +5.9%, -0.4%, +3.1%, -5.6% |
+| echo_1k_c8 | 71,928–85,700 | 77,467–84,010 | +1.7%, -4.4%, -5.7%, +1.8%, +7.7% |
+| echo_1m_c1 | 3,489–4,188 | 4,162–4,633 | **+10.6%, +10.9%, +9.2%, +8.4%, +19.3%** |
+| health_idle512 | 29,374–31,805 | 28,627–32,366 | +1.8%, -2.6%, +1.3%, -7.6%, -3.6% |
+| health_idle2048 | 27,239–29,652 | 25,379–29,966 | +5.6%, +4.8%, -4.2%, -6.3%, -6.8% |
+
+**Round 3 Assessment**:
+
+- **The one targeted scenario separates completely.** `echo_1m_c1` drops from
+  **67.024 to 19.989 Unix syscalls per request** (-70%) — the exact predicted
+  composition of 16 `recv` calls (1 MiB / 64 KiB) plus two `kevent` waits and
+  two `send` calls, versus 64 `recv` calls at the 16 KiB window. Worker CPU
+  falls **-10.9%** (154.94 → 137.98 µs/req), throughput rises **+10.9%**
+  (4,038 → 4,477 req/s) with **5/5 positive paired changes and non-overlapping
+  five-run ranges** (3,489–4,188 versus 4,162–4,633). p50 drops 210.7 → 189.5 µs.
+- **`health_pipeline16` shows 5/5 positive pairs (+1.6% to +10.5%) with
+  unchanged syscall counts (0.188)** — suggestive but with overlapping ranges,
+  so no claim is made; the mechanism there is not syscall reduction.
+- All other scenarios stay inside the established noise band with mixed paired
+  signs (throughput -3.4% to +6.5%), and every median retention ratio is ≥
+  0.966 (`echo_1k_c8` 79,774/82,618), far above the 0.85 guard. The 3.000
+  syscall floor for unpipelined small exchanges is untouched, as expected —
+  those requests never fill a 16 KiB window.
+- The window costs no allocation (stack buffer) and no behavior change: every
+  routed suite, sanitizer run and the byte-exact wire checks stay green.
+
+### Verification (Round 3)
+
+- Red/green: `ctest -R '^http_server_receive_tests$'` — red at HEAD
+  (`data_receives=5 window64k=Fail`, wire/body Pass), green after the change
+  (`data_receives=2`, all Pass).
+- Routed Debug CTest: **13/13 Passed** (including the new suite).
+- Release opt-in CTest (worktree, benchmarks ON): **16/16 Passed**, including
+  `http_server_bench_cli` floors; Pre-window archive tree: **15/15 Passed**.
+- Debug ASan/UBSan CTest with
+  `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1`: **13/13 Passed**.
+- `clang-format --dry-run --Werror` on the changed sources passes.
+- Raw run JSON for both variants, the discarded-invocation audit, and binary
+  SHA-256 fingerprints are retained in
+  [`2026-10-28-http-performance-evidence.json`](2026-10-28-http-performance-evidence.json)
+  under `receive_window_r3`.
+
 ## Follow-Up: Header-Length Pre-Filter, Write-Pass Index, And Drain-Once Activity Clock — 2026-10-28
 
 Following the initial 2026-10-28 SB-6 baseline rerun below, the owner requested
