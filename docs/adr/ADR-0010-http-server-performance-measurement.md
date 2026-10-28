@@ -2,16 +2,17 @@
 
 ## Metadata [Required]
 
-- **Decision Status**: Proposed
-- **Implementation Status**: Not Started
+- **Decision Status**: Accepted
+- **Implementation Status**: In Progress
 - **Date**: 2026-10-22
 - **Author**: @codex
 - **Decision Owner**: @hailingu
 - **Required Approver**: @hailingu
 - **Record Scope**: Project
-- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — individual approval required
-- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — individual approval required
-- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — individual approval required
+- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: @hailingu
+- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: 2026-10-28T14:32:45Z
+- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Approve
+- **Approval Context Revision [Optional — informational and non-binding]**: 15ee45a — immutable revision whose document content equals the content present for approval (the Proposed record with approval fields still `Pending — individual approval required`); the approval edits were made after approval within the same change
 - **Rejector [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
 - **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
 - **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
@@ -80,6 +81,10 @@ single-loop server default while keeping the old poll-era single-threaded
 control untouched, which requires the driver to also select several server
 acceptor loops. Both extend T-3 with SB-7 and SB-8 under the same scoped
 waiver; they authorize no approval, standing waiver, or remote write.
+On 2026-10-28 the repository owner @hailingu responded with the exact word
+Approve in this record's sole context (a one-record approval question naming
+this repository-relative path). The record is Accepted / In Progress;
+fresh HEAD verification and the immutable commit anchor precede completion.
 
 ## Scope [Required]
 
@@ -289,8 +294,8 @@ recorded under Retrospective Authorization, not an engineering exception.
 | AC-1 | T-1 | CLI contract passes | Release driver; eight scenarios | ctest -R ^http_server_bench_cli$; invalid-duration/case matrix | Exit 0 for CLI suite; eight nonempty zero-error scenarios; invalid invocations exit 2 | CTest and JSON | Pass | Historical exception: Release CLI passes |
 | AC-2 | T-1 | Wire validation detects corruption | Disposable driver with one expected health-body byte changed | Compile same driver, run --quick --case health_c1 | Exit 1 and response wire mismatch | Captured diagnostic | Pass | Historical exception: deliberate health-wire mutation exits 1 with response wire mismatch; complete output in evidence JSON |
 | AC-3 | T-2 | Raw comparison is reproducible | Same driver, flags and normalized socket options | Five alternating groups for poll control/before/after; inspect patch and hashes | Five complete eight-case reports per variant, zero errors, source fingerprints and all p50/p95/p99/CPU/RSS fields retained | Evidence JSON and two source patches | Pass | Historical exception: five complete groups per control; zero errors; all eight before/after median throughput changes above -15%; raw data and source fingerprints retained |
-| AC-4 | T-3 | Process/CPU and lifecycle contract passes | Release process/CLI suites | ctest -R 'http_bench_process_tests|http_server_bench_cli'; inspect configure_channel timeouts=20s | Distinct positive PIDs; positive server process/worker CPU and separate RSS; clean finish0; killed/invalid child fails and is reaped; repeated finish0 | CTest and red diagnostics | Pass | 10-23 Release suites; prior executable fails missing server_process_cpu_seconds |
-| AC-6 | T-3 | Server event counts satisfy SB-6 | Release benchmark build; Release+ASan/UBSan build | ctest -R 'http_bench_process_tests|http_server_bench_cli' in both builds; process tests repeated 30 times | Both suites exit 0 in both builds; 30/30 process-test repeats exit 0 | CTest output and recorded per-request counts | Pass | 10-28 waived execution: reds were 4 missing-member compile errors and `server event count missing or not an integer: server_unix_syscalls`; green Release 15/15, 30/30 repeats, Release+ASan/UBSan 2/2. Informative 500 ms run: health_c1 3.000, health_c64 2.369, pipeline16 0.188, echo_1m_c1 67.045 server Unix calls/request; health_c1 1.039 context switches/request |
+| AC-4 | T-3 | Process/CPU and lifecycle contract passes | Release process/CLI suites | run the process and CLI benchmark suites (ctest -R alternation of http_bench_process_tests and http_server_bench_cli); inspect configure_channel timeouts=20s | Distinct positive PIDs; positive server process/worker CPU and separate RSS; clean finish0; killed/invalid child fails and is reaped; repeated finish0 | CTest and red diagnostics | Pass | 10-23 Release suites; prior executable fails missing server_process_cpu_seconds |
+| AC-6 | T-3 | Server event counts satisfy SB-6 | Release benchmark build; Release+ASan/UBSan build | run the process and CLI benchmark suites (ctest -R alternation of http_bench_process_tests and http_server_bench_cli) in both builds; process tests repeated 30 times | Both suites exit 0 in both builds; 30/30 process-test repeats exit 0 | CTest output and recorded per-request counts | Pass | 10-28 waived execution: reds were 4 missing-member compile errors and `server event count missing or not an integer: server_unix_syscalls`; green Release 15/15, 30/30 repeats, Release+ASan/UBSan 2/2. Informative 500 ms run: health_c1 3.000, health_c64 2.369, pipeline16 0.188, echo_1m_c1 67.045 server Unix calls/request; health_c1 1.039 context switches/request |
 | AC-5 | T-3 | Same-window controls complete | Identical driver; Release -O2 without LTO | Five alternating 2000-ms groups of poll/before/after; default8 plus idle512/2048; inspect prepare_descriptor_budget soft-only assignment | Exactly five samples per variant/case; soft descriptor budget stays <= unchanged hard limit; all errors0; all CPU/RSS/tail fields and hashes retained | 10-23 evidence JSON/patches | Pass | Measurement plan, raw samples and fingerprints retained |
 | AC-7 | T-3 | Threaded client keeps the case contract | Release driver; `--quick --client-threads 3`; invalid counts 0, -1, 9, nan, 2.5 | ctest -R ^http_server_bench_cli$ (SB-7 block) | Exit 0 with eight zero-error cases reporting client_threads 3; every invalid count exits 2 | CTest output | Pass | Waived execution: red at HEAD (`--client-threads 3` exited 2: invalid invocation), green at e912dfa with Release 16/16; Round 4 five-group raw runs retained in the 10-28 report |
 | AC-8 | T-3 | Acceptor-threaded child keeps the case contract | Release driver; `--quick --client-threads 3 --server-threads 3`; invalid counts 0, -1, 9, nan, 2.5 | ctest -R ^http_server_bench_cli$ (SB-8 block) | Exit 0 with eight zero-error cases reporting server_threads 3; every invalid count exits 2 | CTest output | Pass | Waived execution: red at e912dfa (`--server-threads 3` exited 2), green at 63c43d8/cd6fcf7 with Release 17/17 twice; Round 5 five-group raw runs retained in the 10-28 report |
@@ -299,7 +304,7 @@ recorded under Retrospective Authorization, not an engineering exception.
 
 | ID | Item | Completion Criterion | Expected Evidence | Status | Actual Evidence |
 | --- | --- | --- | --- | --- | --- |
-| A-1 | ADR approved | Eligible non-author approver responds exactly Approve in this record's sole context | Approval metadata | Not Started | Pending — individual approval required |
+| A-1 | ADR approved | Eligible non-author approver responds exactly Approve in this record's sole context | Approval metadata | Complete | Reapproved-as-initial-approval 2026-10-28: Approver @hailingu (non-author; author @codex), Approval Time 2026-10-28T14:32:45Z, Approval Evidence: Approve, in this record's sole context; informational Approval Context Revision commit 15ee45a exactly represents the approved document content |
 | A-2 | Complete task delivered | Every applicable acceptance check passes and every subtask has actual evidence after acceptance | Checks and evidence JSON | Not Started | Historical exception execution only; formal completion follows individual approval |
 | A-3 | Reciprocal ADD link | N/A — corrective performance maintenance | Architecture Source assessment | N/A — no product-demand handoff | No ADD candidate changed |
 | A-4 | Requirement levels | Every required item and conditional assessment is complete | Structured review | Complete | Reviewed at drafting; approval fields remain pending in Proposed |
@@ -318,6 +323,7 @@ index, and preserve reciprocal supersession paths when applicable.
 
 | Date | Change | Author |
 | --- | --- | --- |
+| 2026-10-28 | Approval: repository owner @hailingu responded with the exact word Approve in this record's sole context (one-record approval question naming this path). Decision Status Proposed→Accepted; Implementation Status Not Started→In Progress; Approver, Approval Time and Approval Evidence recorded; Approval Context Revision recorded informationally at commit 15ee45a. Fresh HEAD verification and the immutable commit anchor precede completion | @zcode |
 | 2026-10-28 | Extend waived T-3 with SB-7 client shards and SB-8 server acceptor plumbing, AC-7/AC-8 and the Round 4/5 measured rerun recorded in the 10-28 report; approval remains outstanding | @zcode |
 | 2026-10-28 | Extend waived T-3 with SB-6 exact server system-call/context-switch counts and AC-6; approval remains outstanding | @copilot |
 | 2026-10-23 | Extend waived tooling with split processes, worker CPU, child lifecycle and same-duration scaling controls; approval remains outstanding | @codex |

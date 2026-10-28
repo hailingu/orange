@@ -92,6 +92,21 @@ only for that scope and permits the two retrospective records below. It grants
 no standing waiver or individual acceptance. Both remain Proposed / Not Started
 until individually approved; historical exception execution is kept separately.
 
+On 2026-10-28, @hailingu supplied the exact `Approve` in two one-record
+approval exchanges, each naming exactly one repository-relative path:
+`docs/adr/ADR-0010-http-server-performance-measurement.md` and
+`service/docs/adr/ADR-0008-kqueue-response-scheduling.md`. The measurement
+record is Accepted / In Progress with fresh HEAD verification and the
+immutable commit anchor recorded before completion. The kqueue scheduling
+record's approval was invalidated in the same change: its Implementation
+Plan carried four subtasks against the at-most-three-subtask cap for
+Accepted records, so its former T-3/T-4 rows merged with all evidence
+preserved, returning it to Proposed / Not Started pending reapproval of
+the merged plan. The scoped 2026-10-22 waiver is discharged by the
+individual approvals; `docs/adr/ADR-0009-http-parser-verification-ci.md`
+remains Accepted / In Progress awaiting its authorized hosted Actions run,
+which no waiver or approval in this section provides.
+
 ## Active Records
 
 | Type | ID | Title | Decision Status | Implementation Status | Scope | Architecture Source | Path | Superseded By |
@@ -112,7 +127,7 @@ until individually approved; historical exception execution is kept separately.
 | Full ADR | ADR-0005 | Reserve the declared fixed body length once | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0005-fixed-body-reserve.md` | None — not superseded |
 | Full ADR | ADR-0006 | Answer rejections with precomputed static wires | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability | `service/docs/adr/ADR-0006-static-rejection-wires.md` | None — not superseded |
 | Full ADR | ADR-0007 | Serialize responses straight into the outgoing backlog | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability | `service/docs/adr/ADR-0007-append-form-response-serialization.md` | None — not superseded |
-| Full ADR | ADR-0010 | Measure real loopback HTTP serving separately from parsing | Proposed | Not Started | Project | N/A — corrective performance verification, not product-demand implementation | `docs/adr/ADR-0010-http-server-performance-measurement.md` | None — not superseded |
+| Full ADR | ADR-0010 | Measure real loopback HTTP serving separately from parsing | Accepted | In Progress | Project | N/A — corrective performance verification, not product-demand implementation | `docs/adr/ADR-0010-http-server-performance-measurement.md` | None — not superseded |
 | Full ADR | ADR-0008 | Use stable kqueue connection identities and avoid redundant request-path work | Proposed | Not Started | Service internal — service | N/A — corrective performance maintenance, not product-demand implementation | `service/docs/adr/ADR-0008-kqueue-response-scheduling.md` | None — not superseded |
 
 ## Archived Records
