@@ -182,22 +182,54 @@ class TlsClient {
     SSL_CTX *ctx_ = nullptr;
 };
 
-// Serves one TLS listener on an ephemeral port on its own thread until the
-// destructor stops it.
+// Reserves one ephemeral loopback port by binding and releasing it, so the
+// server harness knows its port without polling serve_tls's out-pointer.
+std::uint16_t reserve_port() {
+    const int probe = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (probe < 0)
+        return 0;
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_port = 0;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    std::uint16_t port = 0;
+    if (::bind(probe, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) == 0) {
+        sockaddr_in bound{};
+        socklen_t size = sizeof(bound);
+        if (::getsockname(probe, reinterpret_cast<sockaddr *>(&bound), &size) == 0)
+            port = ntohs(bound.sin_port);
+    }
+    ::close(probe);
+    return port;
+}
+
+// Retries one client connection until the freshly started listener accepts,
+// or nullopt after the deadline.
+std::optional<TlsClient> await_connect(std::uint16_t port) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    for (;;) {
+        if (auto client = TlsClient::connect(port))
+            return client;
+        if (std::chrono::steady_clock::now() >= deadline)
+            return std::nullopt;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+// Serves one TLS listener on a reserved ephemeral port on its own thread
+// until the destructor stops it.
 class TestTlsServer {
   public:
     TestTlsServer(const std::string &certificate_path, const std::string &key_path,
                   RequestHandler handler, std::chrono::milliseconds idle_timeout)
-        : handler_(std::move(handler)) {
-        thread_ = std::thread([this, &certificate_path, &key_path, idle_timeout] {
-            std::uint16_t bound = 0;
-            serve_exit_ =
-                serve_tls(0, certificate_path, key_path, handler_, idle_timeout, stop_, &bound);
-            port_.store(bound);
+        : handler_(std::move(handler)), port_(reserve_port()) {
+        // The paths are copied into the thread: the constructor's parameter
+        // frames die before the server thread stops using them.
+        thread_ = std::thread([this, certificate_path, key_path, idle_timeout] {
+            serve_exit_ = serve_tls(port_, certificate_path, key_path, handler_, idle_timeout,
+                                    stop_, nullptr);
+            exited_.store(true);
         });
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-        while (port_.load() == 0 && std::chrono::steady_clock::now() < deadline)
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     ~TestTlsServer() {
         stop_.store(true);
@@ -206,14 +238,21 @@ class TestTlsServer {
     }
     TestTlsServer(const TestTlsServer &) = delete;
     TestTlsServer &operator=(const TestTlsServer &) = delete;
-    [[nodiscard]] std::uint16_t port() const { return static_cast<std::uint16_t>(port_.load()); }
-    [[nodiscard]] int serve_exit() const { return serve_exit_; }
+    [[nodiscard]] std::uint16_t port() const { return port_; }
+    // Waits until the loop returned its coded result (the early EINVAL path).
+    [[nodiscard]] int await_exit() {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!exited_.load() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        return serve_exit_;
+    }
 
   private:
     RequestHandler handler_;
     std::atomic_bool stop_{false};
-    std::atomic<int> port_{0};
+    std::atomic_bool exited_{false};
     int serve_exit_ = 0;
+    std::uint16_t port_ = 0;
     std::thread thread_;
 };
 
@@ -273,7 +312,10 @@ void check_certificate(const std::string &certificate_path, const std::string &k
           "the certificate validity reaches into the future");
     check(X509_verify(certificate, public_key) == 1,
           "the certificate verifies against its own key (self-signed)");
-    check(X509_check_host(certificate, "orange-local", sizeof("orange-local") - 1, 0, nullptr) == 1,
+    char common_name[64] = {};
+    check(X509_NAME_get_text_by_NID(X509_get_subject_name(certificate), NID_commonName, common_name,
+                                    sizeof(common_name)) > 0 &&
+              std::string_view(common_name) == "orange-local",
           "the subject carries CN orange-local");
     check(has_loopback_san(certificate), "the SAN carries IP 127.0.0.1");
     X509_free(certificate);
@@ -281,7 +323,7 @@ void check_certificate(const std::string &certificate_path, const std::string &k
 
 // One complete health exchange over a fresh TLS connection.
 std::optional<std::string> once_health_wire(std::uint16_t port) {
-    auto client = TlsClient::connect(port);
+    auto client = await_connect(port);
     if (!client)
         return std::nullopt;
     if (!client->send_all("GET /api/health HTTP/1.1\r\nHost: localhost\r\n"
@@ -327,12 +369,12 @@ int main() {
         {
             TestTlsServer server(certificate_path, key_path, handler,
                                  std::chrono::milliseconds(5000));
-            check(server.port() != 0, "the TLS listener reports its ephemeral port");
+            check(server.port() != 0, "the TLS listener holds a reserved ephemeral port");
             const auto health = once_health_wire(server.port());
             check(health.has_value() && *health == close_health_wire,
                   "GET /api/health answers its exact wire over TLS and closes");
             // Keep-alive: three cycles on one connection, Content-Length framed.
-            if (auto client = TlsClient::connect(server.port())) {
+            if (auto client = await_connect(server.port())) {
                 bool cycles = true;
                 for (int round = 0; round < 3; ++round) {
                     cycles =
@@ -346,7 +388,7 @@ int main() {
                 check(false, "the keep-alive client connects");
             }
             // Chunked echo over TLS.
-            if (auto client = TlsClient::connect(server.port())) {
+            if (auto client = await_connect(server.port())) {
                 check(client->send_all("POST /api/echo HTTP/1.1\r\nHost: localhost\r\n"
                                        "Connection: close\r\nContent-Length: 7\r\n\r\n"
                                        "he\r\nllo") &&
@@ -358,7 +400,7 @@ int main() {
                       "POST /api/echo answers the exact chunked wire over TLS");
             }
             // Static serving and a single range over TLS.
-            if (auto client = TlsClient::connect(server.port())) {
+            if (auto client = await_connect(server.port())) {
                 check(client->send_all("GET /index.html HTTP/1.1\r\nHost: localhost\r\n"
                                        "Connection: close\r\n"
                                        "Range: bytes=0-3\r\n\r\n") &&
@@ -372,7 +414,7 @@ int main() {
                       "a single-range static request answers its exact 206 wire over TLS");
             }
             // Rejection closure: an oversized head answers 431 then closes.
-            if (auto client = TlsClient::connect(server.port())) {
+            if (auto client = await_connect(server.port())) {
                 const std::string head =
                     "GET / HTTP/1.1\r\nHost: localhost\r\nX-Pad: " + std::string(9000, 'a') +
                     "\r\n\r\n";
@@ -386,8 +428,8 @@ int main() {
             const auto after_rejection = once_health_wire(server.port());
             check(after_rejection.has_value(), "a fresh TLS connection succeeds after a rejection");
             // A paused TLS connection never blocks another one (AC-7, TLS side).
-            auto paused = TlsClient::connect(server.port());
-            auto other = TlsClient::connect(server.port());
+            auto paused = await_connect(server.port());
+            auto other = await_connect(server.port());
             check(paused.has_value() && other.has_value(), "two TLS connections establish");
             if (paused && other) {
                 check(paused->send_all("POST /api/echo HTTP/1.1\r\nHost: localhost\r\n"
@@ -408,8 +450,8 @@ int main() {
         {
             TestTlsServer server(certificate_path, key_path, handler,
                                  std::chrono::milliseconds(400));
-            check(server.port() != 0, "the idle-timeout listener reports its port");
-            auto client = TlsClient::connect(server.port());
+            check(server.port() != 0, "the idle-timeout listener holds a reserved port");
+            auto client = await_connect(server.port());
             check(client.has_value(), "the idle client connects");
             if (client) {
                 const auto closed = client->read_to_eof();
@@ -417,13 +459,13 @@ int main() {
                       "the idle TLS connection closes without a response");
             }
         }
-        // Unusable certificate material is a coded startup error.
+        // Certificate material in an unwritable location is a coded startup
+        // error: absence alone is the ordinary first-run generation path.
         {
-            TestTlsServer server(root + "/absent-cert.pem", root + "/absent-key.pem", handler,
-                                 std::chrono::milliseconds(5000));
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            check(server.serve_exit() == EINVAL && server.port() == 0,
-                  "absent certificate material fails with EINVAL and no listener");
+            TestTlsServer server(root + "/absent-dir/cert.pem", root + "/absent-dir/key.pem",
+                                 handler, std::chrono::milliseconds(5000));
+            check(server.await_exit() == EINVAL,
+                  "unwritable certificate material fails with EINVAL and serves nothing");
         }
         // Restart: the same certificate keeps serving (AC-5, TLS side).
         {
