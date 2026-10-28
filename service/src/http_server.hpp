@@ -1,4 +1,5 @@
 // ADR: docs/adr/ADR-0003-local-runtime-path.md
+// ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
 // The loopback event loop (ADR-0003, subtask T-1): one thread multiplexes
 // a 127.0.0.1 listener and every accepted connection through kqueue(),
 // driving readiness-based read/write state machines per connection. This
@@ -49,8 +50,8 @@ class LoopbackServer {
     // Connection: close is honored the same way (RFC 9110 7.6.1). A
     // connection with no read or write progress for idle_timeout is
     // closed. Reading pauses while a connection holds read_pause_cap
-    // (1 MiB) of undelivered output plus unparsed input, bounding
-    // per-connection memory without dropping bytes.
+    // (1 MiB) of undelivered output. Receive windows are consumed directly
+    // by the bounded decoder before their stack storage expires.
     [[nodiscard]] int serve(RequestHandler handler, std::chrono::milliseconds idle_timeout,
                             const std::atomic_bool &stop);
 

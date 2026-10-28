@@ -26,6 +26,31 @@ void skip_space(std::string_view &value) {
         value.remove_prefix(1);
     }
 }
+// True when one Connection field value carries the close option (RFC 9110
+// 7.6.1): a comma-separated, case-insensitive option list with optional
+// whitespace. The head parser already validated every field octet.
+bool has_close_option(std::string_view value) {
+    std::size_t begin = 0;
+    while (begin <= value.size()) {
+        const std::size_t comma = value.find(',', begin);
+        auto option = value.substr(begin, comma == std::string_view::npos ? std::string_view::npos
+                                                                          : comma - begin);
+        while (!option.empty() && (option.front() == ' ' || option.front() == '\t')) {
+            option.remove_prefix(1);
+        }
+        while (!option.empty() && (option.back() == ' ' || option.back() == '\t')) {
+            option.remove_suffix(1);
+        }
+        if (iequals(option, "close")) {
+            return true;
+        }
+        if (comma == std::string_view::npos) {
+            break;
+        }
+        begin = comma + 1;
+    }
+    return false;
+}
 // Consumes one token, leaving delimiters for the field-specific grammar.
 std::string_view take_token(std::string_view &value) {
     std::size_t size = 0;
@@ -144,11 +169,12 @@ bool collect_codings(std::string_view value, Codings &codings) {
     return found;
 }
 } // namespace
-std::variant<BodyFraming, ParseError> body_framing(const Request &request) {
+std::variant<HeadPolicy, ParseError> head_policy(const Request &request) {
     std::optional<std::string_view> length;
     Codings codings;
     bool has_length = false;
     bool has_codings = false;
+    bool close = false;
     for (const auto &field : request.headers()) {
         if (equal_ascii(field.name, "content-length")) {
             has_length = true;
@@ -160,6 +186,8 @@ std::variant<BodyFraming, ParseError> body_framing(const Request &request) {
             if (!collect_codings(field.value, codings)) {
                 return ParseError::malformed;
             }
+        } else if (equal_ascii(field.name, "connection")) {
+            close = close || has_close_option(field.value);
         }
     }
     if (has_codings) {
@@ -167,8 +195,8 @@ std::variant<BodyFraming, ParseError> body_framing(const Request &request) {
             return ParseError::malformed;
         }
         return codings.unsupported
-                   ? std::variant<BodyFraming, ParseError>(ParseError::unsupported_transfer_coding)
-                   : std::variant<BodyFraming, ParseError>(BodyFraming{true, 0});
+                   ? std::variant<HeadPolicy, ParseError>(ParseError::unsupported_transfer_coding)
+                   : std::variant<HeadPolicy, ParseError>(HeadPolicy{true, 0, close});
     }
     std::size_t bytes = 0;
     if (length) {
@@ -180,6 +208,6 @@ std::variant<BodyFraming, ParseError> body_framing(const Request &request) {
             bytes = bytes * 10 + digit;
         }
     }
-    return BodyFraming{false, bytes};
+    return HeadPolicy{false, bytes, close};
 }
 } // namespace orange::http::detail

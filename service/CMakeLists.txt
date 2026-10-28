@@ -1,4 +1,5 @@
 # ADR: docs/adr/ADR-0008-http-parser-benchmarks.md
+# ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
 # ADR: service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md
 # ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
 # ADR: service/docs/adr/ADR-0004-owned-request-storage.md
@@ -38,6 +39,7 @@ add_library(orange_http
     src/http_messages.cpp
     src/http_response.cpp
     src/http_server.cpp
+    src/http_connection_store.cpp
     src/http_request_decoder.cpp
     src/http_body_framing.cpp
     src/http_chunk_line.cpp
@@ -78,6 +80,21 @@ add_test(NAME http_response_tests COMMAND http_response_tests)
 add_executable(http_server_tests tests/http_server_tests.cpp)
 target_link_libraries(http_server_tests PRIVATE orange_http)
 add_test(NAME http_server_tests COMMAND http_server_tests)
+
+add_executable(http_connection_store_tests tests/http_connection_store_tests.cpp)
+target_link_libraries(http_connection_store_tests PRIVATE orange_http)
+add_test(NAME http_connection_store_tests COMMAND http_connection_store_tests)
+
+# ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
+add_executable(http_server_scheduling_tests tests/http_server_scheduling_tests.cpp)
+target_link_libraries(http_server_scheduling_tests PRIVATE orange_http)
+add_test(NAME http_server_scheduling_tests COMMAND http_server_scheduling_tests)
+add_executable(http_server_input_tests tests/http_server_input_tests.cpp)
+target_link_libraries(http_server_input_tests PRIVATE orange_http)
+add_test(NAME http_server_input_tests COMMAND http_server_input_tests)
+add_executable(http_server_dispatch_tests tests/http_server_dispatch_tests.cpp)
+target_link_libraries(http_server_dispatch_tests PRIVATE orange_http)
+add_test(NAME http_server_dispatch_tests COMMAND http_server_dispatch_tests)
 
 # Route dispatch is the first serving rung of ADR-0003 T-2.
 add_executable(http_routes_tests tests/http_routes_tests.cpp)

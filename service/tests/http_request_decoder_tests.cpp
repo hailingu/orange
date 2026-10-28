@@ -43,6 +43,45 @@ void check(bool condition, std::string_view description) {
                      description.data());
     }
 }
+// The close connection option (RFC 9110 7.6.1) is resolved in the decoder's
+// single head-policy pass, per message and independent of feed splitting.
+void check_close_option() {
+    const auto close_message =
+        orange::http::parse_message("GET / HTTP/1.1\r\nConnection: close\r\n\r\n");
+    const auto *closing = std::get_if<orange::http::ParsedMessage>(&close_message);
+    check(closing && closing->close, "a Connection: close request sets the message close flag");
+    for (const auto *fields :
+         {"Connection: keep-alive, close\r\n", "connection: Close\r\n", "Connection:  close \t\r\n",
+          "Connection: keep-alive\r\nConnection: close\r\n"}) {
+        const auto result =
+            orange::http::parse_message("GET / HTTP/1.1\r\n" + std::string(fields) + "\r\n");
+        const auto *parsed = std::get_if<orange::http::ParsedMessage>(&result);
+        check(parsed && parsed->close,
+              "close inside option lists, case or duplicate fields still sets the flag");
+    }
+    for (const auto *fields : {"", "Connection: keep-alive\r\n", "Connection: closed\r\n"}) {
+        const auto result =
+            orange::http::parse_message("GET / HTTP/1.1\r\n" + std::string(fields) + "\r\n");
+        const auto *parsed = std::get_if<orange::http::ParsedMessage>(&result);
+        check(parsed && !parsed->close, "no close option leaves the message close flag clear");
+    }
+    // A split feed and a following pipelined message resolve independently.
+    orange::http::RequestDecoder decoder;
+    const std::string first = "POST /api/echo HTTP/1.1\r\nContent-Length: 5\r\n"
+                              "Connection: close\r\n\r\nhe";
+    const auto partial = decoder.feed(first);
+    check(std::holds_alternative<std::monostate>(partial.outcome),
+          "a split closing request remains incomplete");
+    const auto done = decoder.feed("llo");
+    const auto *split = std::get_if<orange::http::ParsedMessage>(&done.outcome);
+    check(split && split->close && split->body == "hello",
+          "fragmented input resolves the same close flag");
+    decoder.reset();
+    const auto next = decoder.feed("GET /next HTTP/1.1\r\n\r\n");
+    const auto *fresh = std::get_if<orange::http::ParsedMessage>(&next.outcome);
+    check(fresh && !fresh->close, "reset clears the close flag with the previous message");
+}
+
 // RFC 9112 6.3 fixes the body boundary independently of following input.
 void check_content_length() {
     const std::string head = "POST /api/echo HTTP/1.1\r\nContent-Length: 5\r\n\r\n";
@@ -468,6 +507,7 @@ void check_seeded_roundtrips() {
 }
 } // namespace
 int main() {
+    check_close_option();
     check_content_length();
     check_length_policy();
     check_transfer_policy();

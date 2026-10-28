@@ -44,15 +44,17 @@ struct RequestDecoder::Impl {
         error = failure;
         phase = Phase::failed;
     }
-    // Resolves framing once after the owned head has been constructed.
+    // Resolves framing and the close option once after the owned head has
+    // been constructed, in a single pass over the validated fields.
     void start_body(ParsedRequest parsed) {
         message.request = std::move(parsed.request);
-        const auto framing = detail::body_framing(message.request);
-        if (const auto *failure = std::get_if<ParseError>(&framing)) {
+        const auto policy_result = detail::head_policy(message.request);
+        if (const auto *failure = std::get_if<ParseError>(&policy_result)) {
             fail(*failure);
             return;
         }
-        const auto policy = std::get<detail::BodyFraming>(framing);
+        const auto policy = std::get<detail::HeadPolicy>(policy_result);
+        message.close = policy.close;
         remaining = policy.length;
         if (policy.chunked) {
             phase = Phase::chunk_line;

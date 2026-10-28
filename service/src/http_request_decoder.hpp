@@ -20,6 +20,9 @@ struct ParsedMessage {
     std::string body;
     // Counts wire bytes, including chunk framing and discarded trailer fields.
     std::size_t consumed = 0;
+    // The request's Connection: close option (RFC 9110 7.6.1), resolved during
+    // the same single head-field pass that fixes the body framing.
+    bool close = false;
 };
 // Bytes taken from this fragment and either a complete message, an error,
 // or monostate while more input is needed. Pipeline bytes stay with the caller

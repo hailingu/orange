@@ -1,4 +1,5 @@
 // ADR: docs/adr/ADR-0003-local-runtime-path.md
+// ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
 // Drives the loopback event loop with real sockets: three keep-alive
 // cycles and a pipelined pair on one connection, honoring a request
 // Connection: close, the idle timeout, the 431/413/400 rejection
@@ -157,6 +158,25 @@ void check_keepalive(const TestServer &server) {
     check(send_all(fd, request + request), "pipelined pair sends in one delivery");
     check(recv_exact(fd, fixed_wire.size() * 2, &received) && received == fixed_wire + fixed_wire,
           "a pipelined pair receives both responses on one connection");
+    ::close(fd);
+}
+
+// Pipeline suffixes must survive multiple recv windows without reordering.
+void check_large_pipeline(const TestServer &server) {
+    const int fd = connect_client(server.port());
+    check(fd >= 0, "large-pipeline client connects");
+    if (fd < 0)
+        return;
+    std::string requests;
+    std::string expected;
+    for (int i = 0; i < 512; ++i) {
+        requests += "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        expected += fixed_wire;
+    }
+    std::string received;
+    check(send_all(fd, requests) && recv_exact(fd, expected.size(), &received) &&
+              received == expected,
+          "512 pipelined requests crossing recv windows preserve every response");
     ::close(fd);
 }
 
@@ -339,6 +359,40 @@ void check_port_conflict(std::uint16_t port) {
     LoopbackServer second;
     check(second.bind(port) != 0, "binding a busy port returns a coded error");
 }
+
+// A blocked output must resume through EVFILT_WRITE without blocking a peer.
+void check_slow_reader() {
+    const std::string body(1048576, 'x');
+    TestServer server(std::chrono::seconds(5), [&body](const ParsedMessage &) {
+        return Response{200, BodyFraming::content_length, body, {}, false};
+    });
+    const int slow = connect_client(server.port());
+    const int active = connect_client(server.port());
+    const int window = 65536;
+    check(slow >= 0 && active >= 0, "slow-reader and active clients connect");
+    if (slow < 0 || active < 0) {
+        ::close(slow);
+        ::close(active);
+        return;
+    }
+    check(::setsockopt(slow, SOL_SOCKET, SO_RCVBUF, &window, sizeof(window)) == 0,
+          "slow-reader receive window is bounded");
+    const std::string request = "GET / HTTP/1.1\r\n\r\n";
+    check(send_all(slow, request + request + request), "slow reader queues three large responses");
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    const std::string expected = "HTTP/1.1 200 OK\r\nContent-Length: 1048576\r\n\r\n" + body;
+    std::string received;
+    check(send_all(active, request) && recv_exact(active, expected.size(), &received) &&
+              received == expected,
+          "an active peer progresses while another peer has blocked output");
+    check(recv_exact(slow, expected.size() * 3, &received) &&
+              received == expected + expected + expected,
+          "blocked output resumes with all three response wires intact");
+    ::close(slow);
+    ::close(active);
+    server.stop_and_join();
+    check(server.serve_exit() == 0, "the slow-reader loop stops cleanly");
+}
 } // namespace
 
 // Executes the real-socket checks against one hosted event loop.
@@ -352,6 +406,7 @@ int main() {
     {
         TestServer server(std::chrono::milliseconds(1000), handler);
         check_keepalive(server);
+        check_large_pipeline(server);
         check_request_close(server);
         check_idle_timeout(server);
         check_rejections(server);
@@ -362,6 +417,7 @@ int main() {
         server.stop_and_join();
         check(server.serve_exit() == 0, "the loop exits cleanly through its stop flag");
     }
+    check_slow_reader();
     std::printf("%zu checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }
