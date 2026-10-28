@@ -99,6 +99,10 @@ add_test(NAME http_server_dispatch_tests COMMAND http_server_dispatch_tests)
 add_executable(http_server_receive_tests tests/http_server_receive_tests.cpp)
 target_link_libraries(http_server_receive_tests PRIVATE orange_http)
 add_test(NAME http_server_receive_tests COMMAND http_server_receive_tests)
+# ADR: docs/adr/ADR-0003-local-runtime-path.md
+add_executable(http_server_threading_tests tests/http_server_threading_tests.cpp)
+target_link_libraries(http_server_threading_tests PRIVATE orange_http)
+add_test(NAME http_server_threading_tests COMMAND http_server_threading_tests)
 
 # Route dispatch is the first serving rung of ADR-0003 T-2.
 add_executable(http_routes_tests tests/http_routes_tests.cpp)

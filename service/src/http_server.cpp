@@ -1,12 +1,14 @@
 // ADR: docs/adr/ADR-0003-local-runtime-path.md
 // ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
-// The single-threaded kqueue() event loop: readiness-driven read/write
-// state machines per connection over one loopback listener, with the
-// declared idle timeout, close-after-rejection lifecycle, and a bounded
-// read-pause backpressure. Sockets are owned by RAII descriptors and
-// never escape this file; kernel interest lives in one kqueue descriptor
-// and is maintained incrementally through add/enable/disable changes
-// instead of being rebuilt every round like a poll set.
+// The kqueue() acceptor loops: readiness-driven read/write state machines
+// per connection over loopback listeners, with the declared idle timeout,
+// close-after-rejection lifecycle, and a bounded read-pause backpressure.
+// One acceptor thread is the historical single loop; more threads form a
+// shared-nothing SO_REUSEPORT listener group with one kqueue and connection
+// store per listener and no state crossing loops. Sockets are owned by RAII
+// descriptors and never escape this file; kernel interest is maintained
+// incrementally through add/enable/disable changes instead of being rebuilt
+// every round like a poll set.
 #include "http_server.hpp"
 #include "http_connection_store.hpp"
 #include "http_syntax.hpp"
@@ -24,6 +26,7 @@
 #include <string_view>
 #include <sys/event.h>
 #include <sys/socket.h>
+#include <thread>
 #include <unistd.h>
 #include <utility>
 #include <variant>
@@ -317,6 +320,116 @@ void accept_incoming(int listen_fd, ConnectionStore &connections) {
     }
 }
 
+// One shared-nothing acceptor loop: this listener, this kqueue, this
+// connection store. A loop that fails unrecoverably raises abort so sibling
+// loops stop promptly instead of outliving a broken listener group.
+int run_acceptor(int listener_fd, const RequestHandler &handler,
+                 std::chrono::milliseconds idle_timeout, const std::atomic_bool &stop,
+                 std::atomic_bool &abort) {
+    OwnedFd kq{::kqueue()};
+    if (!kq.valid()) {
+        abort.store(true, std::memory_order_relaxed);
+        return errno;
+    }
+    // The listener's read filter reports pending handshakes; it is
+    // registered once before the loop and stays enabled for its lifetime.
+    struct kevent listener_change{};
+    EV_SET(&listener_change, listener_fd, EVFILT_READ, EV_ADD, 0, 0, nullptr);
+    if (::kevent(kq.get(), &listener_change, 1, nullptr, 0, nullptr) < 0) {
+        abort.store(true, std::memory_order_relaxed);
+        return errno;
+    }
+    ConnectionStore connections;
+    std::vector<struct kevent> changes;
+    std::array<struct kevent, event_capacity> events{};
+    while (!stop.load(std::memory_order_relaxed) && !abort.load(std::memory_order_relaxed)) {
+        const auto now = std::chrono::steady_clock::now();
+        build_interest_changes(changes, connections);
+        const int slice = next_wake_ms(now, connections, idle_timeout);
+        const timespec wake{slice / 1000, (slice % 1000) * 1000000};
+        const int ready = ::kevent(kq.get(), changes.data(), static_cast<int>(changes.size()),
+                                   events.data(), static_cast<int>(events.size()), &wake);
+        if (ready < 0) {
+            if (errno == EINTR)
+                continue;
+            abort.store(true, std::memory_order_relaxed);
+            return errno;
+        }
+        const auto progressed = std::chrono::steady_clock::now();
+        // Readiness pass. A rejected changelist entry returns as an event
+        // with EV_ERROR and the errno in data: a failing listener ends the
+        // loop, a failing connection loses only itself. Connections
+        // accepted below have no registered filters yet, so their first
+        // event arrives from the next round — the polled-set invariant the
+        // poll predecessor enforced by freezing the vector size.
+        int first_write = ready;
+        for (int i = 0; i < ready; ++i) {
+            const struct kevent &event = events[static_cast<std::size_t>(i)];
+            const int fd = static_cast<int>(event.ident);
+            if (event.flags & EV_ERROR) {
+                if (fd == listener_fd) {
+                    abort.store(true, std::memory_order_relaxed);
+                    return EINVAL;
+                }
+                if (Connection *connection = event_connection(event))
+                    connections.retire(*connection);
+                continue;
+            }
+            if (fd == listener_fd) {
+                accept_incoming(listener_fd, connections);
+                continue;
+            }
+            if (event.filter != EVFILT_READ) {
+                if (event.filter == EVFILT_WRITE && first_write == ready)
+                    first_write = i;
+                continue;
+            }
+            Connection *connection = event_connection(event);
+            if (connection == nullptr)
+                continue;
+            service_connection(connections, *connection, handler, true);
+        }
+        // Write pass after the read pass, mirroring the predecessor's
+        // per-connection ordering: a read above may queue the very bytes
+        // this pass flushes, and a connection closed above is skipped by
+        // the identity guard because its descriptor is already invalid.
+        // Skip the scan entirely in the common case where no write filter fired.
+        for (int i = first_write; i < ready; ++i) {
+            const struct kevent &event = events[static_cast<std::size_t>(i)];
+            if (event.filter != EVFILT_WRITE || (event.flags & EV_ERROR))
+                continue;
+            Connection *connection = event_connection(event);
+            if (connection == nullptr)
+                continue;
+            service_connection(connections, *connection, handler, false);
+        }
+        connections.expire(progressed, idle_timeout);
+        // Returned udata may still name a retired node through both event passes.
+        // Destroy those nodes only now; live nodes are never traversed to collect.
+        connections.collect();
+    }
+    return 0;
+}
+
+// Binds one more listener into a bound listener's SO_REUSEPORT group; the
+// kernel spreads incoming connections across every group member. An invalid
+// result carries the failing errno.
+OwnedFd join_listener_group(const sockaddr_in &address) {
+    OwnedFd fd{::socket(AF_INET, SOCK_STREAM, 0)};
+    if (!fd.valid())
+        return fd;
+    const int reuse = 1;
+    if (::setsockopt(fd.get(), SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0 ||
+        ::setsockopt(fd.get(), SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0 ||
+        ::bind(fd.get(), reinterpret_cast<const sockaddr *>(&address), sizeof(address)) < 0 ||
+        ::listen(fd.get(), listen_backlog) < 0 || set_non_blocking(fd.get()) != 0) {
+        const int error = errno;
+        fd.reset();
+        errno = error;
+    }
+    return fd;
+}
+
 } // namespace
 
 LoopbackServer::~LoopbackServer() {
@@ -353,94 +466,58 @@ int LoopbackServer::bind(std::uint16_t port, std::uint16_t *bound_port) {
 }
 
 int LoopbackServer::serve(RequestHandler handler, std::chrono::milliseconds idle_timeout,
-                          const std::atomic_bool &stop) {
-    if (listen_fd_ < 0 || !handler)
+                          const std::atomic_bool &stop, int acceptor_threads) {
+    if (listen_fd_ < 0 || !handler || acceptor_threads < 1 || acceptor_threads > 64)
         return EINVAL;
-    OwnedFd kq{::kqueue()};
-    if (!kq.valid())
+    std::atomic_bool abort{false};
+    if (acceptor_threads == 1)
+        return run_acceptor(listen_fd_, handler, idle_timeout, stop, abort);
+    // Rebind the port as a kernel-balanced SO_REUSEPORT group: the original
+    // listener was bound without the option and cannot join retroactively,
+    // so it closes first and the port is free only for that instant.
+    sockaddr_in address{};
+    socklen_t size = sizeof(address);
+    if (::getsockname(listen_fd_, reinterpret_cast<sockaddr *>(&address), &size) < 0)
         return errno;
-    // The listener's read filter reports pending handshakes; it is
-    // registered once before the loop and stays enabled for its lifetime.
-    struct kevent listener_change{};
-    EV_SET(&listener_change, listen_fd_, EVFILT_READ, EV_ADD, 0, 0, nullptr);
-    if (::kevent(kq.get(), &listener_change, 1, nullptr, 0, nullptr) < 0)
-        return errno;
-    ConnectionStore connections;
-    std::vector<struct kevent> changes;
-    std::array<struct kevent, event_capacity> events{};
-    while (!stop.load(std::memory_order_relaxed)) {
-        const auto now = std::chrono::steady_clock::now();
-        build_interest_changes(changes, connections);
-        const int slice = next_wake_ms(now, connections, idle_timeout);
-        const timespec wake{slice / 1000, (slice % 1000) * 1000000};
-        const int ready = ::kevent(kq.get(), changes.data(), static_cast<int>(changes.size()),
-                                   events.data(), static_cast<int>(events.size()), &wake);
-        if (ready < 0) {
-            if (errno == EINTR)
-                continue;
-            return errno;
-        }
-        const auto progressed = std::chrono::steady_clock::now();
-        // Readiness pass. A rejected changelist entry returns as an event
-        // with EV_ERROR and the errno in data: a failing listener ends the
-        // loop, a failing connection loses only itself. Connections
-        // accepted below have no registered filters yet, so their first
-        // event arrives from the next round — the polled-set invariant the
-        // poll predecessor enforced by freezing the vector size.
-        int first_write = ready;
-        for (int i = 0; i < ready; ++i) {
-            const struct kevent &event = events[static_cast<std::size_t>(i)];
-            const int fd = static_cast<int>(event.ident);
-            if (event.flags & EV_ERROR) {
-                if (fd == listen_fd_)
-                    return EINVAL;
-                if (Connection *connection = event_connection(event))
-                    connections.retire(*connection);
-                continue;
-            }
-            if (fd == listen_fd_) {
-                accept_incoming(listen_fd_, connections);
-                continue;
-            }
-            if (event.filter != EVFILT_READ) {
-                if (event.filter == EVFILT_WRITE && first_write == ready)
-                    first_write = i;
-                continue;
-            }
-            Connection *connection = event_connection(event);
-            if (connection == nullptr)
-                continue;
-            service_connection(connections, *connection, handler, true);
-        }
-        // Write pass after the read pass, mirroring the predecessor's
-        // per-connection ordering: a read above may queue the very bytes
-        // this pass flushes, and a connection closed above is skipped by
-        // the identity guard because its descriptor is already invalid.
-        // Skip the scan entirely in the common case where no write filter fired.
-        for (int i = first_write; i < ready; ++i) {
-            const struct kevent &event = events[static_cast<std::size_t>(i)];
-            if (event.filter != EVFILT_WRITE || (event.flags & EV_ERROR))
-                continue;
-            Connection *connection = event_connection(event);
-            if (connection == nullptr)
-                continue;
-            service_connection(connections, *connection, handler, false);
-        }
-        connections.expire(progressed, idle_timeout);
-        // Returned udata may still name a retired node through both event passes.
-        // Destroy those nodes only now; live nodes are never traversed to collect.
-        connections.collect();
+    OwnedFd original{std::exchange(listen_fd_, -1)};
+    original.reset();
+    std::vector<OwnedFd> listeners;
+    for (int index = 0; index < acceptor_threads; ++index)
+        listeners.push_back(join_listener_group(address));
+    if (!listeners.back().valid())
+        return errno; // RAII closes any siblings that did bind
+    std::vector<int> results(listeners.size(), 0);
+    std::vector<std::thread> loops;
+    try {
+        for (std::size_t index = 1; index < listeners.size(); ++index)
+            loops.emplace_back(
+                [handler, &listeners, &results, index, &idle_timeout, &stop, &abort] {
+                    results[index] =
+                        run_acceptor(listeners[index].get(), handler, idle_timeout, stop, abort);
+                });
+    } catch (...) {
+        // A loop that never started cannot raise abort itself.
+        abort.store(true, std::memory_order_relaxed);
+        for (auto &loop : loops)
+            loop.join();
+        return EAGAIN;
     }
+    results[0] = run_acceptor(listeners[0].get(), handler, idle_timeout, stop, abort);
+    for (auto &loop : loops)
+        loop.join();
+    for (const int result : results)
+        if (result != 0)
+            return result;
     return 0;
 }
 
 int serve_loopback(std::uint16_t port, RequestHandler handler,
                    std::chrono::milliseconds idle_timeout, const std::atomic_bool &stop,
-                   std::uint16_t *bound_port) {
+                   std::uint16_t *bound_port, int acceptor_threads) {
     LoopbackServer server;
     if (const int error = server.bind(port, bound_port); error != 0)
         return error;
-    return server.serve(std::move(handler), idle_timeout, stop);
+    return server.serve(std::move(handler), idle_timeout, stop, acceptor_threads);
 }
 
 } // namespace orange::http

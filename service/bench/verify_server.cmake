@@ -121,6 +121,35 @@ foreach(value IN ITEMS 0 -1 9 nan 2.5)
         message(FATAL_ERROR "invalid client thread count must exit 2")
     endif()
 endforeach()
+# SB-8: optional server acceptor threads keep the same case contract: a
+# three-acceptor child completes all eight scenarios with valid wires and
+# reports its count, and out-of-range counts exit 2.
+execute_process(COMMAND "${BENCHMARK}" --quick --client-threads 3 --server-threads 3
+                RESULT_VARIABLE status OUTPUT_VARIABLE acceptor_report
+                ERROR_VARIABLE diagnostic TIMEOUT 45)
+if(NOT status STREQUAL "0")
+    message(FATAL_ERROR "acceptor-threaded benchmark failed: ${status}: ${diagnostic}")
+endif()
+string(JSON acceptor_count LENGTH "${acceptor_report}" cases)
+if(NOT acceptor_count EQUAL 8)
+    message(FATAL_ERROR "acceptor-threaded benchmark must report all eight scenarios")
+endif()
+string(JSON acceptor_threads ERROR_VARIABLE acceptors_missing GET "${acceptor_report}" cases 0
+        server_threads)
+if(acceptors_missing OR NOT acceptor_threads EQUAL 3)
+    message(FATAL_ERROR "acceptor-threaded benchmark must report its server thread count")
+endif()
+string(JSON acceptor_errors GET "${acceptor_report}" cases 0 errors)
+if(NOT acceptor_errors EQUAL 0)
+    message(FATAL_ERROR "acceptor-threaded validation failed")
+endif()
+foreach(value IN ITEMS 0 -1 9 nan 2.5)
+    execute_process(COMMAND "${BENCHMARK}" --server-threads "${value}" RESULT_VARIABLE status
+                    OUTPUT_QUIET ERROR_QUIET)
+    if(NOT status STREQUAL "2")
+        message(FATAL_ERROR "invalid server thread count must exit 2")
+    endif()
+endforeach()
 foreach(value IN ITEMS 0 -1 10001 nan 0.5)
     execute_process(COMMAND "${BENCHMARK}" --duration-ms "${value}" RESULT_VARIABLE status
                     OUTPUT_QUIET ERROR_QUIET)

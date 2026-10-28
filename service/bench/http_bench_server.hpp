@@ -20,8 +20,10 @@ struct ServerMetrics {
 // Owns a child and its bounded control channel; all socket traffic remains real.
 class ServerProcess {
   public:
-    // Forks before any worker thread and reports the child's ephemeral listener.
-    ServerProcess();
+    // Forks before any worker thread and reports the child's ephemeral
+    // listener. server_threads selects how many acceptor loops the child's
+    // server serves with (1 keeps the historical single loop).
+    explicit ServerProcess(int server_threads = 1);
     // Closes the channel, stops the child loop and reaps the child on every path.
     ~ServerProcess();
     ServerProcess(const ServerProcess &) = delete;
@@ -37,6 +39,7 @@ class ServerProcess {
     std::uint16_t port = 0;
 
   private:
+    int server_threads_ = 1;
     int channel_ = -1;
     pid_t child_ = -1;
     int result_ = 0;

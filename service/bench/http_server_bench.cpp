@@ -257,9 +257,9 @@ void prepare_descriptor_budget(const Scenario &scenario) {
 }
 
 // Excludes connection setup, warmup and shutdown from timing and CPU deltas.
-void measure(const Scenario &scenario, int duration_ms, int client_threads) {
+void measure(const Scenario &scenario, int duration_ms, int client_threads, int server_threads) {
     prepare_descriptor_budget(scenario);
-    Server server;
+    Server server{server_threads};
     std::vector<Client> idle;
     for (int i = 0; i < scenario.idle; ++i)
         idle.push_back(connect_to(server.port));
@@ -293,7 +293,8 @@ void measure(const Scenario &scenario, int duration_ms, int client_threads) {
     std::sort(latencies.begin(), latencies.end());
     std::cout << "{\"name\":\"" << scenario.name << "\",\"active_connections\":" << scenario.active
               << ",\"idle_connections\":" << scenario.idle << ",\"pipeline\":" << scenario.pipeline
-              << ",\"client_threads\":" << client_threads << ",\"body_bytes\":" << scenario.body
+              << ",\"client_threads\":" << client_threads
+              << ",\"server_threads\":" << server_threads << ",\"body_bytes\":" << scenario.body
               << ",\"requests\":" << latencies.size() << ",\"elapsed_seconds\":" << elapsed
               << ",\"requests_per_second\":" << latencies.size() / elapsed
               << ",\"p50_us\":" << percentile(latencies, 50)
@@ -331,6 +332,7 @@ bool thread_count(std::string_view value, int &result) {
 int main(int argc, char **argv) {
     int duration_ms = 200;
     int client_threads = 1;
+    int server_threads = 1;
     std::string_view selected;
     for (int i = 1; i < argc; ++i) {
         const std::string_view argument = argv[i];
@@ -340,6 +342,9 @@ int main(int argc, char **argv) {
             ++i;
         else if (argument == "--client-threads" && i + 1 < argc &&
                  thread_count(argv[i + 1], client_threads))
+            ++i;
+        else if (argument == "--server-threads" && i + 1 < argc &&
+                 thread_count(argv[i + 1], server_threads))
             ++i;
         else if (argument == "--case" && i + 1 < argc)
             selected = argv[++i];
@@ -366,7 +371,7 @@ int main(int argc, char **argv) {
             if (!first)
                 std::cout << ',';
             first = false;
-            measure(scenario, duration_ms, client_threads);
+            measure(scenario, duration_ms, client_threads, server_threads);
         }
         std::cout << "]}\n";
     } catch (const std::exception &error) {

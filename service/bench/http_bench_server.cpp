@@ -31,26 +31,58 @@ void transfer(int fd, void *bytes, std::size_t size, bool sending) {
     }
 }
 
+// Sums user+system CPU over every task thread except the calling control
+// thread, so several acceptor loops report as one worker aggregate.
+double server_threads_cpu() {
+    thread_act_array_t threads{};
+    mach_msg_type_number_t count = 0;
+    if (::task_threads(::mach_task_self(), &threads, &count) != KERN_SUCCESS)
+        throw std::runtime_error("server thread enumeration failed");
+    const auto self = ::mach_thread_self();
+    double total = 0;
+    for (mach_msg_type_number_t i = 0; i < count; ++i) {
+        thread_basic_info_data_t info{};
+        mach_msg_type_number_t info_count = THREAD_BASIC_INFO_COUNT;
+        if (threads[i] != self &&
+            ::thread_info(threads[i], THREAD_BASIC_INFO, reinterpret_cast<task_info_t>(&info),
+                          &info_count) == KERN_SUCCESS)
+            total += info.user_time.seconds + info.system_time.seconds +
+                     (info.user_time.microseconds + info.system_time.microseconds) / 1000000.0;
+        ::mach_port_deallocate(::mach_task_self(), threads[i]);
+    }
+    ::vm_deallocate(::mach_task_self(), reinterpret_cast<vm_address_t>(threads),
+                    count * sizeof(thread_t));
+    return total;
+}
+
 // Captures cumulative process/thread CPU without instrumenting request handling.
 // Task events are read first so the End sample excludes its own CPU queries.
-ServerMetrics snapshot(std::thread &thread) {
+// One acceptor samples its worker thread directly; several acceptors sum
+// every task thread except this control thread.
+ServerMetrics snapshot(std::thread &thread, int acceptors) {
     task_events_info_data_t events{};
     mach_msg_type_number_t events_count = TASK_EVENTS_INFO_COUNT;
     if (::task_info(::mach_task_self(), TASK_EVENTS_INFO, reinterpret_cast<task_info_t>(&events),
                     &events_count) != KERN_SUCCESS)
         throw std::runtime_error("server event sampling failed");
     rusage usage{};
-    thread_basic_info_data_t info{};
-    mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
-    if (::getrusage(RUSAGE_SELF, &usage) != 0 ||
-        ::thread_info(::pthread_mach_thread_np(thread.native_handle()), THREAD_BASIC_INFO,
-                      reinterpret_cast<thread_info_t>(&info), &count) != KERN_SUCCESS)
+    if (::getrusage(RUSAGE_SELF, &usage) != 0)
         throw std::runtime_error("server CPU sampling failed");
+    double worker_cpu = 0;
+    if (acceptors == 1) {
+        thread_basic_info_data_t info{};
+        mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
+        if (::thread_info(::pthread_mach_thread_np(thread.native_handle()), THREAD_BASIC_INFO,
+                          reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS)
+            throw std::runtime_error("server CPU sampling failed");
+        worker_cpu = info.user_time.seconds + info.system_time.seconds +
+                     (info.user_time.microseconds + info.system_time.microseconds) / 1000000.0;
+    } else {
+        worker_cpu = server_threads_cpu();
+    }
     return {usage.ru_utime.tv_sec + usage.ru_stime.tv_sec +
                 (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1000000.0,
-            info.user_time.seconds + info.system_time.seconds +
-                (info.user_time.microseconds + info.system_time.microseconds) / 1000000.0,
-            static_cast<std::uint64_t>(usage.ru_maxrss),
+            worker_cpu, static_cast<std::uint64_t>(usage.ru_maxrss),
             static_cast<std::uint32_t>(events.syscalls_unix),
             static_cast<std::uint32_t>(events.csw)};
 }
@@ -65,11 +97,12 @@ std::uint64_t event_delta(std::uint64_t after, std::uint64_t before) {
 class Worker {
   public:
     // Starts only inside the already-forked child.
-    Worker() {
+    explicit Worker(int acceptors) {
         if (server_.bind(0, &port) != 0)
             throw std::runtime_error("child listener bind failed");
-        thread = std::thread([this] {
-            result_ = server_.serve(http::handle_request, std::chrono::seconds(30), stop_);
+        thread = std::thread([this, acceptors] {
+            result_ =
+                server_.serve(http::handle_request, std::chrono::seconds(30), stop_, acceptors);
         });
     }
     ~Worker() { finish(); }
@@ -90,8 +123,8 @@ class Worker {
 };
 
 // Implements the local B(egin), E(nd), Q(uit) protocol with acknowledged borders.
-int run_child(int channel) {
-    Worker worker;
+int run_child(int channel, int acceptors) {
+    Worker worker(acceptors);
     transfer(channel, &worker.port, sizeof(worker.port), true);
     ServerMetrics before{};
     bool measuring = false;
@@ -101,11 +134,11 @@ int run_child(int channel) {
         if (command == 'Q')
             return worker.finish();
         if (command == 'B' && !measuring) {
-            before = snapshot(worker.thread);
+            before = snapshot(worker.thread, acceptors);
             measuring = true;
             transfer(channel, &command, 1, true);
         } else if (command == 'E' && measuring) {
-            auto metrics = snapshot(worker.thread);
+            auto metrics = snapshot(worker.thread, acceptors);
             metrics.process_cpu_seconds -= before.process_cpu_seconds;
             metrics.thread_cpu_seconds -= before.thread_cpu_seconds;
             metrics.unix_syscalls = event_delta(metrics.unix_syscalls, before.unix_syscalls);
@@ -130,7 +163,7 @@ void configure_channel(int fd) {
 }
 } // namespace
 
-ServerProcess::ServerProcess() {
+ServerProcess::ServerProcess(int server_threads) : server_threads_(server_threads) {
     int pair[2];
     if (::socketpair(AF_UNIX, SOCK_STREAM, 0, pair) != 0)
         throw std::runtime_error("server control socketpair failed");
@@ -147,7 +180,7 @@ ServerProcess::ServerProcess() {
         ::close(pair[0]);
         int result = 1;
         try {
-            result = run_child(pair[1]);
+            result = run_child(pair[1], server_threads_);
         } catch (const std::exception &error) {
             std::fprintf(stderr, "server child failed: %s\n", error.what());
         }
