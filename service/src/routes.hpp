@@ -1,9 +1,9 @@
 // ADR: docs/adr/ADR-0003-local-runtime-path.md
 // Route dispatch of the orange loopback service (ADR-0003, subtask T-2):
 // maps one complete parsed message to its response. These rungs own the
-// declared diagnostic routes GET /api/health and POST /api/echo and the
-// 405/404 outcomes; static serving and the TLS listener land in later
-// T-2 rungs.
+// declared diagnostic routes GET /api/health and POST /api/echo, the
+// 405/404 outcomes, and static serving through the immutable store; the TLS
+// listener lands in a later T-2 rung.
 #ifndef ORANGE_HTTP_ROUTES_HPP
 #define ORANGE_HTTP_ROUTES_HPP
 #include "http_request_decoder.hpp"

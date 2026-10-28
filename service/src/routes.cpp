@@ -1,8 +1,12 @@
 // ADR: docs/adr/ADR-0003-local-runtime-path.md
 // Implementation of the T-2 route dispatch: the declared diagnostic routes
-// and the 405/404 outcomes for methods and targets outside them. Static
-// serving and the TLS listener land in later T-2 rungs.
+// and the 405/404 outcomes for methods and targets outside them, plus static
+// serving through the immutable store. The TLS listener lands in a later
+// T-2 rung.
 #include "routes.hpp"
+#include <optional>
+#include <span>
+#include <string_view>
 
 namespace orange::http {
 namespace {
@@ -15,6 +19,10 @@ constexpr ResponseField health_fields[] = {{"Content-Type", "application/json"}}
 constexpr ResponseField health_allow[] = {{"Allow", "GET"}};
 constexpr std::string_view echo_target = "/api/echo";
 constexpr ResponseField echo_allow[] = {{"Allow", "POST"}};
+// A resolved static asset serves GET only; the pair has static storage so
+// the returned field views outlive the call (RequestHandler borrowing
+// contract).
+constexpr ResponseField static_allow[] = {{"Allow", "GET"}};
 
 // An empty-body outcome framed with Content-Length: 0 so a keep-alive
 // client can delimit the response without a connection close (RFC 9112 6).
@@ -22,9 +30,9 @@ Response empty_response(unsigned int status, std::span<const ResponseField> fiel
     return Response{status, BodyFraming::content_length, "", fields, false};
 }
 
-} // namespace
-
-Response handle_request(const ParsedMessage &message) {
+// The declared API routes, when the message addresses one; nullopt leaves
+// the target to static resolution or the 404 outcome.
+std::optional<Response> api_route(const ParsedMessage &message) {
     const std::string_view target = message.request.target();
     const std::string_view method = message.request.method();
     if (target == health_target) {
@@ -41,15 +49,28 @@ Response handle_request(const ParsedMessage &message) {
         // call that follows (RequestHandler contract).
         return Response{200, BodyFraming::chunked, message.body, {}, false};
     }
+    return std::nullopt;
+}
+
+} // namespace
+
+Response handle_request(const ParsedMessage &message) {
+    if (const auto response = api_route(message))
+        return *response;
     return empty_response(404, {});
 }
 
-// Wiring stub for the T-2 static-serving rung: ignores the store so every
-// non-API target answers 404 exactly as before; the static dispatch lands in
-// the implementing change together with static_files.cpp.
 Response handle_request(const ParsedMessage &message, const StaticFileStore *static_files) {
-    static_cast<void>(static_files);
-    return handle_request(message);
+    if (const auto response = api_route(message))
+        return *response;
+    if (static_files != nullptr) {
+        if (const StaticAsset *asset = static_files->find(message.request.target())) {
+            if (message.request.method() != "GET")
+                return empty_response(405, static_allow);
+            return StaticFileStore::serve_get(*asset, message);
+        }
+    }
+    return empty_response(404, {});
 }
 
 } // namespace orange::http

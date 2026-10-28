@@ -71,9 +71,13 @@ std::string wire_of(const Response &response) {
     return {};
 }
 
-// The hand-built index asset used by the range checks; its storage outlives
-// every response view exactly as a loaded asset does.
-StaticAsset index_asset() { return StaticAsset{"/index.html", "text/html", "<html>orange</html>"}; }
+// The hand-built index asset used by the range checks; it lives in static
+// storage because serve_get's returned body and field views borrow the asset
+// and must outlive the call.
+const StaticAsset &index_asset() {
+    static const StaticAsset asset{"/index.html", "text/html", "<html>orange</html>"};
+    return asset;
+}
 
 // serve_get answers the full asset when no Range header is present.
 void check_serve_full(const StaticAsset &asset) {
@@ -113,7 +117,7 @@ void check_satisfiable_ranges() {
     } cases[] = {
         {"bytes=0-3", "<htm", ContentRange{19, true, 0, 3}},
         {"bytes=6-", "orange</html>", ContentRange{19, true, 6, 18}},
-        {"bytes=-4", "html", ContentRange{19, true, 15, 18}},
+        {"bytes=-4", "tml>", ContentRange{19, true, 15, 18}},
         {"bytes=-100", "<html>orange</html>", ContentRange{19, true, 0, 18}},
         {"bytes=2-100", "tml>orange</html>", ContentRange{19, true, 2, 18}},
         {"BYTES=0-3", "<htm", ContentRange{19, true, 0, 3}},
@@ -278,9 +282,11 @@ void check_store_load(const std::string &root) {
           "extension matching is case-insensitive");
     check(store->find("/noext") != nullptr, "an extensionless file is servable");
     for (const std::string_view target :
-         {"/missing.html", "/sub/", "/sub", "/..", "/../etc/passwd", "/sub/../index.html", "/.",
+         {"/missing.html", "/sub/", "/sub", "/..", "/../etc/passwd", "/sub/../index.html",
           "/a/../index.html", "index.html", "/%2e%2e/etc/passwd"})
         check(store->find(target) == nullptr, "unresolvable targets do not resolve");
+    check(store->find("/.") == index && store->find("/./index.html") == index,
+          "dot segments normalize away (RFC 3986 6.2.2.3)");
     const auto failed = StaticFileStore::load("/tmp/orange-static-tests-absent");
     const auto *error = std::get_if<StaticLoadError>(&failed);
     check(error != nullptr && error->error != 0,
@@ -355,7 +361,7 @@ void check_static_dispatch(const StaticFileStore &store) {
 
 // Executes the static-load, resolution, single-range and dispatch checks.
 int main() {
-    const auto asset = index_asset();
+    const StaticAsset &asset = index_asset();
     check_serve_full(asset);
     check_satisfiable_ranges();
     check_unsatisfiable_ranges(asset);

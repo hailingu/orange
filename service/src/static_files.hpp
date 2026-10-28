@@ -65,6 +65,8 @@ class StaticFileStore {
   private:
     // Sorted by path; find() binary-searches this vector.
     std::vector<StaticAsset> assets_;
+    // Binary search for one normalized stored key.
+    [[nodiscard]] const StaticAsset *find_by_key(const std::string &key) const;
 };
 
 } // namespace orange::http

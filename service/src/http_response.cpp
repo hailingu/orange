@@ -73,11 +73,14 @@ bool valid_value(std::string_view value) {
 }
 
 // Every caller defect the serializer refuses to place on the wire, in the
-// documented order: status, body-forbidden statuses, each field's name,
-// ownership and value, then the unframed-body mismatch.
+// documented order: status, the Content-Range status pairing,
+// body-forbidden statuses, each field's name, ownership and value, then the
+// unframed-body mismatch.
 std::optional<ResponseError> validate(const Response &response) {
     if (response.status < 100 || response.status > 599)
         return ResponseError::invalid_status;
+    if (response.content_range.has_value() && response.status != 206 && response.status != 416)
+        return ResponseError::invalid_content_range;
     if (body_forbidden(response.status) &&
         (response.framing != BodyFraming::none || !response.body.empty()))
         return ResponseError::body_forbidden_status;
@@ -112,6 +115,14 @@ std::size_t wire_size(const Response &response) {
         status_version.size() + 1 + 3 + 1 + reason_phrase(response.status).size() + 2;
     for (const ResponseField &field : response.fields)
         total += field.name.size() + 2 + field.value.size() + 2;
+    if (response.content_range.has_value()) {
+        // "Content-Range: bytes " + the "*/" (or '-' and '/') separators +
+        // up to three 20-digit numbers + CRLF, exactly for both forms.
+        const ContentRange &range = *response.content_range;
+        total += 15 + 6 + 2 + digit_count(range.total, 10) + 2;
+        if (range.satisfied)
+            total += digit_count(range.first, 10) + digit_count(range.last, 10);
+    }
     if (response.framing == BodyFraming::content_length)
         total += 16 + digit_count(response.body.size(), 10) + 2;
     if (response.framing == BodyFraming::chunked)
@@ -138,8 +149,9 @@ void append_number(std::string &out, std::size_t value, int base) {
 }
 
 // Assembles the validated response: status line, caller fields in order,
-// the encoder-owned framing field, the optional Connection: close, the
-// terminating empty line, then the framed body.
+// the encoder-formatted Content-Range, the encoder-owned framing field, the
+// optional Connection: close, the terminating empty line, then the framed
+// body.
 void serialize(const Response &response, std::string &out) {
     out.append(status_version).push_back(' ');
     append_number(out, response.status, 10);
@@ -147,6 +159,20 @@ void serialize(const Response &response, std::string &out) {
     out.append(reason_phrase(response.status)).append("\r\n");
     for (const ResponseField &field : response.fields)
         out.append(field.name).append(": ").append(field.value).append("\r\n");
+    if (response.content_range.has_value()) {
+        const ContentRange &range = *response.content_range;
+        out.append("Content-Range: bytes ");
+        if (range.satisfied) {
+            append_number(out, range.first, 10);
+            out.push_back('-');
+            append_number(out, range.last, 10);
+            out.push_back('/');
+        } else {
+            out.append("*/");
+        }
+        append_number(out, range.total, 10);
+        out.append("\r\n");
+    }
     if (response.framing == BodyFraming::content_length) {
         out.append("Content-Length: ");
         append_number(out, response.body.size(), 10);
