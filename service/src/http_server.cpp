@@ -411,21 +411,24 @@ int run_acceptor(int listener_fd, const RequestHandler &handler,
     return 0;
 }
 
-// Binds one more listener into a bound listener's SO_REUSEPORT group; the
-// kernel spreads incoming connections across every group member. An invalid
-// result carries the failing errno.
-OwnedFd join_listener_group(const sockaddr_in &address) {
+// Creates one bound, listening, non-blocking loopback listener. A shared
+// listener joins the port's SO_REUSEPORT group, over which the kernel spreads
+// incoming connections; an unshared one is the historical lone listener.
+// An invalid result stores the failing errno in error.
+OwnedFd make_listener(const sockaddr_in &address, bool shared, int &error) {
     OwnedFd fd{::socket(AF_INET, SOCK_STREAM, 0)};
-    if (!fd.valid())
+    if (!fd.valid()) {
+        error = errno;
         return fd;
+    }
     const int reuse = 1;
-    if (::setsockopt(fd.get(), SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0 ||
-        ::setsockopt(fd.get(), SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0 ||
+    if (set_non_blocking(fd.get()) != 0 ||
+        ::setsockopt(fd.get(), SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0 ||
+        (shared && ::setsockopt(fd.get(), SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) ||
         ::bind(fd.get(), reinterpret_cast<const sockaddr *>(&address), sizeof(address)) < 0 ||
-        ::listen(fd.get(), listen_backlog) < 0 || set_non_blocking(fd.get()) != 0) {
-        const int error = errno;
+        ::listen(fd.get(), listen_backlog) < 0) {
+        error = errno;
         fd.reset();
-        errno = error;
     }
     return fd;
 }
@@ -433,68 +436,57 @@ OwnedFd join_listener_group(const sockaddr_in &address) {
 } // namespace
 
 LoopbackServer::~LoopbackServer() {
-    if (listen_fd_ >= 0)
-        ::close(listen_fd_);
+    for (const int fd : listeners_)
+        ::close(fd);
 }
 
 int LoopbackServer::bind(std::uint16_t port, std::uint16_t *bound_port) {
-    OwnedFd fd{::socket(AF_INET, SOCK_STREAM, 0)};
-    if (!fd.valid())
-        return errno;
-    if (const int error = set_non_blocking(fd.get()); error != 0)
-        return error;
-    const int reuse = 1;
-    if (::setsockopt(fd.get(), SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
-        return errno;
+    if (acceptor_threads_ < 1 || acceptor_threads_ > 64 || !listeners_.empty())
+        return EINVAL;
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    if (::bind(fd.get(), reinterpret_cast<const sockaddr *>(&address), sizeof(address)) < 0)
+    const bool shared = acceptor_threads_ > 1;
+    int error = 0;
+    std::vector<OwnedFd> group;
+    group.push_back(make_listener(address, shared, error));
+    if (!group.back().valid())
+        return error;
+    // Siblings must name the actual port, which an ephemeral request reveals
+    // only after the first bind; the whole group listens before the port is
+    // reported, so no connection can arrive while it is still forming.
+    socklen_t size = sizeof(address);
+    if (::getsockname(group.front().get(), reinterpret_cast<sockaddr *>(&address), &size) < 0)
         return errno;
-    if (::listen(fd.get(), listen_backlog) < 0)
-        return errno;
-    if (bound_port != nullptr) {
-        sockaddr_in bound{};
-        socklen_t size = sizeof(bound);
-        if (::getsockname(fd.get(), reinterpret_cast<sockaddr *>(&bound), &size) < 0)
-            return errno;
-        *bound_port = ntohs(bound.sin_port);
+    for (int index = 1; index < acceptor_threads_; ++index) {
+        group.push_back(make_listener(address, shared, error));
+        if (!group.back().valid())
+            return error; // RAII closes the members that did bind
     }
-    listen_fd_ = fd.release();
+    if (bound_port != nullptr)
+        *bound_port = ntohs(address.sin_port);
+    for (auto &listener : group)
+        listeners_.push_back(listener.release());
     return 0;
 }
 
 int LoopbackServer::serve(RequestHandler handler, std::chrono::milliseconds idle_timeout,
-                          const std::atomic_bool &stop, int acceptor_threads) {
-    if (listen_fd_ < 0 || !handler || acceptor_threads < 1 || acceptor_threads > 64)
+                          const std::atomic_bool &stop) {
+    if (listeners_.empty() || !handler)
         return EINVAL;
     std::atomic_bool abort{false};
-    if (acceptor_threads == 1)
-        return run_acceptor(listen_fd_, handler, idle_timeout, stop, abort);
-    // Rebind the port as a kernel-balanced SO_REUSEPORT group: the original
-    // listener was bound without the option and cannot join retroactively,
-    // so it closes first and the port is free only for that instant.
-    sockaddr_in address{};
-    socklen_t size = sizeof(address);
-    if (::getsockname(listen_fd_, reinterpret_cast<sockaddr *>(&address), &size) < 0)
-        return errno;
-    OwnedFd original{std::exchange(listen_fd_, -1)};
-    original.reset();
-    std::vector<OwnedFd> listeners;
-    for (int index = 0; index < acceptor_threads; ++index)
-        listeners.push_back(join_listener_group(address));
-    if (!listeners.back().valid())
-        return errno; // RAII closes any siblings that did bind
-    std::vector<int> results(listeners.size(), 0);
+    if (listeners_.size() == 1)
+        return run_acceptor(listeners_.front(), handler, idle_timeout, stop, abort);
+    // Every sibling listener gets its own loop; the calling thread keeps loop 0.
+    std::vector<int> results(listeners_.size(), 0);
     std::vector<std::thread> loops;
     try {
-        for (std::size_t index = 1; index < listeners.size(); ++index)
-            loops.emplace_back(
-                [handler, &listeners, &results, index, &idle_timeout, &stop, &abort] {
-                    results[index] =
-                        run_acceptor(listeners[index].get(), handler, idle_timeout, stop, abort);
-                });
+        for (std::size_t index = 1; index < listeners_.size(); ++index)
+            loops.emplace_back([handler, this, &results, index, &idle_timeout, &stop, &abort] {
+                results[index] =
+                    run_acceptor(listeners_[index], handler, idle_timeout, stop, abort);
+            });
     } catch (...) {
         // A loop that never started cannot raise abort itself.
         abort.store(true, std::memory_order_relaxed);
@@ -502,7 +494,7 @@ int LoopbackServer::serve(RequestHandler handler, std::chrono::milliseconds idle
             loop.join();
         return EAGAIN;
     }
-    results[0] = run_acceptor(listeners[0].get(), handler, idle_timeout, stop, abort);
+    results[0] = run_acceptor(listeners_.front(), handler, idle_timeout, stop, abort);
     for (auto &loop : loops)
         loop.join();
     for (const int result : results)
@@ -514,10 +506,10 @@ int LoopbackServer::serve(RequestHandler handler, std::chrono::milliseconds idle
 int serve_loopback(std::uint16_t port, RequestHandler handler,
                    std::chrono::milliseconds idle_timeout, const std::atomic_bool &stop,
                    std::uint16_t *bound_port, int acceptor_threads) {
-    LoopbackServer server;
+    LoopbackServer server{acceptor_threads};
     if (const int error = server.bind(port, bound_port); error != 0)
         return error;
-    return server.serve(std::move(handler), idle_timeout, stop, acceptor_threads);
+    return server.serve(std::move(handler), idle_timeout, stop);
 }
 
 } // namespace orange::http

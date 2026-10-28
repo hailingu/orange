@@ -1,7 +1,8 @@
 // ADR: docs/adr/ADR-0003-local-runtime-path.md
-// RT-9: several shared-nothing acceptor loops (SO_REUSEPORT listener group)
-// must serve concurrent connections byte-exactly and stop cleanly. Each
-// connection stays owned by whichever acceptor won it; no loop shares state.
+// RT-1: several shared-nothing acceptor loops (SO_REUSEPORT listener group
+// bound as a whole before the port is reported) must serve concurrent
+// connections byte-exactly and stop cleanly. Each connection stays owned by
+// whichever acceptor won it; no loop shares state.
 #include "http_server.hpp"
 #include <algorithm>
 #include <atomic>
@@ -60,7 +61,7 @@ bool exchange(std::uint16_t port) {
 } // namespace
 
 int main() {
-    orange::http::LoopbackServer server;
+    orange::http::LoopbackServer server{3};
     std::uint16_t port = 0;
     if (server.bind(0, &port) != 0)
         return 1;
@@ -77,7 +78,7 @@ int main() {
                                               {health_fields, 1},
                                               false};
             },
-            std::chrono::seconds(5), stop, 3);
+            std::chrono::seconds(5), stop);
     });
     std::vector<std::thread> clients;
     std::vector<bool> outcomes(6);
@@ -89,7 +90,7 @@ int main() {
     worker.join();
     const bool pass = result == 0 && served.load() == 6 &&
                       std::all_of(outcomes.begin(), outcomes.end(), [](bool ok) { return ok; });
-    std::printf("RT-9: clean_stop=%s concurrent_wires=%d/6\n", result == 0 ? "Pass" : "Fail",
+    std::printf("RT-1: clean_stop=%s concurrent_wires=%d/6\n", result == 0 ? "Pass" : "Fail",
                 static_cast<int>(std::count(outcomes.begin(), outcomes.end(), true)));
     return pass ? 0 : 1;
 }

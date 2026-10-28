@@ -96,13 +96,13 @@ std::uint64_t event_delta(std::uint64_t after, std::uint64_t before) {
 // Joins on control failure as well as the normal stop command.
 class Worker {
   public:
-    // Starts only inside the already-forked child.
-    explicit Worker(int acceptors) {
+    // Starts only inside the already-forked child; the whole listener group
+    // is bound before the port is reported to the parent.
+    explicit Worker(int acceptors) : server_(acceptors) {
         if (server_.bind(0, &port) != 0)
             throw std::runtime_error("child listener bind failed");
-        thread = std::thread([this, acceptors] {
-            result_ =
-                server_.serve(http::handle_request, std::chrono::seconds(30), stop_, acceptors);
+        thread = std::thread([this] {
+            result_ = server_.serve(http::handle_request, std::chrono::seconds(30), stop_);
         });
     }
     ~Worker() { finish(); }
