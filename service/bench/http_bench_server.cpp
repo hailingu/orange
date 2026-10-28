@@ -102,7 +102,13 @@ class Worker {
         if (server_.bind(0, &port) != 0)
             throw std::runtime_error("child listener bind failed");
         thread = std::thread([this] {
-            result_ = server_.serve(http::handle_request, std::chrono::seconds(30), stop_);
+            // The single-argument overload keeps the benchmark child on the
+            // API-only dispatch (no static store exists in this process).
+            result_ = server_.serve(
+                [](const http::ParsedMessage &message) {
+                    return http::handle_request(message);
+                },
+                std::chrono::seconds(30), stop_);
         });
     }
     ~Worker() { finish(); }

@@ -3,7 +3,7 @@
 ## Metadata [Required]
 
 - **Decision Status**: Accepted
-- **Implementation Status**: In Progress
+- **Implementation Status**: Complete
 - **Date**: 2026-10-22
 - **Author**: @codex
 - **Decision Owner**: @hailingu
@@ -83,8 +83,8 @@ acceptor loops. Both extend T-3 with SB-7 and SB-8 under the same scoped
 waiver; they authorize no approval, standing waiver, or remote write.
 On 2026-10-28 the repository owner @hailingu responded with the exact word
 Approve in this record's sole context (a one-record approval question naming
-this repository-relative path). The record is Accepted / In Progress;
-fresh HEAD verification and the immutable commit anchor precede completion.
+this repository-relative path). The record is Accepted and, after fresh HEAD
+verification, Complete; the immutable commit anchor is `8ef4e2b`.
 
 ## Scope [Required]
 
@@ -305,7 +305,7 @@ recorded under Retrospective Authorization, not an engineering exception.
 | ID | Item | Completion Criterion | Expected Evidence | Status | Actual Evidence |
 | --- | --- | --- | --- | --- | --- |
 | A-1 | ADR approved | Eligible non-author approver responds exactly Approve in this record's sole context | Approval metadata | Complete | Reapproved-as-initial-approval 2026-10-28: Approver @hailingu (non-author; author @codex), Approval Time 2026-10-28T14:32:45Z, Approval Evidence: Approve, in this record's sole context; informational Approval Context Revision commit 15ee45a exactly represents the approved document content |
-| A-2 | Complete task delivered | Every applicable acceptance check passes and every subtask has actual evidence after acceptance | Checks and evidence JSON | Not Started | Historical exception execution only; formal completion follows individual approval |
+| A-2 | Complete task delivered | Every applicable acceptance check passes and every subtask has actual evidence after acceptance | Checks and evidence JSON | Complete | Completed 2026-10-28 after the individual approval: fresh HEAD verification at anchor `8ef4e2b` — Debug trio 15/15, Release benchmark tree 18/18 (both bench suites green), Release+ASan/UBSan benchmark tree 2/2, process tests repeated 30/30, zero build warnings; the measurement-comparison checks AC-3/AC-5 keep their retained raw artifacts, patches and source fingerprints from the executed rounds as their immutable evidence, and AC-2 keeps its captured mutation diagnostic. All subtasks Complete with historical execution evidence recorded in the Implementation Plan |
 | A-3 | Reciprocal ADD link | N/A — corrective performance maintenance | Architecture Source assessment | N/A — no product-demand handoff | No ADD candidate changed |
 | A-4 | Requirement levels | Every required item and conditional assessment is complete | Structured review | Complete | Reviewed at drafting; approval fields remain pending in Proposed |
 | A-5 | Decidable checks | Every check has input, binary expected result and deterministic method | Acceptance table | Complete | Checks below identify executable contracts and exact outcomes |
@@ -323,6 +323,7 @@ index, and preserve reciprocal supersession paths when applicable.
 
 | Date | Change | Author |
 | --- | --- | --- |
+| 2026-10-28 | Complete the record after the individual approval: fresh HEAD verification at anchor `8ef4e2b` — Debug trio 15/15, Release benchmark tree 18/18 with both bench suites green, Release+ASan/UBSan benchmark tree 2/2, process tests repeated 30/30, zero build warnings (one bench-child compile ambiguity introduced by the routes store-aware overload was fixed by selecting the single-argument dispatch in the same change); Implementation Status In Progress→Complete with A-2 recording the fresh and retained evidence. The retained measurement artifacts, patches and fingerprints of AC-3/AC-5 and the AC-2 mutation diagnostic remain the immutable evidence of the executed rounds | @zcode |
 | 2026-10-28 | Approval: repository owner @hailingu responded with the exact word Approve in this record's sole context (one-record approval question naming this path). Decision Status Proposed→Accepted; Implementation Status Not Started→In Progress; Approver, Approval Time and Approval Evidence recorded; Approval Context Revision recorded informationally at commit 15ee45a. Fresh HEAD verification and the immutable commit anchor precede completion | @zcode |
 | 2026-10-28 | Extend waived T-3 with SB-7 client shards and SB-8 server acceptor plumbing, AC-7/AC-8 and the Round 4/5 measured rerun recorded in the 10-28 report; approval remains outstanding | @zcode |
 | 2026-10-28 | Extend waived T-3 with SB-6 exact server system-call/context-switch counts and AC-6; approval remains outstanding | @copilot |
