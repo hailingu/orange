@@ -146,10 +146,111 @@ zero socket, wire, or deadline errors and no discarded invocations.
   scenarios and +17.8% / +16.7% / +56.4% on `echo_1m_c1` / `health_idle512` /
   `health_idle2048`, each 5/5 positive.
 
-Raw run JSON for all seven arms, the construction recipe, binary fingerprints
-and the per-scenario medians are retained in
+### Round 6b — Three-Shard Client Against Every Version
+
+Round 6 drove the historical versions only with the single-shard client,
+which Round 4 had already shown to be the ceiling at eight and sixty-four
+connections, so the owner asked for the three-shard client to be measured
+too (“没测试对3客户端吗？如果没测试，补充这个测试”). The `e912dfa` driver — the
+first with `--client-threads`, whose child still default-constructs
+`LoopbackServer` and calls the three-argument `serve` — was paired with each
+version's production sources exactly as the `17e571e` driver was above, so
+every version below is driven by three client shards against its single
+acceptor loop; HEAD at one shard is the in-round anchor and HEAD 3×3 the
+acceptor-group arm. Five alternating groups over the ten scenarios at
+2000 ms; **66,117,241 measured responses**, zero errors; four `health_idle512`
+/ `health_idle2048` setups hit the known listen-backlog burst race
+(`errno=54`, one on `4e6c154`, two on HEAD 1×1, one on HEAD 1×3) and were
+discarded and retried per the audit practice.
+
+| Arm | Construction | `http_server_bench` SHA-256 |
+| --- | --- | --- |
+| Poll 1×3 | Round 6 Poll sources under the `e912dfa` tree | `0fb775d7a239a7f68714e9c56d20d6fc40db20251f55b1bb7200f8e8d2766cf4` |
+| `08f85e9` 1×3 | `08f85e9` `service/src` under the `e912dfa` tree | `9cdc42a88e54f2990a27b48de2e6f4f775a2e072ec46b89ab081bf15a55b5cc7` |
+| `17e571e` 1×3 | `17e571e` `service/src` under the `e912dfa` tree | `6e79952f2c07d8b9e15bb790857cce6edec716ef697f599a86675e8ea33f5b6e` |
+| `4e6c154` 1×3 | `4e6c154` `service/src` under the `e912dfa` tree | `c88b4de14675c7f4e31f13b67689fad6c9b6fc191c19ee9b2482f0bb8b7a38cc` |
+| `cfdce4a` 1×3 | `e912dfa` native (production identical to `cfdce4a`) | `d155ffc8b0609f32cabd2b9d88e5904d3abc92280ff565be912735e4af75a0bf` |
+| HEAD 1×1 / 1×3 / 3×3 | `332c49f` native, flags only | `a7566b7f81d70400677f1faa0b26444c130b5987928addf46ef3284767ae529e` |
+
+Arm labels read *server acceptors × client shards*.
+
+| Scenario (median req/s ↑) | Poll 1×3 | `08f85e9` 1×3 | `17e571e` 1×3 | `4e6c154` 1×3 | `cfdce4a` 1×3 | HEAD 1×1 | HEAD 1×3 | HEAD 3×3 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| health_c1 | 27,408 | 27,441 | 27,827 | 27,958 | 27,509 | 28,482 | 27,875 | 28,409 |
+| health_c8 | 100,206 | 100,164 | 100,126 | 103,214 | 101,797 | 81,128 | **103,911** | 101,649 |
+| health_c64 | 109,025 | 107,323 | 109,635 | 114,409 | 113,355 | 83,786 | **114,988** | 112,372 |
+| health_idle64 | 21,245 | 27,110 | 27,084 | 27,337 | 28,478 | 28,484 | 27,886 | 28,350 |
+| health_pipeline16 | 382,497 | 381,720 | 390,070 | 390,587 | 398,298 | 385,979 | 379,933 | 397,201 |
+| echo_1k_c1 | 26,882 | 26,947 | 26,938 | 27,496 | 27,151 | 27,337 | 27,479 | 27,440 |
+| echo_1k_c8 | 96,238 | 94,833 | 98,554 | 97,370 | 98,282 | 77,587 | **100,083** | 99,476 |
+| echo_1m_c1 | 3,807 | 3,589 | 3,674 | 3,744 | 4,133 | 4,151 | 4,143 | 4,227 |
+| health_idle512 | 9,360 | 24,309 | 28,022 | 28,707 | 28,280 | 27,738 | 27,775 | 28,284 |
+| health_idle2048 | 2,086 | 16,895 | 26,573 | 27,237 | 25,915 | 26,306 | 26,880 | 26,984 |
+
+| Scenario (server CPU µs/req ↓) | Poll 1×3 | `08f85e9` 1×3 | `17e571e` 1×3 | `4e6c154` 1×3 | `cfdce4a` 1×3 | HEAD 1×1 | HEAD 1×3 | HEAD 3×3 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| health_c8 | 8.83 | 8.68 | 8.32 | 8.34 | 8.35 | 8.94 | 8.25 | 8.35 |
+| health_c64 | 8.13 | 8.31 | 7.83 | 7.84 | 7.89 | 8.28 | 7.81 | 7.87 |
+| echo_1k_c8 | 9.06 | 9.06 | 8.74 | 8.80 | 8.69 | 9.30 | 8.70 | 8.67 |
+| echo_1m_c1 | 171.00 | 178.65 | 168.21 | 169.68 | 147.93 | 143.36 | 145.83 | 146.53 |
+| health_idle2048 | 419.38 | 35.95 | 10.69 | 10.74 | 10.67 | 10.85 | 10.72 | 10.79 |
+
+| `health_c64` under load | Poll 1×3 | `08f85e9` 1×3 | `17e571e` 1×3 | `4e6c154` 1×3 | `cfdce4a` 1×3 | HEAD 1×1 | HEAD 1×3 | HEAD 3×3 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Server cores busy (req/s × CPU/req) | 0.887 | 0.892 | 0.858 | 0.897 | 0.895 | 0.694 | 0.898 | 0.885 |
+| Client cores busy | 1.68 | 2.06 | 2.51 | 2.61 | 2.60 | 0.88 | 2.62 | 2.58 |
+| Server syscalls/req | 2.020 | 2.047 | 2.025 | 2.025 | 2.025 | 2.814 | 2.025 | 2.025 |
+| Server csw/req | 0.009 | 0.007 | 0.011 | 0.009 | 0.012 | 0.226 | 0.009 | 0.011 |
+
+| Comparison | health_c8 | health_c64 | echo_1k_c8 | echo_1m_c1 | health_idle2048 |
+| --- | --- | --- | --- | --- | --- |
+| HEAD 1×3 / `08f85e9` 1×3 | +3.7% (-10.3, +5.4, +4.3, +8.3, +0.2) | +7.1% (-6.5, +7.7, +7.7, +10.4, +6.1) | +5.5% (-9.3, +8.0, +4.0, +10.5, +5.3) | **+15.4% (+24.2, +17.7, +17.6, +15.1, +12.4)** | **+59.1% (+47.5, +59.1, +66.2, +58.5, +61.6)** |
+| HEAD 1×3 / Poll 1×3 | +3.7% (-12.3, +7.7, +3.7, +13.6, +0.2) | +5.5% (-11.5, +2.2, +6.9, +6.9, +5.7) | +4.0% (-10.0, +6.5, +1.7, +9.3, +3.0) | +8.8% (-2.5, +11.2, +10.8, +15.2, +6.0) | **+1,188.6% (+903, +1,217, +1,211, +1,258, +1,171)** |
+| HEAD 1×3 / HEAD 1×1 | **+28.1% (+22.0, +23.7, +28.3, +30.7, +34.8)** | **+37.2% (+32.8, +25.3, +51.8, +35.5, +43.1)** | **+29.0% (+27.9, +25.5, +26.1, +28.8, +41.2)** | -0.2% (-2.3, -2.4, -0.6, +3.2, +10.6) | +2.2% (-2.2, +0.3, +4.4, +6.3, -1.4) |
+| HEAD 3×3 / HEAD 1×3 | -2.2% (+0.8, -3.9, +1.8, -3.4, -1.7) | -2.3% (+1.0, -4.0, +0.7, -2.7, -3.9) | -0.6% (-3.6, -11.9, +3.6, -0.3, -0.6) | +2.0% (-1.7, -0.6, +2.6, -1.3, -1.7) | +0.4% (+9.6, -1.1, -1.7, -1.0, -0.0) |
+| `4e6c154` 1×3 / `17e571e` 1×3 | +3.1% (+6.2, +1.7, +4.0, -1.9, +5.5) | +4.4% (+3.8, +3.6, +4.5, -0.0, +4.8) | -1.2% (+3.2, +0.2, +0.1, -5.4, +1.1) | +1.9% (+2.3, +2.5, +1.0, -7.9, +5.3) | +2.5% (+13.0, +5.6, +2.5, -0.6, +4.2) |
+
+**Round 6b assessment**:
+
+- **Under the three-shard client every single-loop version converges on one
+  busy core.** At `health_c64` Poll, `08f85e9`, `17e571e`, `4e6c154`,
+  `cfdce4a` and HEAD all sit at 0.86–0.90 server cores while the client burns
+  1.7–2.6 cores. The versions therefore separate only by their cost per
+  request: HEAD's 7.81 µs against `08f85e9`'s 8.31 (-6.0%) and Poll's 8.13
+  (-3.9%) buys a +7.1% / +5.5% median throughput edge at `health_c64`, 4/5
+  pairs positive against each baseline but with partially overlapping ranges
+  (`08f85e9` 105,597–119,073 versus HEAD 111,276–116,544) — a modest, mostly
+  consistent lead, not a separation.
+- **HEAD 3×3 still adds nothing over HEAD 1×3** (every comparison mixed, -2% to
+  +2% medians), confirming for the third time today that the three-shard
+  client, not the server, is the binding constraint; three acceptors reach
+  the same ~112–115k and merely idle more. Because the single-loop servers are
+  at ~0.9 core here, a four- or five-shard client would be the first
+  configuration able to separate the versions' server ceilings.
+- **Deterministic results survive the heavier client.** System calls per
+  request at `health_c64` fall to 2.02–2.05 for every version (each `kevent`
+  or `poll` wakeup harvests more connections) with `08f85e9` still the only
+  version at 4.000 on unpipelined exchanges; `echo_1m_c1` keeps the window
+  split (67 versus 20 calls; HEAD +15.4% over `08f85e9`, 5/5 positive); idle
+  scaling is unchanged by client shards (`health_idle2048` HEAD +59.1% over
+  `08f85e9` and 12.9 times Poll, 5/5 positive).
+- **The client's own cost depends on the server it talks to.** Against Poll
+  the three shards spend 15.45 µs per request; against HEAD 22.79 µs. A
+  server that answers immediately leaves fewer sockets ready per client
+  `poll` wakeup, so the client issues more wakeups per request — the faster
+  the server, the more the closed-loop harness costs, which is why the client
+  ceiling arrives before the server's.
+- **`4e6c154` over `17e571e` shows a small, repeated edge at eight and
+  sixty-four connections** (+3.1% / +4.4%, 4/5 pairs positive with the fifth
+  at 0.0%) that the single-shard client could not see; its CPU per request is
+  identical (7.84 versus 7.83 µs), so it is recorded as suggestive, not
+  claimed.
+
+Raw run JSON for all seven Round 6 arms and the eight Round 6b arms, both
+construction recipes, binary fingerprints and the per-scenario medians are
+retained in
 [`2026-10-28-http-performance-evidence.json`](2026-10-28-http-performance-evidence.json)
-under `cross_version_rerun_r6`.
+under `cross_version_rerun_r6` and `cross_version_rerun_r6_client3`.
 
 ## Follow-Up: Three-Shard Client And Acceptor Threads (Rounds 4 And 5) — 2026-10-28
 
