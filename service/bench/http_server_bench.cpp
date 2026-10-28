@@ -1,7 +1,9 @@
 // ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
 // Measures real loopback request completion with independent wire validation.
-// The single client loop multiplexes nonblocking sockets; the production loop
-// runs in a child process. CPU and RSS are attributed separately.
+// The client multiplexes nonblocking sockets, optionally across disjoint
+// driving shards (--client-threads); the production loop runs in a child
+// process forked before any client thread starts. CPU and RSS are attributed
+// separately.
 #include "http_bench_server.hpp"
 #include "routes.hpp"
 #include <algorithm>
@@ -15,11 +17,13 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <sys/resource.h>
 #include <sys/socket.h>
+#include <thread>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -144,51 +148,87 @@ void receive_window(Client &client, const std::string &response, int pipeline,
     }
 }
 
-// Measures a closed-loop load, then drains every issued request before returning.
-double exercise(std::vector<Client> &clients, const std::string &request,
-                const std::string &response, int pipeline, int duration_ms,
-                std::vector<double> &latencies) {
-    std::vector<pollfd> fds(clients.size());
-    const auto begin = Clock::now();
-    const auto end = begin + std::chrono::milliseconds(duration_ms);
-    std::size_t done = 0;
-    while (done < clients.size()) {
-        if (Clock::now() > end + 3s)
-            throw std::runtime_error("client deadline exceeded");
-        for (std::size_t i = 0; i < clients.size(); ++i) {
-            const auto &client = clients[i];
-            fds[i] = {client.fd,
-                      static_cast<short>(client.done                    ? 0
-                                         : client.sent < request.size() ? POLLOUT
-                                                                        : POLLIN),
-                      0};
-        }
-        if (::poll(fds.data(), fds.size(), 100) < 0) {
-            if (errno == EINTR)
-                continue;
-            throw std::runtime_error("client poll failed");
-        }
-        for (std::size_t i = 0; i < clients.size(); ++i) {
-            auto &client = clients[i];
-            if (client.done)
-                continue;
-            if (fds[i].revents & (POLLERR | POLLNVAL | POLLHUP))
-                throw std::runtime_error("client readiness error");
-            if (fds[i].revents & POLLOUT)
-                send_window(client, request);
-            if (fds[i].revents & POLLIN)
-                receive_window(client, response, pipeline, latencies);
-            if (client.received != response.size() * static_cast<std::size_t>(pipeline))
-                continue;
-            if (Clock::now() >= end) {
-                client.done = true;
-                ++done;
-            } else {
-                client.sent = 0;
-                client.received = 0;
+// Drives one disjoint slice of clients through the closed loop; a shard error
+// is recorded instead of propagating across the thread boundary. Every client
+// belongs to exactly one shard, so no state is shared between shards.
+void drive(std::span<Client> clients, const std::string &request, const std::string &response,
+           int pipeline, std::vector<double> &latencies, Clock::time_point end,
+           std::string &failure) {
+    try {
+        std::vector<pollfd> fds(clients.size());
+        std::size_t done = 0;
+        while (done < clients.size()) {
+            if (Clock::now() > end + 3s)
+                throw std::runtime_error("client deadline exceeded");
+            for (std::size_t i = 0; i < clients.size(); ++i) {
+                const auto &client = clients[i];
+                fds[i] = {client.fd,
+                          static_cast<short>(client.done                    ? 0
+                                             : client.sent < request.size() ? POLLOUT
+                                                                            : POLLIN),
+                          0};
+            }
+            if (::poll(fds.data(), fds.size(), 100) < 0) {
+                if (errno == EINTR)
+                    continue;
+                throw std::runtime_error("client poll failed");
+            }
+            for (std::size_t i = 0; i < clients.size(); ++i) {
+                auto &client = clients[i];
+                if (client.done)
+                    continue;
+                if (fds[i].revents & (POLLERR | POLLNVAL | POLLHUP))
+                    throw std::runtime_error("client readiness error");
+                if (fds[i].revents & POLLOUT)
+                    send_window(client, request);
+                if (fds[i].revents & POLLIN)
+                    receive_window(client, response, pipeline, latencies);
+                if (client.received != response.size() * static_cast<std::size_t>(pipeline))
+                    continue;
+                if (Clock::now() >= end) {
+                    client.done = true;
+                    ++done;
+                } else {
+                    client.sent = 0;
+                    client.received = 0;
+                }
             }
         }
+    } catch (const std::exception &error) {
+        failure = error.what();
     }
+}
+
+// Measures a closed-loop load across disjoint client shards, then drains every
+// issued request before returning. All shards share one deadline; latencies
+// merge unordered and are sorted by the caller.
+double exercise(std::vector<Client> &clients, const std::string &request,
+                const std::string &response, int pipeline, int duration_ms,
+                std::vector<double> &latencies, int client_threads) {
+    const auto begin = Clock::now();
+    const auto end = begin + std::chrono::milliseconds(duration_ms);
+    const std::size_t shards = std::min<std::size_t>(client_threads, clients.size());
+    auto slice = [&](std::size_t shard) {
+        const std::size_t first = clients.size() * shard / shards;
+        const std::size_t last = clients.size() * (shard + 1) / shards;
+        return std::span<Client>(clients.data() + first, last - first);
+    };
+    std::vector<std::vector<double>> shard_latencies(shards);
+    std::vector<std::string> failures(shards);
+    std::vector<std::thread> workers;
+    for (std::size_t shard = 1; shard < shards; ++shard)
+        workers.emplace_back([&, shard] {
+            drive(slice(shard), request, response, pipeline, shard_latencies[shard], end,
+                  failures[shard]);
+        });
+    drive(slice(0), request, response, pipeline, shard_latencies[0], end, failures[0]);
+    for (auto &worker : workers)
+        worker.join();
+    for (const auto &failure : failures)
+        if (!failure.empty())
+            throw std::runtime_error(failure);
+    for (auto &samples : shard_latencies)
+        latencies.insert(latencies.end(), samples.begin(), samples.end());
     return std::chrono::duration<double>(Clock::now() - begin).count();
 }
 
@@ -217,7 +257,7 @@ void prepare_descriptor_budget(const Scenario &scenario) {
 }
 
 // Excludes connection setup, warmup and shutdown from timing and CPU deltas.
-void measure(const Scenario &scenario, int duration_ms) {
+void measure(const Scenario &scenario, int duration_ms, int client_threads) {
     prepare_descriptor_budget(scenario);
     Server server;
     std::vector<Client> idle;
@@ -232,7 +272,7 @@ void measure(const Scenario &scenario, int duration_ms) {
         request += single_request;
     std::vector<double> latencies;
     latencies.reserve(262144);
-    exercise(clients, request, response, scenario.pipeline, 20, latencies);
+    exercise(clients, request, response, scenario.pipeline, 20, latencies, client_threads);
     for (auto &client : clients) {
         client.done = false;
         client.sent = 0;
@@ -243,8 +283,8 @@ void measure(const Scenario &scenario, int duration_ms) {
     rusage before{}, after{};
     if (::getrusage(RUSAGE_SELF, &before) != 0)
         throw std::runtime_error("getrusage failed");
-    const double elapsed =
-        exercise(clients, request, response, scenario.pipeline, duration_ms, latencies);
+    const double elapsed = exercise(clients, request, response, scenario.pipeline, duration_ms,
+                                    latencies, client_threads);
     if (::getrusage(RUSAGE_SELF, &after) != 0)
         throw std::runtime_error("getrusage failed");
     const auto server_metrics = server.end();
@@ -253,8 +293,8 @@ void measure(const Scenario &scenario, int duration_ms) {
     std::sort(latencies.begin(), latencies.end());
     std::cout << "{\"name\":\"" << scenario.name << "\",\"active_connections\":" << scenario.active
               << ",\"idle_connections\":" << scenario.idle << ",\"pipeline\":" << scenario.pipeline
-              << ",\"body_bytes\":" << scenario.body << ",\"requests\":" << latencies.size()
-              << ",\"elapsed_seconds\":" << elapsed
+              << ",\"client_threads\":" << client_threads << ",\"body_bytes\":" << scenario.body
+              << ",\"requests\":" << latencies.size() << ",\"elapsed_seconds\":" << elapsed
               << ",\"requests_per_second\":" << latencies.size() / elapsed
               << ",\"p50_us\":" << percentile(latencies, 50)
               << ",\"p95_us\":" << percentile(latencies, 95)
@@ -278,17 +318,28 @@ bool duration(std::string_view value, int &result) {
     return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size() && result > 0 &&
            result <= 10000;
 }
+
+// Parses a bounded client thread count; one thread is the historical driver.
+bool thread_count(std::string_view value, int &result) {
+    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), result);
+    return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size() && result >= 1 &&
+           result <= 8;
+}
 } // namespace
 
 // The CLI exits 2 for invalid options and 1 for socket/wire/deadline failures.
 int main(int argc, char **argv) {
     int duration_ms = 200;
+    int client_threads = 1;
     std::string_view selected;
     for (int i = 1; i < argc; ++i) {
         const std::string_view argument = argv[i];
         if (argument == "--quick")
             duration_ms = 20;
         else if (argument == "--duration-ms" && i + 1 < argc && duration(argv[i + 1], duration_ms))
+            ++i;
+        else if (argument == "--client-threads" && i + 1 < argc &&
+                 thread_count(argv[i + 1], client_threads))
             ++i;
         else if (argument == "--case" && i + 1 < argc)
             selected = argv[++i];
@@ -315,7 +366,7 @@ int main(int argc, char **argv) {
             if (!first)
                 std::cout << ',';
             first = false;
-            measure(scenario, duration_ms);
+            measure(scenario, duration_ms, client_threads);
         }
         std::cout << "]}\n";
     } catch (const std::exception &error) {

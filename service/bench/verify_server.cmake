@@ -93,6 +93,34 @@ foreach(argument IN ITEMS --unknown --duration-ms --case)
         message(FATAL_ERROR "invalid invocation must exit 2")
     endif()
 endforeach()
+# SB-7: optional multi-threaded client driving keeps the case contract: three
+# threads still complete all eight scenarios with valid wires and report the
+# thread count, while out-of-range counts exit 2 like malformed durations.
+execute_process(COMMAND "${BENCHMARK}" --quick --client-threads 3 RESULT_VARIABLE status
+                OUTPUT_VARIABLE threaded_report ERROR_VARIABLE diagnostic TIMEOUT 45)
+if(NOT status STREQUAL "0")
+    message(FATAL_ERROR "threaded client benchmark failed: ${status}: ${diagnostic}")
+endif()
+string(JSON threaded_count LENGTH "${threaded_report}" cases)
+if(NOT threaded_count EQUAL 8)
+    message(FATAL_ERROR "threaded client benchmark must report all eight scenarios")
+endif()
+string(JSON threaded_threads ERROR_VARIABLE threads_missing GET "${threaded_report}" cases 0
+        client_threads)
+if(threads_missing OR NOT threaded_threads EQUAL 3)
+    message(FATAL_ERROR "threaded client benchmark must report its thread count")
+endif()
+string(JSON threaded_errors GET "${threaded_report}" cases 0 errors)
+if(NOT threaded_errors EQUAL 0)
+    message(FATAL_ERROR "threaded client validation failed")
+endif()
+foreach(value IN ITEMS 0 -1 9 nan 2.5)
+    execute_process(COMMAND "${BENCHMARK}" --client-threads "${value}" RESULT_VARIABLE status
+                    OUTPUT_QUIET ERROR_QUIET)
+    if(NOT status STREQUAL "2")
+        message(FATAL_ERROR "invalid client thread count must exit 2")
+    endif()
+endforeach()
 foreach(value IN ITEMS 0 -1 10001 nan 0.5)
     execute_process(COMMAND "${BENCHMARK}" --duration-ms "${value}" RESULT_VARIABLE status
                     OUTPUT_QUIET ERROR_QUIET)
