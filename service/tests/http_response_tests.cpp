@@ -1,7 +1,8 @@
 // ADR: docs/adr/ADR-0003-local-runtime-path.md
 // Pins the write_response framing contract: exact wire bytes for
 // Content-Length and chunked bodies, Connection: close rejection responses,
-// the reason-phrase table, typed rejections of invalid input, and the
+// the reason-phrase table, typed rejections of invalid input, the
+// encoder-formatted Content-Range of single-range responses, and the
 // no-throw allocation-failure channel.
 #include "http_response.hpp"
 #include <array>
@@ -122,6 +123,51 @@ void check_wire_shapes() {
     check(wire_bytes(with_fields(200, BodyFraming::none, "", repeated)) ==
               "HTTP/1.1 200 OK\r\nX-A: 1\r\nX-B: caf\xC3\xA9\r\nX-A: 2\r\n\r\n",
           "fields keep caller order and duplicates; obs-text passes");
+}
+
+// The encoder-formatted Content-Range of single-range responses (RFC 9110
+// 14.4): a satisfied 206 slice, an unsatisfiable 416 answer, large totals,
+// and the typed rejection of a misplaced range.
+void check_content_range() {
+    Response slice = plain(206, BodyFraming::content_length, "2345");
+    slice.content_range = orange::http::ContentRange{10, true, 2, 5};
+    check(wire_bytes(slice) == "HTTP/1.1 206 Partial Content\r\n"
+                               "Content-Range: bytes 2-5/10\r\n"
+                               "Content-Length: 4\r\n"
+                               "\r\n"
+                               "2345",
+          "a satisfied 206 formats bytes first-last/total before the framing field");
+    const std::array<ResponseField, 1> html_type{{{"Content-Type", "text/html"}}};
+    Response typed = with_fields(206, BodyFraming::content_length, "<htm", html_type);
+    typed.content_range = orange::http::ContentRange{19, true, 0, 3};
+    check(wire_bytes(typed) == "HTTP/1.1 206 Partial Content\r\n"
+                               "Content-Type: text/html\r\n"
+                               "Content-Range: bytes 0-3/19\r\n"
+                               "Content-Length: 4\r\n"
+                               "\r\n"
+                               "<htm",
+          "caller fields precede the Content-Range");
+    Response unsatisfiable = plain(416, BodyFraming::content_length, "");
+    unsatisfiable.content_range = orange::http::ContentRange{26, false, 0, 0};
+    check(wire_bytes(unsatisfiable) == "HTTP/1.1 416 Range Not Satisfiable\r\n"
+                                       "Content-Range: bytes */26\r\n"
+                                       "Content-Length: 0\r\n"
+                                       "\r\n",
+          "an unsatisfiable 416 formats bytes */total");
+    Response large = plain(206, BodyFraming::content_length, "x");
+    large.content_range = orange::http::ContentRange{12345678901234, true, 5, 5};
+    check(wire_bytes(large) == "HTTP/1.1 206 Partial Content\r\n"
+                               "Content-Range: bytes 5-5/12345678901234\r\n"
+                               "Content-Length: 1\r\n"
+                               "\r\n"
+                               "x",
+          "large totals format without separators");
+    Response misplaced = plain(200, BodyFraming::none, "");
+    misplaced.content_range = orange::http::ContentRange{10, true, 0, 3};
+    check(wire_error(misplaced) == ResponseError::invalid_content_range,
+          "a Content-Range on a status other than 206/416 is rejected");
+    check(wire_bytes(plain(206, BodyFraming::content_length, "2345")).has_value(),
+          "a 206 without a Content-Range still serializes; pairing is the routes' contract");
 }
 
 // The status-line reason table and the mandatory SP for unknown codes.
@@ -339,6 +385,7 @@ void check_write_into() {
 int main() {
     check_wire_shapes();
     check_reason_phrases();
+    check_content_range();
     check_rejections();
     check_allocation_failure();
     check_error_responses();

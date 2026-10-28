@@ -8,6 +8,7 @@
 #define ORANGE_HTTP_ROUTES_HPP
 #include "http_request_decoder.hpp"
 #include "http_response.hpp"
+#include "static_files.hpp"
 
 namespace orange::http {
 
@@ -28,6 +29,16 @@ namespace orange::http {
 // for non-origin target forms stays with the T-2 owner determinations
 // recorded in ADR-0003 and is not decided by these rungs.
 [[nodiscard]] Response handle_request(const ParsedMessage &message);
+
+// Dispatch with the deployment's static content: the declared API routes
+// above answer first with unchanged outcomes, then other targets resolve
+// through `static_files` (see static_files.hpp) — GET serves the resolved
+// asset with the declared single-range 206/416 behavior, another method on a
+// resolved asset answers 405 with Allow: GET, and every unresolved target
+// answers 404. A null store serves no static content: every non-API target
+// answers 404 exactly as the single-argument form.
+[[nodiscard]] Response handle_request(const ParsedMessage &message,
+                                      const StaticFileStore *static_files);
 
 } // namespace orange::http
 #endif // ORANGE_HTTP_ROUTES_HPP

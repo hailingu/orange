@@ -21,6 +21,17 @@ namespace orange::http {
 // plus the last chunk (RFC 9112 6, 7.1).
 enum class BodyFraming { none, content_length, chunked };
 
+// The Content-Range of one single-range response (RFC 9110 14.4), carried by
+// value so the encoder formats it without per-request storage: a satisfied
+// 206 slice serializes `bytes FIRST-LAST/TOTAL`, an unsatisfiable 416
+// answer serializes `bytes */TOTAL` (satisfied == false ignores first/last).
+struct ContentRange {
+    std::size_t total = 0;
+    bool satisfied = true;
+    std::size_t first = 0;
+    std::size_t last = 0;
+};
+
 // One caller-assembled response field. Both views borrow caller storage and
 // stay valid only for the write_response call that serializes them.
 struct ResponseField {
@@ -43,6 +54,13 @@ struct Response {
     // Appends `Connection: close` (RFC 9110 7.6.1) after the framing field;
     // the event loop owns closing the connection after these bytes.
     bool close = false;
+    // When present, the encoder emits an encoder-formatted Content-Range
+    // field after the caller fields and before the framing field. Only a 206
+    // (satisfied) or 416 (unsatisfiable) response may carry one; any other
+    // status is rejected as invalid_content_range. The default member
+    // initializer keeps every existing positional Response{...} construction
+    // warning-free.
+    std::optional<ContentRange> content_range = std::nullopt;
 };
 
 // Why a response could not be serialized. The caller owns the input; every
@@ -64,6 +82,8 @@ enum class ResponseError {
     conflicting_field,
     // Framing is `none` but the body is not empty.
     unframed_body,
+    // A Content-Range was supplied for a status other than 206 or 416.
+    invalid_content_range,
     // Owned wire bytes could not be allocated.
     resource_exhausted,
 };

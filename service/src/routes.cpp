@@ -44,4 +44,12 @@ Response handle_request(const ParsedMessage &message) {
     return empty_response(404, {});
 }
 
+// Wiring stub for the T-2 static-serving rung: ignores the store so every
+// non-API target answers 404 exactly as before; the static dispatch lands in
+// the implementing change together with static_files.cpp.
+Response handle_request(const ParsedMessage &message, const StaticFileStore *static_files) {
+    static_cast<void>(static_files);
+    return handle_request(message);
+}
+
 } // namespace orange::http
