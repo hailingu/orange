@@ -1,0 +1,255 @@
+# ADR-0010: Measure real loopback HTTP serving separately from parsing
+
+## Metadata [Required]
+
+- **Decision Status**: Proposed
+- **Implementation Status**: Not Started
+- **Date**: 2026-10-22
+- **Author**: @codex
+- **Decision Owner**: @hailingu
+- **Required Approver**: @hailingu
+- **Record Scope**: Project
+- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — individual approval required
+- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — individual approval required
+- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — individual approval required
+- **Rejector [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Rejection Reason [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
+- **Retired By [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Time [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Evidence [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Retirement Reason [Conditionally Required — Decision Status is `Deprecated` or `Superseded`]**: N/A — not retired
+- **Blocked From [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
+- **Blocker And Evidence [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
+- **Blocker Owner [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
+- **Blocker Exit Or Recheck Criterion [Conditionally Required — Implementation Status is `Blocked`]**: N/A — not blocked
+- **Related [Optional]**: docs/reviews/2026-10-22-http-performance.md
+- **Architecture Source [Conditionally Required — product demand]**: N/A — corrective performance verification, not product-demand implementation
+- **Supersedes [Conditionally Required — this ADR replaces another]**: None
+- **Superseded By [Conditionally Required — this ADR is replaced]**: None — not superseded
+
+
+## Requirement Level Legend [Required]
+
+- **`[Required]`**: The section or field always applies and MUST remain present
+  with complete, verifiable content. Use `None — <reason>` only when the
+  template explicitly permits an empty result; never leave it blank.
+- **`[Conditionally Required — <trigger>]`**: The section or field MUST be
+  completed when its stated trigger applies. When the trigger does not apply,
+  retain `N/A — <reason>` unless the template explicitly instructs removal or
+  retention as inactive future-lifecycle guidance. A missing trigger assessment
+  is incomplete content.
+- **`[Optional]`**: The section may be removed without affecting acceptance,
+  execution, completion, or verification. If retained, it MUST be accurate and
+  complete; optional content MUST NOT substitute for required evidence.
+
+Unlabeled fields inside a `[Required]` section are required.
+
+## Context And Problem Statement [Required]
+
+The parser benchmark never executes poll or kqueue. A server regression cannot
+be attributed from parser-only timing. Deliver a repeatable, real-socket
+measurement that independently validates responses and separates event-loop
+controls from the historical parser anchor.
+
+### Retrospective Authorization [Required]
+
+In the current task chat on 2026-10-22, the owner requested optimization,
+a complete rerun and a rewritten report, then explicitly selected
+“本轮豁免，实施并回补 ADR” for the question permitting real-socket benchmarks,
+measured kqueue dispatch/write/input optimizations, and a scoped waiver of
+ADR preapproval and serialization. This permits this record alongside the
+unfinished runtime and CI ADRs. It does not accept this record, grant a
+standing waiver, authorize remote writes, or complete the runtime/CI records.
+Implementation and historical checks below ran under that exception. Keep
+Proposed / Not Started until this exact record receives individual approval.
+On 2026-10-23 the owner requested “按这个方向优化” after the proposed
+process isolation, server-thread CPU and same-window controls. This extends
+the same waived tooling slice; individual approval remains outstanding.
+
+## Scope [Required]
+
+In scope: one opt-in Release socket benchmark, eight default scenarios plus
+two explicit idle-scaling cases, separate client/server processes, server-worker
+CPU sampling, child lifecycle tests, CLI validation and reproduction guidance. Comparison evidence
+includes a normalized disposable poll control, not a second production backend.
+
+Out of scope: production optimization, open-loop capacity/SLO claims, TLS,
+remote Actions execution, dependencies and build-flag changes.
+
+## Tensions, Constraints, And Open Questions [Required]
+
+### Identified Tensions [Conditionally Required — competing goals or trade-offs exist]
+
+| ID | Tension | Impact | Decision |
+| --- | --- | --- | --- |
+| TN-1 | End-to-end evidence versus client overhead | Client polling, validation and scheduling can limit observed rates | Report closed-loop results, separate process CPU/RSS and worker CPU; do not infer server capacity |
+
+### Constraints [Required]
+
+Use Apple clang C++20, -O2 -DNDEBUG, no LTO or new dependency. Keep benchmark
+instrumentation out of production. Preserve all earlier reports and approvals.
+
+### Open Questions [Conditionally Required — material questions exist or were resolved during drafting]
+
+None — independent server CPU is now measured; saturation capacity and small
+wall-clock effects under shared host scheduling remain outside the claim.
+
+## Decision Drivers [Required]
+
+1. Independent response validation and bounded failure.
+2. Identical driver and socket options across comparison controls.
+3. Reproducible raw results and honest latency/resource definitions.
+
+## Options Considered [Required]
+
+| Option | Description | Pros | Cons |
+| --- | --- | --- | --- |
+| Parser timings alone | Reuse existing measurements | No new tooling | Cannot evaluate the serving loop |
+| Standard-library/POSIX socket driver | One client process and a production server worker in a child | No dependency; wire validation and CPU attribution | Shared-host scheduling and boundary-sampling cost remain |
+| External load framework | Add another toolchain | Broader capacity features | Dependency and deployment beyond scope |
+
+## Decision [Required]
+
+Select the standard-library/POSIX driver.
+
+- **SB-1**: ORANGE_BUILD_BENCHMARKS remains OFF by default; ON in Release
+  additionally builds http_server_bench without IPO and registers its CLI check.
+- **SB-2**: The eight scenarios are health with 1/8/64 active connections,
+  health with 64 idle plus one active, one connection with pipeline depth 16,
+  1 KiB echo with 1/8 active connections, and one 1 MiB fixed-body echo.
+  Explicit health_idle512/health_idle2048 cases add 512/2048 idle plus one
+  active socket without changing the eight-case default. Raise only the
+  disposable soft descriptor limit within its hard limit; fail if insufficient.
+  Expected response bytes are constructed independently of write_response.
+- **SB-3**: Invalid options, duration outside 1..10000 ms or unknown cases exit
+  2. Socket, wire or deadline failures exit 1; only entirely validated runs exit
+  0. Client no-progress waiting is bounded by requested duration plus 3 seconds.
+- **SB-4**: Exclude setup, 20 ms warmup and shutdown. Drain issued work.
+  Report completed requests/actual elapsed time and nearest-rank p50/p95/p99
+  from window first-send to each response completion. Pipeline samples include
+  queue position and are not divided by 16. Fork before starting the worker;
+  client_pid and server_pid must differ. Report separate parent/child RUSAGE_SELF
+  CPU deltas and worker THREAD_BASIC_INFO user/system CPU deltas. Sample CPU
+  only at acknowledged boundaries with the worker alive, bracketing client
+  issuing/draining. Report separate client/server RSS as lifetime high-water,
+  including inherited pages; neither is per-connection live memory.
+- **SB-5**: Bound local control I/O by 20-second timeouts. Close the channel and
+  reap the child exactly once on normal completion or failure; child exceptions
+  stop/join the worker. Abnormal child exit or invalid control transition fails
+  explicitly; finish is idempotent.
+
+### Consequences [Required]
+
+The driver detects invalid responses and provides actual serving evidence.
+Closed-loop load, client work, shared-host scheduling and boundary cost limit
+capacity inference and small-effect sensitivity. Historical 500-ms shared-process
+and current 2000-ms split-process data are separate experiments. Retain all five raw runs and
+state overlap rather than equating a 15% guard with proof of no regression.
+
+## Implementation Plan [Required]
+
+**Complete task outcome**: An opt-in socket driver validates eight scenarios
+and two explicit scaling cases with reproducible separate process/worker CPU
+metrics and explicit measurement limits.
+
+**Primary implementation boundary**: Server performance verification tooling.
+
+| ID | Objective or deliverable | Included scope | Status | Actual implementation evidence |
+| --- | --- | --- | --- | --- |
+| T-1 | Deliver driver and executable CLI contract | service/bench/http_server_bench.cpp; verify_server.cmake; CMake target | Complete | Historical exception: missing-executable CLI red, then eight-scenario Release CLI Pass |
+| T-2 | Reproduce comparison controls and retain evidence | bench README and 10-22 evidence/patches | Complete | Historical exception: five groups per control, exact patches and SHA-256 manifest retained in the 10-22 report/evidence |
+| T-3 | Isolate process/worker measurement and verify lifecycle/scaling | http_bench_server.cpp/.hpp; process tests; driver/CLI; same-window controls | Complete | Owner-waived execution: missing-server-metric and missing-idle-case reds; process/CLI green; raw 10-23 evidence retained |
+
+**Affected paths**: service/CMakeLists.txt; service/bench/http_server_bench.cpp;
+service/bench/verify_server.cmake; service/bench/README.md;
+service/bench/http_bench_server.cpp; service/bench/http_bench_server.hpp; service/bench/http_bench_process_tests.cpp.
+**Affected evidence files**: docs/reviews/2026-10-22-http-performance.md;
+docs/reviews/2026-10-22-http-performance-evidence.json;
+docs/reviews/2026-10-22-http-performance-source.patch;
+docs/reviews/2026-10-22-poll-control.patch.
+
+### Stable Implementation Touchpoints [Conditionally Required — source or configuration implementation]
+
+| Path | Stable symbol or contract anchor | Key code excerpt, when needed | Purpose | Source revision |
+| --- | --- | --- | --- | --- |
+| service/bench/http_server_bench.cpp | (anonymous namespace)::exercise; ::receive_window; ::measure; ::main | N/A — symbols sufficient | Closed-loop load, wire validation and metrics | Base 08f85e9 plus 10-22 source patch and SHA-256 manifest |
+| service/bench/verify_server.cmake | executable CLI contract | N/A — named script sufficient | Eight validated cases and invalid invocation handling | Same evidence manifest |
+| service/CMakeLists.txt | ORANGE_BUILD_BENCHMARKS; http_server_bench; http_server_bench_cli | N/A — stable keys sufficient | Release-only opt-in registration | Same evidence manifest |
+
+Additional current touchpoints: `service/bench/http_bench_server.cpp`,
+`orange::bench::ServerProcess` and anonymous `snapshot`/`run_child`; process tests
+`clean_stop`, `interrupted_child`, `invalid_transition`. Their source revision
+is the 10-23 incremental patch and SHA-256 manifest. Additional evidence:
+`docs/reviews/2026-10-23-kqueue-lifecycle-evidence.json`,
+`docs/reviews/2026-10-23-kqueue-lifecycle.patch`,
+`docs/reviews/2026-10-23-poll-control.patch`,
+`docs/reviews/2026-10-23-batch-send-control.patch`.
+
+**Migration and rollback strategy [Conditionally Required — this replaces or changes existing behavior]**:
+N/A — additive opt-in tooling; remove the target, CLI registration and new files
+to discard it without changing the production library.
+
+### Engineering Exceptions [Conditionally Required — an engineering rule is exceeded or waived]
+
+N/A — new files are below review thresholds, new executable units below 60 code
+lines, no dependencies or intrinsics. Cyclomatic complexity: N/A — no configured
+tool; review executable span and nesting instead. The ADR gate exception is
+recorded under Retrospective Authorization, not an engineering exception.
+
+## Contract-To-Check Traceability [Conditionally Required — source or configuration implementation]
+
+| Clause ID | Authoritative contract path and heading | Exact normative requirement | Acceptance check or deterministic test IDs | Explicit coverage method |
+| --- | --- | --- | --- | --- |
+| SB-1 | This record, Decision | Release-only opt-in target and CLI | AC-1 | Configure OFF/ON and existing Debug rejection |
+| SB-2 | This record, Decision | Default8 plus explicit idle512/2048; soft-only descriptor budget; independent wires | AC-1; AC-2; AC-5 | CLI fixtures/wire mutation; deterministic prepare_descriptor_budget inspection verifies only rlim_cur changes within rlim_max |
+| SB-3 | This record, Decision | Exit codes and bounded failure | AC-1; AC-2 | CLI invalid matrix; wire mutation exits 1 |
+| SB-4 | This record, Decision | Distinct PIDs, separate process/worker CPU and timing semantics | AC-3; AC-4; AC-5 | Actual Mach/RUSAGE sampling, CLI schema and same-window raw runs |
+| SB-5 | This record, Decision | Bounded control I/O, explicit failure and exactly-once reaping | AC-4 | Clean/repeated finish, own-child SIGKILL and invalid begin; waitpid ECHILD |
+
+## Risk Coverage Matrix [Conditionally Required — source or configuration implementation]
+
+| Risk dimension | Applicability and scenario, or specific N/A reason | Owning boundary | Deterministic verification method | Exact expected result | Acceptance check IDs | Status | Actual evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| concurrency and ordering | Multiple clients and depth-16 pipeline | Socket driver | Eight-scenario CLI | Every response matches independent wire | AC-1 | Pass | Historical Release CLI |
+| timeout and deadline | Socket stalls or loop fails | Client multiplexer | Inspect steady-clock end+3s, 100ms poll and configure_channel 20-second receive/send timeouts; CLI timeout45s | Failure exits 1; CTest cannot hang indefinitely | AC-1; AC-2; AC-4 | Pass | Bounded control flow and executable checks |
+| cancellation and interruption | Own child killed or invalid begin transition | Benchmark process ownership | Real interruption/protocol tests; waitpid after finish | Failure explicit, child reaped; repeated clean finish0 | AC-4 | Pass | http_bench_process_tests; 10-23 evidence |
+| resource bounds and backpressure | 1 MiB responses and idle sockets | Benchmark client/server | Execute eight bounded scenarios | No wire error or timeout; separate metrics and explicit idle512/2048 cases | AC-1; AC-3; AC-5 | Pass | Raw reports and scaling CLI |
+| framework or trust-boundary rejection | Invalid CLI or mismatched server bytes | Public benchmark CLI | Invalid matrix and mutation | Exit 2 for invalid CLI; 1 for wire mismatch | AC-1; AC-2 | Pass | CLI and mutation evidence |
+
+## Acceptance Checks [Required]
+
+| Check ID | Subtask | Binary acceptance point | Preconditions or input | Verification method | Exact expected result | Expected evidence | Status | Actual result and evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC-1 | T-1 | CLI contract passes | Release driver; eight scenarios | ctest -R ^http_server_bench_cli$; invalid-duration/case matrix | Exit 0 for CLI suite; eight nonempty zero-error scenarios; invalid invocations exit 2 | CTest and JSON | Pass | Historical exception: Release CLI passes |
+| AC-2 | T-1 | Wire validation detects corruption | Disposable driver with one expected health-body byte changed | Compile same driver, run --quick --case health_c1 | Exit 1 and response wire mismatch | Captured diagnostic | Pass | Historical exception: deliberate health-wire mutation exits 1 with response wire mismatch; complete output in evidence JSON |
+| AC-3 | T-2 | Raw comparison is reproducible | Same driver, flags and normalized socket options | Five alternating groups for poll control/before/after; inspect patch and hashes | Five complete eight-case reports per variant, zero errors, source fingerprints and all p50/p95/p99/CPU/RSS fields retained | Evidence JSON and two source patches | Pass | Historical exception: five complete groups per control; zero errors; all eight before/after median throughput changes above -15%; raw data and source fingerprints retained |
+| AC-4 | T-3 | Process/CPU and lifecycle contract passes | Release process/CLI suites | ctest -R 'http_bench_process_tests|http_server_bench_cli'; inspect configure_channel timeouts=20s | Distinct positive PIDs; positive server process/worker CPU and separate RSS; clean finish0; killed/invalid child fails and is reaped; repeated finish0 | CTest and red diagnostics | Pass | 10-23 Release suites; prior executable fails missing server_process_cpu_seconds |
+| AC-5 | T-3 | Same-window controls complete | Identical driver; Release -O2 without LTO | Five alternating 2000-ms groups of poll/before/after; default8 plus idle512/2048; inspect prepare_descriptor_budget soft-only assignment | Exactly five samples per variant/case; soft descriptor budget stays <= unchanged hard limit; all errors0; all CPU/RSS/tail fields and hashes retained | 10-23 evidence JSON/patches | Pass | Measurement plan, raw samples and fingerprints retained |
+
+## Completion Checklist [Required]
+
+| ID | Item | Completion Criterion | Expected Evidence | Status | Actual Evidence |
+| --- | --- | --- | --- | --- | --- |
+| A-1 | ADR approved | Eligible non-author approver responds exactly Approve in this record's sole context | Approval metadata | Not Started | Pending — individual approval required |
+| A-2 | Complete task delivered | Every applicable acceptance check passes and every subtask has actual evidence after acceptance | Checks and evidence JSON | Not Started | Historical exception execution only; formal completion follows individual approval |
+| A-3 | Reciprocal ADD link | N/A — corrective performance maintenance | Architecture Source assessment | N/A — no product-demand handoff | No ADD candidate changed |
+| A-4 | Requirement levels | Every required item and conditional assessment is complete | Structured review | Complete | Reviewed at drafting; approval fields remain pending in Proposed |
+| A-5 | Decidable checks | Every check has input, binary expected result and deterministic method | Acceptance table | Complete | Checks below identify executable contracts and exact outcomes |
+| A-6 | Engineering exceptions | Triggered rules have rationale, owner and controls | Engineering assessment | Complete | Assessment included above |
+| A-7 | Contracts and risks | Every clause maps to checks; all five risks assessed | Tables above | Complete | Historical exception evidence is distinguished from approval |
+| A-8 | Governance validation | Validator and its suite exit 0 | Validation output | Complete | Historical exception and current 10-23 verification: governance suite303/303; repository validator exits0; complete logs retained in 10-23 lifecycle evidence JSON |
+
+## Archival [Conditionally Required — Decision Status is `Rejected`, or Decision Status is `Deprecated` or `Superseded` and Implementation Status is final]
+
+Inactive future-lifecycle guidance — this Proposed record is not retired.
+When triggered, archive in this ADR root, update markers and the central
+index, and preserve reciprocal supersession paths when applicable.
+
+## Change Log [Required]
+
+| Date | Change | Author |
+| --- | --- | --- |
+| 2026-10-23 | Extend waived tooling with split processes, worker CPU, child lifecycle and same-duration scaling controls; approval remains outstanding | @codex |
+| 2026-10-22 | Backfill the owner-waived performance task with test-first evidence, explicit measurement boundaries and individual approval still outstanding | @codex |

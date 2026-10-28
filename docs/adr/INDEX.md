@@ -85,6 +85,13 @@ then supplied the exact `Approve` in an exchange whose sole approval context
 was that record; it is now Accepted / Complete with fresh approval-HEAD
 verification recorded.
 
+On 2026-10-22, in the current performance rerun chat, the owner explicitly
+selected “本轮豁免，实施并回补 ADR” for real-socket measurement and measured
+kqueue dispatch/write/input changes. This waives preapproval and serialization
+only for that scope and permits the two retrospective records below. It grants
+no standing waiver or individual acceptance. Both remain Proposed / Not Started
+until individually approved; historical exception execution is kept separately.
+
 ## Active Records
 
 | Type | ID | Title | Decision Status | Implementation Status | Scope | Architecture Source | Path | Superseded By |
@@ -105,6 +112,8 @@ verification recorded.
 | Full ADR | ADR-0005 | Reserve the declared fixed body length once | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing parser and its verification, not a new product-demand capability | `service/docs/adr/ADR-0005-fixed-body-reserve.md` | None — not superseded |
 | Full ADR | ADR-0006 | Answer rejections with precomputed static wires | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability | `service/docs/adr/ADR-0006-static-rejection-wires.md` | None — not superseded |
 | Full ADR | ADR-0007 | Serialize responses straight into the outgoing backlog | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability | `service/docs/adr/ADR-0007-append-form-response-serialization.md` | None — not superseded |
+| Full ADR | ADR-0010 | Measure real loopback HTTP serving separately from parsing | Proposed | Not Started | Project | N/A — corrective performance verification, not product-demand implementation | `docs/adr/ADR-0010-http-server-performance-measurement.md` | None — not superseded |
+| Full ADR | ADR-0008 | Use stable kqueue connection identities and avoid redundant request-path work | Proposed | Not Started | Service internal — service | N/A — corrective performance maintenance, not product-demand implementation | `service/docs/adr/ADR-0008-kqueue-response-scheduling.md` | None — not superseded |
 
 ## Archived Records
 
