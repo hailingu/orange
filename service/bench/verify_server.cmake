@@ -33,6 +33,13 @@ foreach(index RANGE 7)
     if(NOT errors EQUAL 0)
         message(FATAL_ERROR "socket or response validation failed")
     endif()
+    # SB-6: whole server-process event counts are exact non-negative integers.
+    foreach(field IN ITEMS server_unix_syscalls server_context_switches)
+        string(JSON value ERROR_VARIABLE missing GET "${report}" cases ${index} ${field})
+        if(missing OR NOT value MATCHES "^[0-9]+$")
+            message(FATAL_ERROR "server event count missing or not an integer: ${field}")
+        endif()
+    endforeach()
     string(JSON p50 GET "${report}" cases ${index} p50_us)
     string(JSON p95 GET "${report}" cases ${index} p95_us)
     string(JSON p99 GET "${report}" cases ${index} p99_us)
@@ -49,6 +56,23 @@ foreach(index RANGE 7)
         message(FATAL_ERROR "scenario identity disagrees with SB-2")
     endif()
 endforeach()
+# SB-6: each unpipelined health request needs at least one server receive and
+# one server send, so health_c1 counts at least two Unix system calls per
+# request; a client-side or zero counter fails. Depth-16 pipelining amortizes
+# those calls, so its per-request count (cross-multiplied in integers) is lower.
+string(JSON c1_requests GET "${report}" cases 0 requests)
+string(JSON c1_syscalls GET "${report}" cases 0 server_unix_syscalls)
+string(JSON pipeline_requests GET "${report}" cases 4 requests)
+string(JSON pipeline_syscalls GET "${report}" cases 4 server_unix_syscalls)
+math(EXPR c1_floor "2 * ${c1_requests}")
+if(c1_syscalls LESS c1_floor)
+    message(FATAL_ERROR "health_c1 server_unix_syscalls below two per request")
+endif()
+math(EXPR pipeline_scaled "${pipeline_syscalls} * ${c1_requests}")
+math(EXPR c1_scaled "${c1_syscalls} * ${pipeline_requests}")
+if(NOT pipeline_scaled LESS c1_scaled)
+    message(FATAL_ERROR "pipelined server system calls per request must be below health_c1")
+endif()
 foreach(idle IN ITEMS 512 2048)
     execute_process(COMMAND "${BENCHMARK}" --case "health_idle${idle}" --quick
                     RESULT_VARIABLE status OUTPUT_VARIABLE scale_report

@@ -2,10 +2,12 @@
 // Regresses unreaped child processes and control-channel failure concealment.
 #include "http_bench_server.hpp"
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <stdexcept>
 #include <sys/wait.h>
+#include <thread>
 #include <unistd.h>
 
 namespace {
@@ -16,14 +18,20 @@ bool reaped(pid_t child) {
 }
 
 // Removing shutdown/reaping or including an in-process server must fail this case.
+// SB-6: with no traffic, the window holds only the child's boundary control I/O:
+// the blocked wait for End is a real context switch, so an unwired zero
+// counter fails the floor and an unbounded one fails the ceiling.
 bool clean_stop() {
     orange::bench::ServerProcess server;
     const pid_t child = server.process_id();
     server.begin();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
     const auto metrics = server.end();
     return child > 0 && child != ::getpid() && server.port != 0 &&
            metrics.process_cpu_seconds >= 0 && metrics.thread_cpu_seconds >= 0 &&
-           metrics.peak_rss_bytes > 0 && server.finish() == 0 && reaped(child) &&
+           metrics.peak_rss_bytes > 0 && metrics.unix_syscalls >= 2 &&
+           metrics.unix_syscalls <= 16 && metrics.context_switches >= 1 &&
+           metrics.context_switches <= 16 && server.finish() == 0 && reaped(child) &&
            server.finish() == 0;
 }
 

@@ -32,7 +32,13 @@ void transfer(int fd, void *bytes, std::size_t size, bool sending) {
 }
 
 // Captures cumulative process/thread CPU without instrumenting request handling.
+// Task events are read first so the End sample excludes its own CPU queries.
 ServerMetrics snapshot(std::thread &thread) {
+    task_events_info_data_t events{};
+    mach_msg_type_number_t events_count = TASK_EVENTS_INFO_COUNT;
+    if (::task_info(::mach_task_self(), TASK_EVENTS_INFO, reinterpret_cast<task_info_t>(&events),
+                    &events_count) != KERN_SUCCESS)
+        throw std::runtime_error("server event sampling failed");
     rusage usage{};
     thread_basic_info_data_t info{};
     mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
@@ -44,7 +50,15 @@ ServerMetrics snapshot(std::thread &thread) {
                 (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1000000.0,
             info.user_time.seconds + info.system_time.seconds +
                 (info.user_time.microseconds + info.system_time.microseconds) / 1000000.0,
-            static_cast<std::uint64_t>(usage.ru_maxrss)};
+            static_cast<std::uint64_t>(usage.ru_maxrss),
+            static_cast<std::uint32_t>(events.syscalls_unix),
+            static_cast<std::uint32_t>(events.csw)};
+}
+
+// The kernel keeps 32-bit cumulative tallies; modular subtraction stays exact
+// across one wrap, far beyond any bounded 10-second window.
+std::uint64_t event_delta(std::uint64_t after, std::uint64_t before) {
+    return static_cast<std::uint32_t>(after - before);
 }
 
 // Joins on control failure as well as the normal stop command.
@@ -94,6 +108,9 @@ int run_child(int channel) {
             auto metrics = snapshot(worker.thread);
             metrics.process_cpu_seconds -= before.process_cpu_seconds;
             metrics.thread_cpu_seconds -= before.thread_cpu_seconds;
+            metrics.unix_syscalls = event_delta(metrics.unix_syscalls, before.unix_syscalls);
+            metrics.context_switches =
+                event_delta(metrics.context_switches, before.context_switches);
             transfer(channel, &metrics, sizeof(metrics), true);
             measuring = false;
         } else {

@@ -67,12 +67,19 @@ Proposed / Not Started until this exact record receives individual approval.
 On 2026-10-23 the owner requested “按这个方向优化” after the proposed
 process isolation, server-thread CPU and same-window controls. This extends
 the same waived tooling slice; individual approval remains outstanding.
+On 2026-10-28 the requesting user in that task chat, after the 10-22 report
+analysis recommended deterministic per-request system-call and wakeup counts,
+selected scope “A. 基准加确定性计数” and gate option “本轮豁免：像上次一样先实施，
+再回补 Proposed ADR”. This extends T-3 with SB-6 only; no actor identity was
+declared in that answer, so it is recorded as a scoped waiver, never as
+`Approve`. It authorizes no production change, commit or remote write.
 
 ## Scope [Required]
 
 In scope: one opt-in Release socket benchmark, eight default scenarios plus
 two explicit idle-scaling cases, separate client/server processes, server-worker
-CPU sampling, child lifecycle tests, CLI validation and reproduction guidance. Comparison evidence
+CPU sampling, exact server-process system-call and context-switch counts,
+child lifecycle tests, CLI validation and reproduction guidance. Comparison evidence
 includes a normalized disposable poll control, not a second production backend.
 
 Out of scope: production optimization, open-loop capacity/SLO claims, TLS,
@@ -139,6 +146,16 @@ Select the standard-library/POSIX driver.
   reap the child exactly once on normal completion or failure; child exceptions
   stop/join the worker. Abnormal child exit or invalid control transition fails
   explicitly; finish is idempotent.
+- **SB-6**: Each case reports `server_unix_syscalls` and
+  `server_context_switches`: non-negative integer deltas of the child task's
+  TASK_EVENTS_INFO `syscalls_unix` and `csw`, sampled at the same acknowledged
+  boundaries as SB-4 (task events read first in each sample) and subtracted
+  modulo 2^32. They cover every child thread, so they include the control
+  thread's constant boundary I/O; a 50 ms traffic-free window MUST report
+  2..16 of each. Production gains no instrumentation. health_c1 MUST report
+  at least two server Unix system calls per validated request, and
+  health_pipeline16 MUST report fewer per request than health_c1. Client
+  calls, Mach traps and in-kernel work per call are outside these counts.
 
 ### Consequences [Required]
 
@@ -147,12 +164,16 @@ Closed-loop load, client work, shared-host scheduling and boundary cost limit
 capacity inference and small-effect sensitivity. Historical 500-ms shared-process
 and current 2000-ms split-process data are separate experiments. Retain all five raw runs and
 state overlap rather than equating a 15% guard with proof of no regression.
+SB-6 counts are exact and do not drift with host speed, so they can serve as
+binary evidence for call- or wakeup-reduction work; they measure call counts,
+not the cost of each call, and do not replace wall-clock or CPU results.
 
 ## Implementation Plan [Required]
 
 **Complete task outcome**: An opt-in socket driver validates eight scenarios
 and two explicit scaling cases with reproducible separate process/worker CPU
-metrics and explicit measurement limits.
+metrics, exact server system-call/context-switch counts and explicit
+measurement limits.
 
 **Primary implementation boundary**: Server performance verification tooling.
 
@@ -160,7 +181,7 @@ metrics and explicit measurement limits.
 | --- | --- | --- | --- | --- |
 | T-1 | Deliver driver and executable CLI contract | service/bench/http_server_bench.cpp; verify_server.cmake; CMake target | Complete | Historical exception: missing-executable CLI red, then eight-scenario Release CLI Pass |
 | T-2 | Reproduce comparison controls and retain evidence | bench README and 10-22 evidence/patches | Complete | Historical exception: five groups per control, exact patches and SHA-256 manifest retained in the 10-22 report/evidence |
-| T-3 | Isolate process/worker measurement and verify lifecycle/scaling | http_bench_server.cpp/.hpp; process tests; driver/CLI; same-window controls | Complete | Owner-waived execution: missing-server-metric and missing-idle-case reds; process/CLI green; raw 10-23 evidence retained |
+| T-3 | Isolate process/worker measurement, add exact server event counts and verify lifecycle/scaling | http_bench_server.cpp/.hpp; process tests; driver/CLI; same-window controls; SB-6 counters | Complete | Owner-waived execution: missing-server-metric and missing-idle-case reds; process/CLI green; raw 10-23 evidence retained. 10-28 waived extension: missing-member compile red and missing-field CLI red, then Release 15/15 green (AC-6) |
 
 **Affected paths**: service/CMakeLists.txt; service/bench/http_server_bench.cpp;
 service/bench/verify_server.cmake; service/bench/README.md;
@@ -187,6 +208,13 @@ is the 10-23 incremental patch and SHA-256 manifest. Additional evidence:
 `docs/reviews/2026-10-23-poll-control.patch`,
 `docs/reviews/2026-10-23-batch-send-control.patch`.
 
+SB-6 touchpoints, source revision `865fa4e` plus the 10-28 uncommitted
+worktree change: `orange::bench::ServerMetrics::unix_syscalls` and
+`::context_switches`; anonymous `snapshot` (TASK_EVENTS_INFO read first),
+`event_delta` and `run_child` End delta; JSON keys `server_unix_syscalls` and
+`server_context_switches` in `(anonymous namespace)::measure`; the SB-6 block
+of `verify_server.cmake`; and the bounded idle window in `clean_stop`.
+
 **Migration and rollback strategy [Conditionally Required — this replaces or changes existing behavior]**:
 N/A — additive opt-in tooling; remove the target, CLI registration and new files
 to discard it without changing the production library.
@@ -207,6 +235,7 @@ recorded under Retrospective Authorization, not an engineering exception.
 | SB-3 | This record, Decision | Exit codes and bounded failure | AC-1; AC-2 | CLI invalid matrix; wire mutation exits 1 |
 | SB-4 | This record, Decision | Distinct PIDs, separate process/worker CPU and timing semantics | AC-3; AC-4; AC-5 | Actual Mach/RUSAGE sampling, CLI schema and same-window raw runs |
 | SB-5 | This record, Decision | Bounded control I/O, explicit failure and exactly-once reaping | AC-4 | Clean/repeated finish, own-child SIGKILL and invalid begin; waitpid ECHILD |
+| SB-6 | This record, Decision | Integer child-task syscall/csw deltas; idle window 2..16; health_c1 >= 2 calls/request; pipeline16 below health_c1 | AC-6 | clean_stop asserts the idle bounds; verify_server.cmake asserts integer fields for all eight cases, the health_c1 floor and the cross-multiplied pipeline comparison |
 
 ## Risk Coverage Matrix [Conditionally Required — source or configuration implementation]
 
@@ -215,7 +244,7 @@ recorded under Retrospective Authorization, not an engineering exception.
 | concurrency and ordering | Multiple clients and depth-16 pipeline | Socket driver | Eight-scenario CLI | Every response matches independent wire | AC-1 | Pass | Historical Release CLI |
 | timeout and deadline | Socket stalls or loop fails | Client multiplexer | Inspect steady-clock end+3s, 100ms poll and configure_channel 20-second receive/send timeouts; CLI timeout45s | Failure exits 1; CTest cannot hang indefinitely | AC-1; AC-2; AC-4 | Pass | Bounded control flow and executable checks |
 | cancellation and interruption | Own child killed or invalid begin transition | Benchmark process ownership | Real interruption/protocol tests; waitpid after finish | Failure explicit, child reaped; repeated clean finish0 | AC-4 | Pass | http_bench_process_tests; 10-23 evidence |
-| resource bounds and backpressure | 1 MiB responses and idle sockets | Benchmark client/server | Execute eight bounded scenarios | No wire error or timeout; separate metrics and explicit idle512/2048 cases | AC-1; AC-3; AC-5 | Pass | Raw reports and scaling CLI |
+| resource bounds and backpressure | 1 MiB responses and idle sockets; 32-bit kernel event tallies | Benchmark client/server | Execute eight bounded scenarios; inspect event_delta modular subtraction against the 10-second duration cap | No wire error or timeout; separate metrics and explicit idle512/2048 cases; event deltas exact across one wrap | AC-1; AC-3; AC-5; AC-6 | Pass | Raw reports and scaling CLI; 10-28 Release CLI |
 | framework or trust-boundary rejection | Invalid CLI or mismatched server bytes | Public benchmark CLI | Invalid matrix and mutation | Exit 2 for invalid CLI; 1 for wire mismatch | AC-1; AC-2 | Pass | CLI and mutation evidence |
 
 ## Acceptance Checks [Required]
@@ -226,6 +255,7 @@ recorded under Retrospective Authorization, not an engineering exception.
 | AC-2 | T-1 | Wire validation detects corruption | Disposable driver with one expected health-body byte changed | Compile same driver, run --quick --case health_c1 | Exit 1 and response wire mismatch | Captured diagnostic | Pass | Historical exception: deliberate health-wire mutation exits 1 with response wire mismatch; complete output in evidence JSON |
 | AC-3 | T-2 | Raw comparison is reproducible | Same driver, flags and normalized socket options | Five alternating groups for poll control/before/after; inspect patch and hashes | Five complete eight-case reports per variant, zero errors, source fingerprints and all p50/p95/p99/CPU/RSS fields retained | Evidence JSON and two source patches | Pass | Historical exception: five complete groups per control; zero errors; all eight before/after median throughput changes above -15%; raw data and source fingerprints retained |
 | AC-4 | T-3 | Process/CPU and lifecycle contract passes | Release process/CLI suites | ctest -R 'http_bench_process_tests|http_server_bench_cli'; inspect configure_channel timeouts=20s | Distinct positive PIDs; positive server process/worker CPU and separate RSS; clean finish0; killed/invalid child fails and is reaped; repeated finish0 | CTest and red diagnostics | Pass | 10-23 Release suites; prior executable fails missing server_process_cpu_seconds |
+| AC-6 | T-3 | Server event counts satisfy SB-6 | Release benchmark build; Release+ASan/UBSan build | ctest -R 'http_bench_process_tests|http_server_bench_cli' in both builds; process tests repeated 30 times | Both suites exit 0 in both builds; 30/30 process-test repeats exit 0 | CTest output and recorded per-request counts | Pass | 10-28 waived execution: reds were 4 missing-member compile errors and `server event count missing or not an integer: server_unix_syscalls`; green Release 15/15, 30/30 repeats, Release+ASan/UBSan 2/2. Informative 500 ms run: health_c1 3.000, health_c64 2.369, pipeline16 0.188, echo_1m_c1 67.045 server Unix calls/request; health_c1 1.039 context switches/request |
 | AC-5 | T-3 | Same-window controls complete | Identical driver; Release -O2 without LTO | Five alternating 2000-ms groups of poll/before/after; default8 plus idle512/2048; inspect prepare_descriptor_budget soft-only assignment | Exactly five samples per variant/case; soft descriptor budget stays <= unchanged hard limit; all errors0; all CPU/RSS/tail fields and hashes retained | 10-23 evidence JSON/patches | Pass | Measurement plan, raw samples and fingerprints retained |
 
 ## Completion Checklist [Required]
@@ -239,7 +269,7 @@ recorded under Retrospective Authorization, not an engineering exception.
 | A-5 | Decidable checks | Every check has input, binary expected result and deterministic method | Acceptance table | Complete | Checks below identify executable contracts and exact outcomes |
 | A-6 | Engineering exceptions | Triggered rules have rationale, owner and controls | Engineering assessment | Complete | Assessment included above |
 | A-7 | Contracts and risks | Every clause maps to checks; all five risks assessed | Tables above | Complete | Historical exception evidence is distinguished from approval |
-| A-8 | Governance validation | Validator and its suite exit 0 | Validation output | Complete | Historical exception and current 10-23 verification: governance suite303/303; repository validator exits0; complete logs retained in 10-23 lifecycle evidence JSON |
+| A-8 | Governance validation | Validator and its suite exit 0 | Validation output | Complete | Historical exception and current 10-23 verification: governance suite303/303; repository validator exits0; complete logs retained in 10-23 lifecycle evidence JSON; 10-28 SB-6 extension: governance suite 303/303 and repository validator pass |
 
 ## Archival [Conditionally Required — Decision Status is `Rejected`, or Decision Status is `Deprecated` or `Superseded` and Implementation Status is final]
 
@@ -251,5 +281,6 @@ index, and preserve reciprocal supersession paths when applicable.
 
 | Date | Change | Author |
 | --- | --- | --- |
+| 2026-10-28 | Extend waived T-3 with SB-6 exact server system-call/context-switch counts and AC-6; approval remains outstanding | @copilot |
 | 2026-10-23 | Extend waived tooling with split processes, worker CPU, child lifecycle and same-duration scaling controls; approval remains outstanding | @codex |
 | 2026-10-22 | Backfill the owner-waived performance task with test-first evidence, explicit measurement boundaries and individual approval still outstanding | @codex |

@@ -7,10 +7,14 @@
 
 namespace orange::bench {
 // Server-only counters bracket the issuing/drain window, excluding warmup/stop.
+// The two event counts are exact whole-child-process kernel tallies: they
+// include the control thread's constant boundary I/O, not per-request probes.
 struct ServerMetrics {
     double process_cpu_seconds = 0;
     double thread_cpu_seconds = 0;
     std::uint64_t peak_rss_bytes = 0;
+    std::uint64_t unix_syscalls = 0;
+    std::uint64_t context_switches = 0;
 };
 
 // Owns a child and its bounded control channel; all socket traffic remains real.

@@ -13,8 +13,10 @@ with `--case health_c1`. `--quick` uses 20 ms and is a CLI/correctness check.
 The normal default is 200 ms; explicit durations must be integers 1..10000.
 Unknown options/cases and invalid durations exit 2; socket, wire or deadline
 failure exits 1. CTest's `http_server_bench_cli` exercises all eight cases,
-the metric schema, optional idle scaling cases and invalid invocations.
-`http_bench_process_tests` checks clean/repeated stop, child interruption, invalid
+the metric schema, the system-call floor and pipeline amortization, optional
+idle scaling cases and invalid invocations.
+`http_bench_process_tests` checks clean/repeated stop, the bounded idle-window
+event counts, child interruption, invalid
 control transitions and exactly-once child reaping.
 
 The client uses nonblocking sockets multiplexed by poll; the production
@@ -37,6 +39,17 @@ latencies are not divided by its depth. `client_process_cpu_seconds` uses
 parent RUSAGE_SELF deltas; `server_process_cpu_seconds` uses child RUSAGE_SELF
 deltas. `server_thread_cpu_seconds` samples THREAD_BASIC_INFO user/system CPU
 on the still-live worker's Mach thread at acknowledged begin/end boundaries.
+`server_unix_syscalls` and `server_context_switches` are exact
+TASK_EVENTS_INFO deltas for the whole child process over the same boundary
+window: every BSD system call (kevent, recv, send, accept, ...) and every
+thread context switch. Divide them by `requests` for per-request costs. They
+include the child control thread's constant boundary I/O (the idle-window
+process test bounds it to at most 16 of each) and the worker's idle-deadline
+wakeups, which
+are real loop work. Unlike wall-clock throughput, these counts are
+insensitive to host speed drift; health_c1 needs at least one server receive
+and one send per request, which CTest checks. Mach traps, the client
+process's calls and kernel work inside one call are not counted.
 There is no per-request measurement instrumentation in production. The server
 interval brackets the client interval and includes a small control-boundary
 cost. JSON includes distinct client/server PIDs to verify process separation.

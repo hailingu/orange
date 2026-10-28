@@ -264,6 +264,8 @@ void measure(const Scenario &scenario, int duration_ms) {
               << ",\"server_process_cpu_seconds\":" << server_metrics.process_cpu_seconds
               << ",\"server_thread_cpu_seconds\":" << server_metrics.thread_cpu_seconds
               << ",\"server_peak_rss_bytes\":" << server_metrics.peak_rss_bytes
+              << ",\"server_unix_syscalls\":" << server_metrics.unix_syscalls
+              << ",\"server_context_switches\":" << server_metrics.context_switches
               << ",\"client_pid\":" << ::getpid() << ",\"server_pid\":" << server.process_id()
               << ",\"errors\":0}";
     if (server.finish() != 0)
