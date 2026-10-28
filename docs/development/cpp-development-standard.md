@@ -84,9 +84,16 @@ interoperability.
   documented lifetime.
 - Sockets and descriptors are wrapped in owning types whose destructors
   close them; a leak on an error path is a defect with a regression test.
-- The runtime concurrency model is the single-threaded `kqueue()` event loop
-  (ADR-0003): readiness-driven, non-blocking sockets, one connection state
-  machine per descriptor. Introducing threads requires a governed revision
+- The runtime concurrency model is the `kqueue()` acceptor loop (ADR-0003):
+  readiness-driven, non-blocking sockets, one connection state machine per
+  descriptor. Per the ADR's RT-1 revision, `LoopbackServer` may be constructed
+  with up to 64 acceptor threads, each running one independent shared-nothing
+  kqueue loop over an SO_REUSEPORT listener group — no mutable state crosses
+  loops, an unrecoverable loop failure raises the shared abort flag so its
+  siblings stop, and the request handler must be safe for concurrent calls
+  when several acceptors run. One acceptor remains the default construction,
+  and the poll()-era single-threaded comparison control is unchanged. Any
+  further threading beyond this accepted shape requires a governed revision
   that records lock ownership, ordering, contention, and failure behavior.
 - Time uses `<chrono>` types end to end; `time()`-family calls and
   wall-clock arithmetic on integers are not accepted in maintained code.
@@ -188,8 +195,10 @@ authority, with flagship precedent:
 ### Governance choices (not industry norms)
 
 Toolchain pinning and the exact verification-command shape, the
-single-threaded `kqueue()` event loop (an ADR-0003 accepted decision that
-satisfies CP.2 by construction), documentation-before-implementation and
+shared-nothing `kqueue()` acceptor loops (an ADR-0003 accepted decision —
+one loop by default, up to 64 acceptor threads over an SO_REUSEPORT
+listener group under the RT-1 revision — that satisfies CP.2 by
+construction), documentation-before-implementation and
 test-first development (`AGENTS.md` Core Rules), and the numeric guardrails
 inherited from the PlotWeave-calibrated baseline (ADR-0004 Q-1 owner
 determination) are orange governance decisions. They are recorded here as
