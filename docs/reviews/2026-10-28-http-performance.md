@@ -11,6 +11,146 @@ only with comparable process scope and fixture state; the process-lifetime
 high-water marks here do not establish server memory savings. These directions
 do not establish statistical significance.
 
+## Complete Cross-Version Rerun (Round 6) — 2026-10-28
+
+The owner asked for the whole performance history to be re-measured from the
+code of each version in one session (“基于各个版本的代码，进行 perf文档里的完整重新
+测试，并更新文档对比性能”). Every server variant this report has ever compared
+was rebuilt from its own source and run under identical conditions, so the
+columns below are comparable with each other; absolute values are lower than
+the morning rounds because the host was busier, and cross-round absolute
+comparison is not claimed.
+
+### Arms, Construction And Fingerprints
+
+| Arm | Production source | Construction | `http_server_bench` SHA-256 |
+| --- | --- | --- | --- |
+| Poll | `08f85e9` + [`2026-10-22-http-performance-source.patch`](2026-10-22-http-performance-source.patch) + [`2026-10-22-kqueue-udata.patch`](2026-10-22-kqueue-udata.patch) + [`2026-10-23-poll-control.patch`](2026-10-23-poll-control.patch) | `service/src` hunks of the three patches applied in order onto the `08f85e9` sources under the `17e571e` tree (harness, CMake, routes); `poll(2)` readiness over the direct-feed/immediate-send transport | `955a58771b049140a6fe40606adf552c17316b05f173370a08a9e6b899671964` |
+| `08f85e9` | `08f85e9` | `08f85e9` `service/src` under the `17e571e` tree (the pre-optimization staging/deferred-write transport paired with the split-process driver, as in Round 1) | `233b336d1504f57e51ec3a4e01a76b80b09b9a2eb5eb872a39891c7e438bff51` |
+| `17e571e` | `17e571e` (production `d577443`: KS-1..KS-7) | native tree | `326a4486156be58fce4471d66cca5ea5ff3bc6c6897ecd9253e22f69e17ce099` |
+| `4e6c154` | `4e6c154` (production `fef1756`: KS-8..KS-10) | native tree | `4cdae332eb8afa6c5eb27ab351f5e02660f8e510d1fbe6a34ea36a118c1111e9` |
+| `cfdce4a` | `cfdce4a` (KS-11, 64 KiB receive window) | native tree | `e87eaac9a17920acf734b0d7bcc3cbbf0cebaa8f5349446f81dffa3590d5e9cc` |
+| HEAD | `332c49f` (production `cd6fcf7`: acceptor groups, default one loop) | native tree, default flags | `a7566b7f81d70400677f1faa0b26444c130b5987928addf46ef3284767ae529e` |
+| HEAD 3×3 | `332c49f` | same binary, `--client-threads 3 --server-threads 3` | same as HEAD |
+
+The `4e6c154`, `cfdce4a` and `332c49f` binaries reproduce the exact hashes
+recorded in Rounds 3 and 5. All arms were compiled with Release `-O2 -DNDEBUG`
+by Apple clang 21.0.0 and run from the `17e571e`-or-later split-process driver
+(the HEAD driver reports two extra fields and is behavior-identical at its
+defaults). Five sequential groups alternated forward and reverse arm order over
+the ten scenarios at 2000 ms; **53,931,523 measured responses** validated with
+zero socket, wire, or deadline errors and no discarded invocations.
+
+### Throughput (median req/s ↑)
+
+| Scenario | Poll | `08f85e9` | `17e571e` | `4e6c154` | `cfdce4a` | HEAD | HEAD 3×3 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| health_c1 | 27,374 | 26,908 | 27,575 | 27,900 | 27,285 | 27,042 | 26,466 |
+| health_c8 | 81,394 | 78,910 | 78,471 | 77,897 | 80,286 | 79,696 | **101,289** |
+| health_c64 | 84,317 | 85,047 | 82,436 | 83,018 | 83,286 | 83,239 | **109,411** |
+| health_idle64 | 21,157 | 27,499 | 27,420 | 27,109 | 27,090 | 27,764 | 26,919 |
+| health_pipeline16 | 384,139 | 385,197 | 396,251 | 394,238 | 388,532 | 392,181 | 376,439 |
+| echo_1k_c1 | 27,285 | 26,292 | 26,776 | 26,873 | 26,982 | 26,567 | 27,195 |
+| echo_1k_c8 | 77,178 | 76,685 | 76,271 | 76,587 | 78,958 | 77,830 | **97,777** |
+| echo_1m_c1 | 3,764 | 3,437 | 3,670 | 3,702 | **4,117** | **4,048** | **4,086** |
+| health_idle512 | 9,257 | 23,459 | 27,658 | 26,712 | 27,124 | 27,367 | 27,140 |
+| health_idle2048 | 2,124 | 16,789 | 26,168 | 26,706 | 25,880 | 26,266 | 25,849 |
+
+### Server Worker CPU (median µs per request ↓)
+
+| Scenario | Poll | `08f85e9` | `17e571e` | `4e6c154` | `cfdce4a` | HEAD | HEAD 3×3 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| health_c1 | 11.27 | 11.08 | 10.76 | 10.71 | 10.94 | 10.85 | 10.96 |
+| health_c8 | 9.99 | 9.34 | 9.13 | 9.15 | 9.11 | 9.06 | 8.33 |
+| health_c64 | 10.15 | 8.68 | 8.39 | 8.55 | 8.45 | 8.35 | 7.89 |
+| health_idle64 | 28.05 | 11.61 | 10.78 | 10.80 | 10.83 | 10.80 | 10.90 |
+| health_pipeline16 | 0.91 | 0.89 | 0.85 | 0.86 | 0.86 | 0.86 | 0.87 |
+| echo_1k_c1 | 11.59 | 11.62 | 11.12 | 11.08 | 11.09 | 11.21 | 11.11 |
+| echo_1k_c8 | 10.24 | 9.70 | 9.38 | 9.44 | 9.33 | 9.44 | 8.68 |
+| echo_1m_c1 | 169.88 | 183.60 | 168.18 | 168.50 | **146.41** | **147.00** | **148.53** |
+| health_idle512 | 95.00 | 15.43 | 10.72 | 10.94 | 10.86 | 10.90 | 10.99 |
+| health_idle2048 | 413.47 | 35.95 | 10.75 | 10.82 | 10.78 | 10.82 | 10.86 |
+
+### Server Unix System Calls (median per request ↓)
+
+| Scenario | Poll | `08f85e9` | `17e571e` | `4e6c154` | `cfdce4a` | HEAD | HEAD 3×3 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| health_c1 | 3.000 | 4.000 | 3.000 | 3.000 | 3.000 | 3.000 | 3.000 |
+| health_c8 | 2.868 | 3.749 | 2.902 | 2.905 | 2.901 | 2.917 | 2.270 |
+| health_c64 | 2.236 | 3.257 | 2.776 | 2.759 | 2.761 | 2.773 | 2.025 |
+| health_idle64 | 3.000 | 4.000 | 3.000 | 3.000 | 3.000 | 3.000 | 3.000 |
+| health_pipeline16 | 0.188 | 0.250 | 0.188 | 0.188 | 0.188 | 0.188 | 0.188 |
+| echo_1k_c1 | 3.000 | 4.000 | 3.000 | 3.000 | 3.000 | 3.000 | 3.000 |
+| echo_1k_c8 | 2.867 | 3.715 | 2.919 | 2.903 | 2.913 | 2.913 | 2.263 |
+| echo_1m_c1 | 67.043 | 68.020 | 67.030 | 67.035 | **20.107** | **20.113** | **20.085** |
+| health_idle512 | 3.000 | 4.000 | 3.000 | 3.000 | 3.000 | 3.000 | 3.000 |
+| health_idle2048 | 3.001 | 4.000 | 3.000 | 3.000 | 3.000 | 3.000 | 3.000 |
+
+### HEAD Against The Two Baselines (same single-shard client)
+
+| Scenario | HEAD/`08f85e9` throughput ↑ | Five paired changes ↑ | HEAD/`08f85e9` CPU ↓ | HEAD/Poll throughput ↑ | HEAD/Poll CPU ↓ |
+| --- | ---: | --- | ---: | ---: | ---: |
+| health_c1 | +0.5% | -0.2%, +0.5%, +0.5%, -5.7%, -2.0% | -2.1% | -1.2% | -3.7% |
+| health_c8 | +1.0% | -0.5%, +1.2%, -0.5%, +1.1%, +0.0% | -3.0% | -2.1% | -9.3% |
+| health_c64 | -2.1% | -4.5%, +4.0%, -2.1%, -3.2%, -4.4% | -3.8% | -1.3% | -17.7% |
+| health_idle64 | +1.0% | +2.0%, -0.4%, +4.1%, -0.3%, -0.9% | -7.0% | **+31.2%** | **-61.5%** |
+| health_pipeline16 | +1.8% | +4.1%, -3.6%, +5.8%, -4.2%, +1.8% | -3.4% | +2.1% | -5.5% |
+| echo_1k_c1 | +1.0% | +0.3%, +2.1%, +6.4%, -5.6%, -4.8% | -3.5% | -2.6% | -3.3% |
+| echo_1k_c8 | +1.5% | +2.5%, +1.5%, +1.9%, -3.4%, -13.4% | -2.7% | +0.8% | -7.8% |
+| echo_1m_c1 | **+17.8%** | **+16.9%, +15.8%, +17.8%, +10.7%, +9.4%** | **-19.9%** | **+7.5%** | **-13.5%** |
+| health_idle512 | **+16.7%** | **+12.0%, +22.0%, +18.5%, +4.5%, +12.8%** | **-29.4%** | **+195.6%** | **-88.5%** |
+| health_idle2048 | **+56.4%** | **+61.0%, +54.3%, +59.3%, +51.9%, +53.1%** | **-69.9%** | **+1,136.6%** | **-97.4%** |
+
+### Assessment: What Each Version Step Bought
+
+- **`08f85e9` → `17e571e` (direct feed, immediate send, stable identities,
+  O(1) management)** is the structural step. Every unpipelined exchange drops
+  from exactly 4.000 to 3.000 server system calls (pipelined 0.250 → 0.188),
+  `health_idle2048` worker CPU falls 35.95 → 10.75 µs (-70%) with throughput
+  16,789 → 26,168 (+55.9%), `health_idle512` CPU 15.43 → 10.72, and
+  `echo_1m_c1` CPU 183.60 → 168.18 (-8.4%) from removing the staging copy. The
+  idle-scaling columns become flat at ~10.8 µs from 64 to 2,048 idle sockets.
+- **`17e571e` → `4e6c154` (interest-transition guard, tail-splice skip,
+  single-pass head policy, micro-tunings)** is indistinguishable from noise in
+  every column, exactly as Round 2 concluded; its value is the provably dead
+  work it removed, not a measurable win.
+- **`4e6c154` → `cfdce4a` (64 KiB receive window)** moves only the scenario it
+  targets: `echo_1m_c1` system calls 67.035 → 20.107 (-70%), CPU 168.50 →
+  146.41 (-13.1%), throughput 3,702 → 4,117 (+11.2%, paired +11.2%, +7.8%,
+  -3.6%, +11.1%, +6.5% — 4/5 positive this round). Every other scenario is
+  unchanged, as predicted for requests that never fill a 16 KiB window.
+- **`cfdce4a` → HEAD (acceptor groups at default one loop)** is identical
+  within noise in every column (`echo_1m_c1` 4,117 → 4,048, -1.7%), which is
+  the required property of the default path.
+- **HEAD → HEAD 3×3** reproduces Round 4: `health_c8` +27.1%, `health_c64`
+  +31.4%, `echo_1k_c8` +25.6%, server system calls per request falling to
+  2.27/2.03 as each `kevent` wakeup harvests more, client CPU per request
+  rising 10.56 → 22.95 µs at `health_c64`. Single-connection scenarios are
+  unchanged. Round 5 already showed the three-shard client, not the server,
+  bounds this arm.
+- **Poll versus the kqueue line.** At up to 64 active connections `poll(2)`
+  is competitive — it even issues fewer system calls per request at
+  `health_c64` (2.236 versus 2.773) because one wait covers all 64 descriptors
+  — but costs more CPU per request (10.15 versus 8.35 µs) for the per-round
+  `pollfd` rebuild and copy. Its real cost is idle scaling: 28.05 / 95.00 /
+  413.47 µs per request at 64 / 512 / 2,048 idle sockets against a flat ~10.8
+  for every kqueue variant from `17e571e` on, which is why HEAD serves
+  `health_idle2048` at 12.4 times Poll's throughput. The `08f85e9` kqueue
+  loop sat in between (35.95 µs at 2,048 idle) because it still scanned its
+  connection vector every wakeup.
+- **Cumulative, HEAD against the pre-optimization `08f85e9` baseline with the
+  same client**: system calls -25% on every unpipelined exchange and -70% on
+  the 1 MiB echo; worker CPU -2% to -4% on the hot single-connection scenarios
+  (kernel-bound, as every round has said), -20% on `echo_1m_c1`, -29% at 512
+  idle and -70% at 2,048 idle; throughput within noise on the small hot
+  scenarios and +17.8% / +16.7% / +56.4% on `echo_1m_c1` / `health_idle512` /
+  `health_idle2048`, each 5/5 positive.
+
+Raw run JSON for all seven arms, the construction recipe, binary fingerprints
+and the per-scenario medians are retained in
+[`2026-10-28-http-performance-evidence.json`](2026-10-28-http-performance-evidence.json)
+under `cross_version_rerun_r6`.
+
 ## Follow-Up: Three-Shard Client And Acceptor Threads (Rounds 4 And 5) — 2026-10-28
 
 After Round 3 the owner asked for one measured round with a three-thread
