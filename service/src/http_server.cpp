@@ -45,6 +45,9 @@ constexpr int event_capacity = 64;
 // Reading pauses while a connection holds this much undelivered output
 // while receive windows are synchronously consumed by the bounded decoder.
 constexpr std::size_t read_pause_cap = 1024 * 1024;
+// One receive drain's slice: each recv() fills at most this many bytes, so
+// large coalesced bodies need fewer syscalls while stack use stays bounded.
+constexpr std::size_t receive_window = 64 * 1024;
 // Listen backlog; loopback single-user traffic (ADR-0003 connection model).
 constexpr int listen_backlog = 16;
 
@@ -130,9 +133,9 @@ void drive_messages(Connection &connection, std::string_view input, const Reques
 }
 
 // Feeds received bytes directly; no connection input staging or prefix erase.
-// Samples the activity clock once per drain rather than on every 16 KiB slice.
+// Samples the activity clock once per drain rather than on every window slice.
 void read_connection(Connection &connection, const RequestHandler &handler) {
-    char buffer[16384];
+    char buffer[receive_window];
     bool progressed = false;
     for (;;) {
         const auto received = ::recv(connection.fd.get(), buffer, sizeof(buffer), 0);
