@@ -1,4 +1,5 @@
 # ADR: docs/adr/ADR-0008-http-parser-benchmarks.md
+# ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
 # ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
 # ADR: service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md
 # ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
@@ -108,6 +109,21 @@ if(ORANGE_BUILD_BENCHMARKS)
         message(FATAL_ERROR "Parser benchmarks require CMAKE_BUILD_TYPE=Release")
     endif()
     add_executable(http_parser_bench bench/http_parser_bench.cpp)
+    # ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
+    add_executable(http_server_bench bench/http_server_bench.cpp bench/http_bench_server.cpp)
+    add_executable(http_bench_process_tests bench/http_bench_process_tests.cpp
+                   bench/http_bench_server.cpp)
+    target_link_libraries(http_bench_process_tests PRIVATE orange_http)
+    add_test(NAME http_bench_process_tests COMMAND http_bench_process_tests)
+    target_link_libraries(http_server_bench PRIVATE orange_http)
+    set_property(TARGET http_server_bench PROPERTY INTERPROCEDURAL_OPTIMIZATION FALSE)
+    target_compile_definitions(http_server_bench PRIVATE
+        ORANGE_BENCH_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
+        ORANGE_BENCH_FLAGS="${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}"
+        ORANGE_BENCH_ARCH="${CMAKE_SYSTEM_PROCESSOR}")
+    add_test(NAME http_server_bench_cli
+        COMMAND ${CMAKE_COMMAND} -DBENCHMARK=$<TARGET_FILE:http_server_bench>
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/bench/verify_server.cmake)
     add_executable(http_parser_allocations bench/http_parser_allocations.cpp)
     target_link_libraries(http_parser_allocations PRIVATE orange_http)
     add_executable(http_parser_equivalence bench/http_parser_equivalence.cpp)

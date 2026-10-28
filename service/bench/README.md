@@ -1,8 +1,65 @@
 <!-- ADR: docs/adr/ADR-0008-http-parser-benchmarks.md -->
+<!-- ADR: docs/adr/ADR-0010-http-server-performance-measurement.md -->
 <!-- ADR: service/docs/adr/ADR-0004-owned-request-storage.md -->
 <!-- Authorization: docs/reviews/2026-10-16-http-performance.md. -->
 <!-- Owned storage: docs/reviews/2026-10-16-owned-request-storage.md. -->
 # HTTP Parser Benchmarks
+
+## Real-Socket Server Measurement
+
+The same opt-in Release configuration also builds `http_server_bench`. Run
+`http_server_bench --duration-ms 2000` for all eight scenarios, or select one
+with `--case health_c1`. `--quick` uses 20 ms and is a CLI/correctness check.
+The normal default is 200 ms; explicit durations must be integers 1..10000.
+Unknown options/cases and invalid durations exit 2; socket, wire or deadline
+failure exits 1. CTest's `http_server_bench_cli` exercises all eight cases,
+the metric schema, optional idle scaling cases and invalid invocations.
+`http_bench_process_tests` checks clean/repeated stop, child interruption, invalid
+control transitions and exactly-once child reaping.
+
+The client uses nonblocking sockets multiplexed by poll; the production
+kqueue server runs on a worker thread in a separate child process, forked
+before any worker thread starts. Both endpoints use
+TCP_NODELAY. Cases cover 1/8/64 active health connections, 64 idle plus one
+active, a depth-16 pipeline, 1 KiB echo at 1/8 connections, and 1 MiB fixed-body
+echo. Explicit `--case health_idle512` and `--case health_idle2048` add
+512/2048 idle sockets plus one active socket; these are excluded from the
+eight-case default. The fixture raises only its own soft descriptor limit,
+within its hard limit, before forking; insufficient budget fails explicitly.
+Every response is compared byte for byte against independently built
+wire bytes. Setup, a 20 ms warmup and shutdown are outside timing. All issued
+requests are drained after the timed issuing interval.
+
+Throughput is completions divided by actual elapsed time. Nearest-rank
+p50/p95/p99 measure each response completion from its window's first-send
+start, including client scheduling and pipeline queue position; pipeline
+latencies are not divided by its depth. `client_process_cpu_seconds` uses
+parent RUSAGE_SELF deltas; `server_process_cpu_seconds` uses child RUSAGE_SELF
+deltas. `server_thread_cpu_seconds` samples THREAD_BASIC_INFO user/system CPU
+on the still-live worker's Mach thread at acknowledged begin/end boundaries.
+There is no per-request measurement instrumentation in production. The server
+interval brackets the client interval and includes a small control-boundary
+cost. JSON includes distinct client/server PIDs to verify process separation.
+
+`client_peak_rss_bytes` and `server_peak_rss_bytes` are separate process-lifetime
+high-water values. Fork inherits parent allocator pages and earlier-case
+history; neither field establishes live or per-connection memory savings.
+The 20-second control timeout bounds failed sampling/communication. Normal exit
+and exceptions stop/join the worker and reap the child; abnormal child exit
+fails explicitly. This is closed-loop load on one shared host and cannot
+establish an open-loop saturation point, server CPU capacity limit, browser
+latency or an SLO.
+
+Use byte-identical drivers, -O2 -DNDEBUG without LTO and at least five
+alternating groups with the same duration in the same measurement window.
+Retain individual samples and all tails. The 2026-10-23 follow-up uses 2000 ms
+for poll, prior kqueue and optimized kqueue, with separate CPU scopes. The 2026-10-22
+report additionally compares a disposable poll control with the same parser,
+serializer and TCP_NODELAY; the control is not a production backend. Exact
+reconstruction patches, raw runs, source fingerprints and commands are in
+[`2026-10-22-http-performance.md`](../../docs/reviews/2026-10-22-http-performance.md).
+
+## Parser Measurement
 
 From the repository root, allocate and remove your own disposable directory:
 
