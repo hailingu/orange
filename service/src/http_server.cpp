@@ -130,47 +130,56 @@ void drive_messages(Connection &connection, std::string_view input, const Reques
 }
 
 // Feeds received bytes directly; no connection input staging or prefix erase.
+// Samples the activity clock once per drain rather than on every 16 KiB slice.
 void read_connection(Connection &connection, const RequestHandler &handler) {
     char buffer[16384];
+    bool progressed = false;
     for (;;) {
         const auto received = ::recv(connection.fd.get(), buffer, sizeof(buffer), 0);
         if (received > 0) {
-            connection.last_activity = std::chrono::steady_clock::now();
+            progressed = true;
             drive_messages(connection, {buffer, static_cast<std::size_t>(received)}, handler);
             if (connection.closing_after_flush ||
                 static_cast<std::size_t>(received) < sizeof(buffer))
-                return;
+                break;
             continue;
         }
         if (received == 0) {
             connection.peer_eof = true;
-            return;
+            break;
         }
         if (errno == EINTR)
             continue;
         if (!would_block())
             connection.fd.reset();
-        return;
+        break;
     }
+    if (progressed && connection.fd.valid())
+        connection.last_activity = std::chrono::steady_clock::now();
 }
 
 // Delivers pending bytes; a fully flushed closing response closes.
 void write_connection(Connection &connection) {
+    bool progressed = false;
     while (connection.outgoing_offset < connection.outgoing.size()) {
         const char *data = connection.outgoing.data() + connection.outgoing_offset;
         const std::size_t left = connection.outgoing.size() - connection.outgoing_offset;
         const auto sent = ::send(connection.fd.get(), data, left, 0);
         if (sent > 0) {
             connection.outgoing_offset += static_cast<std::size_t>(sent);
-            connection.last_activity = std::chrono::steady_clock::now();
+            progressed = true;
             continue;
         }
         if (sent < 0 && errno == EINTR)
             continue;
         if (sent < 0 && !would_block())
             connection.fd.reset();
+        if (progressed && connection.fd.valid())
+            connection.last_activity = std::chrono::steady_clock::now();
         return;
     }
+    if (progressed)
+        connection.last_activity = std::chrono::steady_clock::now();
     connection.outgoing.clear();
     connection.outgoing_offset = 0;
     if (connection.closing_after_flush)
@@ -375,6 +384,7 @@ int LoopbackServer::serve(RequestHandler handler, std::chrono::milliseconds idle
         // accepted below have no registered filters yet, so their first
         // event arrives from the next round — the polled-set invariant the
         // poll predecessor enforced by freezing the vector size.
+        int first_write = ready;
         for (int i = 0; i < ready; ++i) {
             const struct kevent &event = events[static_cast<std::size_t>(i)];
             const int fd = static_cast<int>(event.ident);
@@ -389,8 +399,11 @@ int LoopbackServer::serve(RequestHandler handler, std::chrono::milliseconds idle
                 accept_incoming(listen_fd_, connections);
                 continue;
             }
-            if (event.filter != EVFILT_READ)
+            if (event.filter != EVFILT_READ) {
+                if (event.filter == EVFILT_WRITE && first_write == ready)
+                    first_write = i;
                 continue;
+            }
             Connection *connection = event_connection(event);
             if (connection == nullptr)
                 continue;
@@ -400,9 +413,10 @@ int LoopbackServer::serve(RequestHandler handler, std::chrono::milliseconds idle
         // per-connection ordering: a read above may queue the very bytes
         // this pass flushes, and a connection closed above is skipped by
         // the identity guard because its descriptor is already invalid.
-        for (int i = 0; i < ready; ++i) {
+        // Skip the scan entirely in the common case where no write filter fired.
+        for (int i = first_write; i < ready; ++i) {
             const struct kevent &event = events[static_cast<std::size_t>(i)];
-            if (event.filter != EVFILT_WRITE)
+            if (event.filter != EVFILT_WRITE || (event.flags & EV_ERROR))
                 continue;
             Connection *connection = event_connection(event);
             if (connection == nullptr)

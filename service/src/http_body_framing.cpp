@@ -176,18 +176,30 @@ std::variant<HeadPolicy, ParseError> head_policy(const Request &request) {
     bool has_codings = false;
     bool close = false;
     for (const auto &field : request.headers()) {
-        if (equal_ascii(field.name, "content-length")) {
-            has_length = true;
-            if (!collect_length(field.value, length)) {
-                return ParseError::malformed;
+        switch (field.name.size()) {
+        case 10:
+            if (equal_ascii(field.name, "connection")) {
+                close = close || has_close_option(field.value);
             }
-        } else if (equal_ascii(field.name, "transfer-encoding")) {
-            has_codings = true;
-            if (!collect_codings(field.value, codings)) {
-                return ParseError::malformed;
+            break;
+        case 14:
+            if (equal_ascii(field.name, "content-length")) {
+                has_length = true;
+                if (!collect_length(field.value, length)) {
+                    return ParseError::malformed;
+                }
             }
-        } else if (equal_ascii(field.name, "connection")) {
-            close = close || has_close_option(field.value);
+            break;
+        case 17:
+            if (equal_ascii(field.name, "transfer-encoding")) {
+                has_codings = true;
+                if (!collect_codings(field.value, codings)) {
+                    return ParseError::malformed;
+                }
+            }
+            break;
+        default:
+            break;
         }
     }
     if (has_codings) {
