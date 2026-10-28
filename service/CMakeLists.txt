@@ -31,6 +31,12 @@ endif()
 
 add_compile_options(-Wall -Wextra)
 
+# The pinned OpenSSL library terminates the https listener (ADR-0003 T-2);
+# crypto primitives are never hand-rolled. The manifest pin lands with the
+# documented toolchain bootstrap in the assembly rung; the exact linked
+# version is recorded in the ADR evidence.
+find_package(OpenSSL 3 REQUIRED)
+
 enable_testing()
 
 # Production library of the transport core, one capability per file, headers
@@ -45,8 +51,10 @@ add_library(orange_http
     src/http_body_framing.cpp
     src/http_chunk_line.cpp
     src/static_files.cpp
-    src/routes.cpp)
+    src/routes.cpp
+    src/tls.cpp)
 target_include_directories(orange_http PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(orange_http PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 
 # One executable per test suite; CTest judges each by its process exit status.
 add_executable(http_message_tests tests/http_message_tests.cpp)
@@ -115,6 +123,12 @@ add_test(NAME http_routes_tests COMMAND http_routes_tests)
 add_executable(http_static_files_tests tests/http_static_files_tests.cpp)
 target_link_libraries(http_static_files_tests PRIVATE orange_http)
 add_test(NAME http_static_files_tests COMMAND http_static_files_tests)
+
+# TLS termination with the first-run self-signed certificate is the third
+# serving rung of ADR-0003 T-2.
+add_executable(http_tls_tests tests/http_tls_tests.cpp)
+target_link_libraries(http_tls_tests PRIVATE orange_http)
+add_test(NAME http_tls_tests COMMAND http_tls_tests)
 
 # Opt-in timings use the same optimized library as the correctness suites.
 option(ORANGE_BUILD_BENCHMARKS "Build reproducible HTTP parser benchmarks" OFF)
