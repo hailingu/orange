@@ -11,6 +11,160 @@ only with comparable process scope and fixture state; the process-lifetime
 high-water marks here do not establish server memory savings. These directions
 do not establish statistical significance.
 
+## Follow-Up: Three-Shard Client And Acceptor Threads (Rounds 4 And 5) — 2026-10-28
+
+After Round 3 the owner asked for one measured round with a three-thread
+client over the same ten scenarios and, in the same instruction, directed
+overturning the server's single-loop default while leaving the poll-era
+single-threaded comparison control untouched (“增加一轮3线程的client 测试，场景和
+benchmark 里一样，也更新进文档里” / “推翻 head 上的‘单线程’，但是旧的poll 的单线程
+不动”). Round 2 had shown the single-threaded benchmark client itself costing
+~8.6 µs of CPU per request at `health_c64`, close to the server's own ~7.7 µs,
+so a single-loop server ceiling could not be observed without first lifting the
+client ceiling.
+
+### What Changed
+
+1. **Client shards (`ADR-0010` SB-7, `e912dfa`)**: `--client-threads N` (1..8,
+   default 1) splits the active connections into disjoint slices, each driven
+   by its own `poll` loop against one shared deadline; per-shard latencies merge
+   before the nearest-rank percentiles. The default path is behavior-identical
+   to the historical driver, and every case now reports `client_threads`.
+   Red/green: `--client-threads 3` exited 2 at HEAD, then the eight-case
+   threaded report passed with Release CTest 16/16.
+2. **Server acceptor threads (`ADR-0003` RT-1, `63c43d8` then `cd6fcf7`)**:
+   `LoopbackServer` takes an acceptor count (1..64) at construction; `bind`
+   creates every member of a kernel-balanced SO_REUSEPORT listener group —
+   bound, listening and non-blocking — before reporting the port, and `serve`
+   runs one independent kqueue loop and connection store per listener (the
+   calling thread keeps loop 0). Loops share no state; a failing loop raises a
+   shared abort so siblings stop. One acceptor (the default) is behavior-
+   identical to the previous single loop and a lone listener never joins a
+   reuseport group, so the busy-port `EADDRINUSE` contract and every existing
+   suite are unchanged. The new `http_server_threading_tests` suite went from
+   compile-red (no acceptor-count capability) to `RT-1: clean_stop=Pass
+   concurrent_wires=6/6`; Debug 14/14, Release 17/17 (twice), ASan/UBSan 14/14.
+3. **Harness plumbing (`ADR-0010` SB-8)**: `--server-threads N` forwards the
+   acceptor count through `ServerProcess`; with several acceptors the worker-CPU
+   sample sums every child task thread except the control thread, and every
+   case reports `server_threads`. Red/green through `verify_server.cmake`.
+
+The first acceptor-thread implementation (`63c43d8`) formed the listener group
+at `serve` time by closing the lone listener and rebinding the port, which left
+the port unbound for an instant. The Round 5 audit caught it: two client setups
+failed with `errno=61` (`ECONNREFUSED`) inside that window. `cd6fcf7` moved
+group formation into `bind`, before the port is reported; the rerun below used
+that binary and recorded zero discarded invocations. The pre-fix raw runs are
+retained in the evidence JSON as superseded provenance, not as results.
+
+### Round 4 — Client 1 Shard Versus 3 Shards (server single loop, `e912dfa`)
+
+Same binary, same server, only the client flag differs; five alternating
+groups over the ten scenarios at 2000 ms; **16,845,641 measured responses**,
+zero errors, no discarded invocations. Host: Apple M4 Max (12 performance +
+4 efficiency cores).
+
+| Scenario | 1-shard req/s ↑ | 3-shard req/s ↑ | Change ↑ | Server CPU µs/req 1→3 ↓ | Client CPU µs/req 1→3 ↓ | Server syscalls/req 1→3 ↓ | Server csw/req 1→3 ↓ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| health_c1 | 29,214 | 29,119 | -0.3% | 10.38 → 10.40 | 13.99 → 13.98 | 3.000 → 3.000 | 1.026 → 1.021 |
+| health_c8 | 85,357 | 109,302 | **+28.1%** | 8.53 → 7.80 | 10.23 → 16.33 | 2.945 → 2.263 | 0.458 → 0.015 |
+| health_c64 | 88,295 | 116,964 | **+32.5%** | 7.90 → 7.46 | 10.05 → 22.00 | 2.859 → 2.027 | 0.243 → 0.007 |
+| health_idle64 | 29,462 | 29,458 | -0.0% | 10.31 → 10.42 | 13.98 → 14.04 | 3.000 → 3.000 | 1.041 → 1.024 |
+| health_pipeline16 | 400,092 | 401,312 | +0.3% | 0.83 → 0.83 | 0.93 → 0.93 | 0.188 → 0.188 | 0.064 → 0.064 |
+| echo_1k_c1 | 27,752 | 28,246 | +1.8% | 10.68 → 10.67 | 14.25 → 14.21 | 3.000 → 3.000 | 1.035 → 1.019 |
+| echo_1k_c8 | 83,077 | 105,368 | **+26.8%** | 8.81 → 8.19 | 10.52 → 16.72 | 2.951 → 2.255 | 0.433 → 0.013 |
+| echo_1m_c1 | 4,388 | 4,469 | +1.9% | 133.90 → 135.14 | 148.26 → 148.67 | 19.438 → 19.401 | 1.232 → 1.260 |
+| health_idle512 | 28,882 | 29,077 | +0.7% | 10.41 → 10.29 | 14.34 → 14.23 | 3.000 → 3.000 | 1.037 → 1.036 |
+| health_idle2048 | 27,441 | 27,797 | +1.3% | 10.41 → 10.35 | 15.33 → 15.28 | 3.000 → 3.000 | 1.031 → 1.044 |
+
+| Scenario | 1-shard req/s range ↑ | 3-shard req/s range ↑ | Five paired 3-shard/1-shard changes ↑ |
+| --- | ---: | ---: | --- |
+| health_c8 | 82,766–87,182 | 100,808–112,662 | **+29.0%, +27.6%, +29.5%, +29.2%, +21.8%** |
+| health_c64 | 85,634–91,649 | 112,211–122,163 | **+30.2%, +38.8%, +32.4%, +33.3%, +31.0%** |
+| echo_1k_c8 | 75,850–85,151 | 98,235–107,291 | **+26.3%, +26.8%, +25.3%, +26.0%, +29.5%** |
+| health_c1 | 28,616–30,272 | 27,541–29,939 | -1.1%, +0.9%, +0.8%, +0.6%, -5.8% |
+| health_pipeline16 | 392,251–408,572 | 394,702–419,179 | +2.6%, -1.3%, +1.3%, -0.6%, +0.6% |
+| echo_1m_c1 | 4,004–4,509 | 4,036–4,510 | -3.2%, +2.8%, +1.9%, +1.3%, +0.8% |
+
+**Round 4 assessment**:
+
+- **The single-shard client was the ceiling.** The three multi-connection
+  scenarios separate completely with 5/5 positive pairs and non-overlapping
+  ranges: `health_c64` 88k → 117k (+32.5%), `health_c8` +28.1%, `echo_1k_c8`
+  +26.8%. Every single-connection scenario (c1, pipeline16, the idle fixtures)
+  is unchanged, as it must be — one connection belongs to one shard — which
+  makes them the invariance controls for the whole round.
+- **The server was never the bottleneck at 88k.** Its CPU per request at
+  `health_c64` *fell* (7.90 → 7.46 µs) while throughput rose a third, its
+  syscalls per request fell (2.859 → 2.027) because each `kevent` wakeup now
+  harvests more ready connections, and its context switches per request
+  collapsed (0.243 → 0.007) because the loop stops sleeping between requests.
+  At 117k × 7.46 µs the single loop uses ~0.87 of one core.
+- **The price is paid by the client.** Client CPU per request more than doubles
+  at `health_c64` (10.05 → 22.00 µs): three shards each poll a third of the
+  sockets with less batching per wakeup. The harness now spends roughly three
+  times the server's CPU to generate the load it measures.
+
+### Round 5 — Server 1 Acceptor Versus 3 Acceptors (client 3 shards, `cd6fcf7`)
+
+Same binary (SHA-256
+`a7566b7f81d70400677f1faa0b26444c130b5987928addf46ef3284767ae529e`), client
+fixed at three shards, only `--server-threads` differs; five alternating groups
+over the ten scenarios; **17,464,766 measured responses**, zero errors, no
+discarded invocations.
+
+| Scenario | 1-acceptor req/s ↑ | 3-acceptor req/s ↑ | Change ↑ | Server CPU µs/req 1→3 ↓ | p50 µs 1→3 ↓ | Server syscalls/req 1→3 ↓ | Five paired 3/1 changes ↑ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| health_c1 | 28,319 | 29,283 | +3.4% | 10.50 → 10.39 | 28.1 → 27.8 | 3.000 → 3.000 | +1.7%, +4.3%, -8.9%, +4.6%, +3.4% |
+| health_c8 | 106,192 | 108,760 | +2.4% | 8.08 → 7.97 | 62.7 → 61.1 | 2.265 → 2.262 | +3.3%, +0.4%, -32.3%, +5.5%, +4.1% |
+| health_c64 | 119,357 | 114,404 | -4.1% | 7.61 → 7.75 | 399.5 → 410.6 | 2.026 → 2.026 | -3.8%, +1.5%, -9.2%, -4.1%, -2.8% |
+| health_idle64 | 29,985 | 28,561 | -4.7% | 10.34 → 10.59 | 27.7 → 28.2 | 3.000 → 3.000 | +2.4%, -4.7%, -4.3%, -5.7%, -6.5% |
+| health_pipeline16 | 403,178 | 399,965 | -0.8% | 0.84 → 0.84 | 33.0 → 33.2 | 0.188 → 0.188 | -0.1%, -2.7%, +5.2%, -2.7%, +0.6% |
+| echo_1k_c1 | 28,452 | 27,837 | -2.2% | 10.57 → 10.91 | 29.0 → 29.5 | 3.000 → 3.000 | -2.4%, -3.9%, -5.7%, -5.6%, +5.5% |
+| echo_1k_c8 | 102,318 | 103,167 | +0.8% | 8.41 → 8.45 | 65.6 → 65.9 | 2.258 → 2.257 | +2.4%, +3.2%, -7.7%, -10.9%, +6.2% |
+| echo_1m_c1 | 4,229 | 4,185 | -1.0% | 141.58 → 140.80 | 194.5 → 195.0 | 19.616 → 19.720 | +2.7%, -0.9%, -8.5%, -8.4%, +12.3% |
+| health_idle512 | 28,924 | 29,370 | +1.5% | 10.47 → 10.39 | 28.2 → 27.9 | 3.000 → 3.000 | -0.3%, -3.2%, +21.2%, -3.3%, +6.4% |
+| health_idle2048 | 26,935 | 27,758 | +3.1% | 10.64 → 10.45 | 29.0 → 28.7 | 3.000 → 3.000 | +3.8%, +3.2%, +2.7%, -2.2%, +9.6% |
+
+**Round 5 assessment**:
+
+- **Three acceptor loops change nothing measurable under a three-shard
+  client.** Every scenario has mixed paired signs and overlapping ranges
+  (`health_c64` 113,706–122,122 versus 109,285–118,739); the one -32.3% pair on
+  `health_c8` is a single noisy group (3-acceptor range 71,903–114,839).
+- **The reason is visible in the CPU columns.** At `health_c64` the single
+  acceptor spends 7.61 µs per request at 119k requests/s — about 0.91 of one
+  core, so it still had headroom — while the three-shard client needs ~22 µs
+  per request, about 2.5 cores. On this host the three-shard client, not the
+  server, bounds the closed loop near 115k requests/s. The three acceptors
+  spread the same ~7.7 µs over three threads and simply wait more.
+- **What this does and does not establish.** It establishes that the acceptor
+  group is correct under load (zero wire errors across 17.5 million responses,
+  every suite green) and that a single kqueue loop on one M4 Max performance
+  core is not the limiting resource up to ~120k requests/s at 64 connections.
+  It does not measure the server's multi-core ceiling: observing that requires
+  a client that scales past three shards (the host has twelve performance
+  cores), or a lighter client per request. Single-connection scenarios cannot
+  benefit from either flag by construction and again serve as controls.
+
+### Verification (Rounds 4 And 5)
+
+- `verify_server.cmake` SB-7 block red at HEAD, green at `e912dfa` (Release
+  16/16); SB-8 block red at `e912dfa`, green at `63c43d8` and `cd6fcf7`
+  (Release 17/17, run twice to confirm after one transient setup-race failure).
+- `http_server_threading_tests` compile-red, then `RT-1: clean_stop=Pass
+  concurrent_wires=6/6`; routed Debug CTest 14/14; Debug ASan/UBSan 14/14 with
+  `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1`. ThreadSanitizer
+  is unavailable on this Apple arm64 toolchain, so loop isolation rests on the
+  structural argument (one listener, kqueue and connection store per loop; no
+  shared mutable state) plus the real-socket concurrency suite, not on a race
+  detector.
+- `clang-format --dry-run --Werror` passes on every changed source.
+- Raw run JSON for Rounds 4 and 5, the superseded pre-fix Round 5 with its
+  `ECONNREFUSED` audit, and the final binary fingerprint are retained in
+  [`2026-10-28-http-performance-evidence.json`](2026-10-28-http-performance-evidence.json)
+  under `client_threads_r4` and `acceptor_threads_r5`.
+
 ## Follow-Up: 64 KiB Receive Window (Round 3) — 2026-10-28
 
 Following Round 2, the owner re-selected the receive-buffer candidate that had

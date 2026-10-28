@@ -73,13 +73,22 @@ selected scope “A. 基准加确定性计数” and gate option “本轮豁免
 再回补 Proposed ADR”. This extends T-3 with SB-6 only; no actor identity was
 declared in that answer, so it is recorded as a scoped waiver, never as
 `Approve`. It authorizes no production change, commit or remote write.
+Later on 2026-10-28 the owner requested one measured round with a three-thread
+client over the same scenarios (“增加一轮3线程的client 测试，场景和benchmark
+里一样，也更新进文档里”), and in the same instruction directed overturning the
+single-loop server default while keeping the old poll-era single-threaded
+control untouched, which requires the driver to also select several server
+acceptor loops. Both extend T-3 with SB-7 and SB-8 under the same scoped
+waiver; they authorize no approval, standing waiver, or remote write.
 
 ## Scope [Required]
 
 In scope: one opt-in Release socket benchmark, eight default scenarios plus
 two explicit idle-scaling cases, separate client/server processes, server-worker
 CPU sampling, exact server-process system-call and context-switch counts,
-child lifecycle tests, CLI validation and reproduction guidance. Comparison evidence
+optional multi-thread client shards and server acceptor threads (defaults keep
+the historical single-threaded arms), child lifecycle tests, CLI validation and
+reproduction guidance. Comparison evidence
 includes a normalized disposable poll control, not a second production backend.
 
 Out of scope: production optimization, open-loop capacity/SLO claims, TLS,
@@ -156,6 +165,18 @@ Select the standard-library/POSIX driver.
   at least two server Unix system calls per validated request, and
   health_pipeline16 MUST report fewer per request than health_c1. Client
   calls, Mach traps and in-kernel work per call are outside these counts.
+- **SB-7**: `--client-threads N` (1..8, default 1) partitions the active
+  connections into disjoint shards, each driven by its own poll loop sharing
+  one deadline; per-shard latencies merge before nearest-rank percentiles and
+  shard errors cross the thread boundary as strings. The child is forked
+  before any client thread starts; the default single-shard path is
+  behavior-identical to the historical driver and every case reports
+  `client_threads`. Out-of-range counts exit 2 exactly like SB-3.
+- **SB-8**: `--server-threads N` (1..8, default 1) forwards the acceptor count
+  through `ServerProcess` into `LoopbackServer::serve`; with N above 1 the
+  worker-CPU sample sums every child task thread except the control thread
+  instead of sampling the one worker thread, and every case reports
+  `server_threads`. Out-of-range counts exit 2 exactly like SB-3.
 
 ### Consequences [Required]
 
@@ -167,6 +188,11 @@ state overlap rather than equating a 15% guard with proof of no regression.
 SB-6 counts are exact and do not drift with host speed, so they can serve as
 binary evidence for call- or wakeup-reduction work; they measure call counts,
 not the cost of each call, and do not replace wall-clock or CPU results.
+SB-7/SB-8 thread counts change what a run measures: a multi-shard client
+spends more client CPU per request to remove the single-loop client ceiling,
+so comparisons must pin both thread counts, and single-connection scenarios
+(c1, pipeline16, idle) cannot benefit from either flag and serve as
+invariance controls.
 
 ## Implementation Plan [Required]
 
@@ -181,7 +207,7 @@ measurement limits.
 | --- | --- | --- | --- | --- |
 | T-1 | Deliver driver and executable CLI contract | service/bench/http_server_bench.cpp; verify_server.cmake; CMake target | Complete | Historical exception: missing-executable CLI red, then eight-scenario Release CLI Pass |
 | T-2 | Reproduce comparison controls and retain evidence | bench README and 10-22 evidence/patches | Complete | Historical exception: five groups per control, exact patches and SHA-256 manifest retained in the 10-22 report/evidence |
-| T-3 | Isolate process/worker measurement, add exact server event counts and verify lifecycle/scaling | http_bench_server.cpp/.hpp; process tests; driver/CLI; same-window controls; SB-6 counters | Complete | Owner-waived execution: missing-server-metric and missing-idle-case reds; process/CLI green; raw 10-23 evidence retained. 10-28 waived extension: missing-member compile red and missing-field CLI red, then Release 15/15 green (AC-6) |
+| T-3 | Isolate process/worker measurement, add exact server event counts, optional client shards and server acceptor plumbing, and verify lifecycle/scaling | http_bench_server.cpp/.hpp; process tests; driver/CLI; same-window controls; SB-6 counters; SB-7/SB-8 thread flags | Complete | Owner-waived execution: missing-server-metric and missing-idle-case reds; process/CLI green; raw 10-23 evidence retained. 10-28 waived extension: missing-member compile red and missing-field CLI red, then Release 15/15 green (AC-6). 10-28 thread rounds: `--client-threads 3` CLI red (flag exited 2) then green with the eight-case threaded report (e912dfa); `--server-threads 3` CLI red then green with the aggregated worker CPU (63c43d8); Release 16/16 then 17/17; Round 4/5 raw runs retained in the 10-28 report |
 
 **Affected paths**: service/CMakeLists.txt; service/bench/http_server_bench.cpp;
 service/bench/verify_server.cmake; service/bench/README.md;
@@ -214,6 +240,13 @@ worktree change: `orange::bench::ServerMetrics::unix_syscalls` and
 `event_delta` and `run_child` End delta; JSON keys `server_unix_syscalls` and
 `server_context_switches` in `(anonymous namespace)::measure`; the SB-6 block
 of `verify_server.cmake`; and the bounded idle window in `clean_stop`.
+SB-7 touchpoints, source revision `e912dfa`: `(anonymous namespace)::drive`
+and `::exercise` (shard partition, shared deadline, latency merge),
+`::thread_count`, the `client_threads` JSON key in `::measure`, and the SB-7
+block of `verify_server.cmake`. SB-8 touchpoints, source revision `63c43d8`:
+`orange::bench::ServerProcess::ServerProcess(int)`, anonymous `Worker`,
+`server_threads_cpu` and the two-branch `snapshot`, the `server_threads` JSON
+key in `::measure`, and the SB-8 block of `verify_server.cmake`.
 
 **Migration and rollback strategy [Conditionally Required — this replaces or changes existing behavior]**:
 N/A — additive opt-in tooling; remove the target, CLI registration and new files
@@ -236,6 +269,8 @@ recorded under Retrospective Authorization, not an engineering exception.
 | SB-4 | This record, Decision | Distinct PIDs, separate process/worker CPU and timing semantics | AC-3; AC-4; AC-5 | Actual Mach/RUSAGE sampling, CLI schema and same-window raw runs |
 | SB-5 | This record, Decision | Bounded control I/O, explicit failure and exactly-once reaping | AC-4 | Clean/repeated finish, own-child SIGKILL and invalid begin; waitpid ECHILD |
 | SB-6 | This record, Decision | Integer child-task syscall/csw deltas; idle window 2..16; health_c1 >= 2 calls/request; pipeline16 below health_c1 | AC-6 | clean_stop asserts the idle bounds; verify_server.cmake asserts integer fields for all eight cases, the health_c1 floor and the cross-multiplied pipeline comparison |
+| SB-7 | This record, Decision | --client-threads 1..8 shards the active connections with one shared deadline and merged latencies; default identical; client_threads reported; out-of-range exits 2 | AC-7 | verify_server.cmake runs the eight scenarios with three client threads and checks the reported count and zero errors, then the invalid-count matrix |
+| SB-8 | This record, Decision | --server-threads 1..8 selects the child's acceptor count; worker CPU sums every non-control task thread when above 1; server_threads reported; out-of-range exits 2 | AC-8 | verify_server.cmake runs the eight scenarios with three client and three server threads and checks the reported count and zero errors, then the invalid-count matrix |
 
 ## Risk Coverage Matrix [Conditionally Required — source or configuration implementation]
 
@@ -257,6 +292,8 @@ recorded under Retrospective Authorization, not an engineering exception.
 | AC-4 | T-3 | Process/CPU and lifecycle contract passes | Release process/CLI suites | ctest -R 'http_bench_process_tests|http_server_bench_cli'; inspect configure_channel timeouts=20s | Distinct positive PIDs; positive server process/worker CPU and separate RSS; clean finish0; killed/invalid child fails and is reaped; repeated finish0 | CTest and red diagnostics | Pass | 10-23 Release suites; prior executable fails missing server_process_cpu_seconds |
 | AC-6 | T-3 | Server event counts satisfy SB-6 | Release benchmark build; Release+ASan/UBSan build | ctest -R 'http_bench_process_tests|http_server_bench_cli' in both builds; process tests repeated 30 times | Both suites exit 0 in both builds; 30/30 process-test repeats exit 0 | CTest output and recorded per-request counts | Pass | 10-28 waived execution: reds were 4 missing-member compile errors and `server event count missing or not an integer: server_unix_syscalls`; green Release 15/15, 30/30 repeats, Release+ASan/UBSan 2/2. Informative 500 ms run: health_c1 3.000, health_c64 2.369, pipeline16 0.188, echo_1m_c1 67.045 server Unix calls/request; health_c1 1.039 context switches/request |
 | AC-5 | T-3 | Same-window controls complete | Identical driver; Release -O2 without LTO | Five alternating 2000-ms groups of poll/before/after; default8 plus idle512/2048; inspect prepare_descriptor_budget soft-only assignment | Exactly five samples per variant/case; soft descriptor budget stays <= unchanged hard limit; all errors0; all CPU/RSS/tail fields and hashes retained | 10-23 evidence JSON/patches | Pass | Measurement plan, raw samples and fingerprints retained |
+| AC-7 | T-3 | Threaded client keeps the case contract | Release driver; `--quick --client-threads 3`; invalid counts 0, -1, 9, nan, 2.5 | ctest -R ^http_server_bench_cli$ (SB-7 block) | Exit 0 with eight zero-error cases reporting client_threads 3; every invalid count exits 2 | CTest output | Pass | Waived execution: red at HEAD (`--client-threads 3` exited 2: invalid invocation), green at e912dfa with Release 16/16; Round 4 five-group raw runs retained in the 10-28 report |
+| AC-8 | T-3 | Acceptor-threaded child keeps the case contract | Release driver; `--quick --client-threads 3 --server-threads 3`; invalid counts 0, -1, 9, nan, 2.5 | ctest -R ^http_server_bench_cli$ (SB-8 block) | Exit 0 with eight zero-error cases reporting server_threads 3; every invalid count exits 2 | CTest output | Pass | Waived execution: red at e912dfa (`--server-threads 3` exited 2), green at 63c43d8/cd6fcf7 with Release 17/17 twice; Round 5 five-group raw runs retained in the 10-28 report |
 
 ## Completion Checklist [Required]
 
@@ -281,6 +318,7 @@ index, and preserve reciprocal supersession paths when applicable.
 
 | Date | Change | Author |
 | --- | --- | --- |
+| 2026-10-28 | Extend waived T-3 with SB-7 client shards and SB-8 server acceptor plumbing, AC-7/AC-8 and the Round 4/5 measured rerun recorded in the 10-28 report; approval remains outstanding | @zcode |
 | 2026-10-28 | Extend waived T-3 with SB-6 exact server system-call/context-switch counts and AC-6; approval remains outstanding | @copilot |
 | 2026-10-23 | Extend waived tooling with split processes, worker CPU, child lifecycle and same-duration scaling controls; approval remains outstanding | @codex |
 | 2026-10-22 | Backfill the owner-waived performance task with test-first evidence, explicit measurement boundaries and individual approval still outstanding | @codex |

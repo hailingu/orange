@@ -11,10 +11,17 @@ The same opt-in Release configuration also builds `http_server_bench`. Run
 `http_server_bench --duration-ms 2000` for all eight scenarios, or select one
 with `--case health_c1`. `--quick` uses 20 ms and is a CLI/correctness check.
 The normal default is 200 ms; explicit durations must be integers 1..10000.
-Unknown options/cases and invalid durations exit 2; socket, wire or deadline
+`--client-threads N` (1..8, default 1) drives disjoint slices of the active
+connections from N client shards, and `--server-threads N` (1..8, default 1)
+starts the child with N shared-nothing acceptor loops; both defaults keep the
+historical single-threaded arms and every case reports both counts, so a
+comparison must pin both flags. Single-connection scenarios cannot benefit
+from either flag and act as invariance controls.
+Unknown options/cases, invalid durations and out-of-range thread counts exit
+2; socket, wire or deadline
 failure exits 1. CTest's `http_server_bench_cli` exercises all eight cases,
 the metric schema, the system-call floor and pipeline amortization, optional
-idle scaling cases and invalid invocations.
+idle scaling cases, both thread flags and invalid invocations.
 `http_bench_process_tests` checks clean/repeated stop, the bounded idle-window
 event counts, child interruption, invalid
 control transitions and exactly-once child reaping.
