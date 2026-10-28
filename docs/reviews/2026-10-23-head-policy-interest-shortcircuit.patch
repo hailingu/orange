@@ -1,0 +1,406 @@
+diff --git a/tmp/orange-s5-before.RSNCNE/service/src/http_body_framing.cpp b/service/src/http_body_framing.cpp
+index 714c324..7d1ea3c 100644
+--- a/tmp/orange-s5-before.RSNCNE/service/src/http_body_framing.cpp
++++ b/service/src/http_body_framing.cpp
+@@ -26,6 +26,31 @@ void skip_space(std::string_view &value) {
+         value.remove_prefix(1);
+     }
+ }
++// True when one Connection field value carries the close option (RFC 9110
++// 7.6.1): a comma-separated, case-insensitive option list with optional
++// whitespace. The head parser already validated every field octet.
++bool has_close_option(std::string_view value) {
++    std::size_t begin = 0;
++    while (begin <= value.size()) {
++        const std::size_t comma = value.find(',', begin);
++        auto option = value.substr(begin, comma == std::string_view::npos ? std::string_view::npos
++                                                                          : comma - begin);
++        while (!option.empty() && (option.front() == ' ' || option.front() == '\t')) {
++            option.remove_prefix(1);
++        }
++        while (!option.empty() && (option.back() == ' ' || option.back() == '\t')) {
++            option.remove_suffix(1);
++        }
++        if (iequals(option, "close")) {
++            return true;
++        }
++        if (comma == std::string_view::npos) {
++            break;
++        }
++        begin = comma + 1;
++    }
++    return false;
++}
+ // Consumes one token, leaving delimiters for the field-specific grammar.
+ std::string_view take_token(std::string_view &value) {
+     std::size_t size = 0;
+@@ -144,11 +169,12 @@ bool collect_codings(std::string_view value, Codings &codings) {
+     return found;
+ }
+ } // namespace
+-std::variant<BodyFraming, ParseError> body_framing(const Request &request) {
++std::variant<HeadPolicy, ParseError> head_policy(const Request &request) {
+     std::optional<std::string_view> length;
+     Codings codings;
+     bool has_length = false;
+     bool has_codings = false;
++    bool close = false;
+     for (const auto &field : request.headers()) {
+         if (equal_ascii(field.name, "content-length")) {
+             has_length = true;
+@@ -160,6 +186,8 @@ std::variant<BodyFraming, ParseError> body_framing(const Request &request) {
+             if (!collect_codings(field.value, codings)) {
+                 return ParseError::malformed;
+             }
++        } else if (equal_ascii(field.name, "connection")) {
++            close = close || has_close_option(field.value);
+         }
+     }
+     if (has_codings) {
+@@ -167,8 +195,8 @@ std::variant<BodyFraming, ParseError> body_framing(const Request &request) {
+             return ParseError::malformed;
+         }
+         return codings.unsupported
+-                   ? std::variant<BodyFraming, ParseError>(ParseError::unsupported_transfer_coding)
+-                   : std::variant<BodyFraming, ParseError>(BodyFraming{true, 0});
++                   ? std::variant<HeadPolicy, ParseError>(ParseError::unsupported_transfer_coding)
++                   : std::variant<HeadPolicy, ParseError>(HeadPolicy{true, 0, close});
+     }
+     std::size_t bytes = 0;
+     if (length) {
+@@ -180,6 +208,6 @@ std::variant<BodyFraming, ParseError> body_framing(const Request &request) {
+             bytes = bytes * 10 + digit;
+         }
+     }
+-    return BodyFraming{false, bytes};
++    return HeadPolicy{false, bytes, close};
+ }
+ } // namespace orange::http::detail
+diff --git a/tmp/orange-s5-before.RSNCNE/service/src/http_body_framing.hpp b/service/src/http_body_framing.hpp
+index 4c6f111..ae8295a 100644
+--- a/tmp/orange-s5-before.RSNCNE/service/src/http_body_framing.hpp
++++ b/service/src/http_body_framing.hpp
+@@ -1,15 +1,19 @@
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+-// Internal interpretation of request-body framing fields (RFC 9112 6).
++// Internal interpretation of request head policy fields: body framing
++// (RFC 9112 6) and the connection-close option (RFC 9110 7.6.1), resolved
++// together in one pass over the validated fields.
+ #ifndef ORANGE_HTTP_BODY_FRAMING_HPP
+ #define ORANGE_HTTP_BODY_FRAMING_HPP
+ #include "http_messages.hpp"
+ namespace orange::http::detail {
+-// A validated decoded length, or chunked framing whose length is not yet known.
+-struct BodyFraming {
++// A validated decoded length, or chunked framing whose length is not yet
++// known, plus the request's connection-close option from the same pass.
++struct HeadPolicy {
+     bool chunked = false;
+     std::size_t length = 0;
++    bool close = false;
+ };
+-// Resolves all framing fields together before any content is accepted.
+-[[nodiscard]] std::variant<BodyFraming, ParseError> body_framing(const Request &request);
++// Resolves all head policy fields together before any content is accepted.
++[[nodiscard]] std::variant<HeadPolicy, ParseError> head_policy(const Request &request);
+ } // namespace orange::http::detail
+ #endif
+diff --git a/tmp/orange-s5-before.RSNCNE/service/src/http_connection_store.cpp b/service/src/http_connection_store.cpp
+index fa698d8..d60589c 100644
+--- a/tmp/orange-s5-before.RSNCNE/service/src/http_connection_store.cpp
++++ b/service/src/http_connection_store.cpp
+@@ -48,7 +48,11 @@ Connection *ConnectionStore::take_dirty() noexcept {
+ void ConnectionStore::touch(Connection &connection,
+                             std::chrono::steady_clock::time_point now) noexcept {
+     connection.last_activity = now;
+-    active_.splice(active_.end(), active_, connection.position);
++    // Splicing the newest node to the tail is the identity relink; skip it.
++    // splice(end, list, prev(end)) would additionally hit the standard's
++    // position == ++i undefined case (c1 steady state touches only the tail).
++    if (connection.position != std::prev(active_.end()))
++        active_.splice(active_.end(), active_, connection.position);
+ }
+ 
+ void ConnectionStore::retire(Connection &connection) noexcept {
+diff --git a/tmp/orange-s5-before.RSNCNE/service/src/http_request_decoder.cpp b/service/src/http_request_decoder.cpp
+index 240159b..c48a114 100644
+--- a/tmp/orange-s5-before.RSNCNE/service/src/http_request_decoder.cpp
++++ b/service/src/http_request_decoder.cpp
+@@ -44,15 +44,17 @@ struct RequestDecoder::Impl {
+         error = failure;
+         phase = Phase::failed;
+     }
+-    // Resolves framing once after the owned head has been constructed.
++    // Resolves framing and the close option once after the owned head has
++    // been constructed, in a single pass over the validated fields.
+     void start_body(ParsedRequest parsed) {
+         message.request = std::move(parsed.request);
+-        const auto framing = detail::body_framing(message.request);
+-        if (const auto *failure = std::get_if<ParseError>(&framing)) {
++        const auto policy_result = detail::head_policy(message.request);
++        if (const auto *failure = std::get_if<ParseError>(&policy_result)) {
+             fail(*failure);
+             return;
+         }
+-        const auto policy = std::get<detail::BodyFraming>(framing);
++        const auto policy = std::get<detail::HeadPolicy>(policy_result);
++        message.close = policy.close;
+         remaining = policy.length;
+         if (policy.chunked) {
+             phase = Phase::chunk_line;
+diff --git a/tmp/orange-s5-before.RSNCNE/service/src/http_request_decoder.hpp b/service/src/http_request_decoder.hpp
+index f2eda67..1dd2b83 100644
+--- a/tmp/orange-s5-before.RSNCNE/service/src/http_request_decoder.hpp
++++ b/service/src/http_request_decoder.hpp
+@@ -20,6 +20,9 @@ struct ParsedMessage {
+     std::string body;
+     // Counts wire bytes, including chunk framing and discarded trailer fields.
+     std::size_t consumed = 0;
++    // The request's Connection: close option (RFC 9110 7.6.1), resolved during
++    // the same single head-field pass that fixes the body framing.
++    bool close = false;
+ };
+ // Bytes taken from this fragment and either a complete message, an error,
+ // or monostate while more input is needed. Pipeline bytes stay with the caller
+diff --git a/tmp/orange-s5-before.RSNCNE/service/src/http_server.cpp b/service/src/http_server.cpp
+index 54a5dcb..de54fdb 100644
+--- a/tmp/orange-s5-before.RSNCNE/service/src/http_server.cpp
++++ b/service/src/http_server.cpp
+@@ -75,34 +75,6 @@ int set_no_delay(int fd) {
+     return ::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0 ? errno : 0;
+ }
+ 
+-// True when a request's Connection field carries the close option
+-// (RFC 9110 7.6.1: comma-separated, case-insensitive option list).
+-bool requests_close(const Request &request) {
+-    const auto trim_ows = [](std::string_view value) {
+-        while (!value.empty() && (value.front() == ' ' || value.front() == '\t'))
+-            value.remove_prefix(1);
+-        while (!value.empty() && (value.back() == ' ' || value.back() == '\t'))
+-            value.remove_suffix(1);
+-        return value;
+-    };
+-    for (HeaderField field : request.headers()) {
+-        if (!detail::iequals(field.name, "connection"))
+-            continue;
+-        std::size_t begin = 0;
+-        while (begin <= field.value.size()) {
+-            const std::size_t comma = field.value.find(',', begin);
+-            const std::string_view option = trim_ows(field.value.substr(
+-                begin, comma == std::string_view::npos ? std::string_view::npos : comma - begin));
+-            if (detail::iequals(option, "close"))
+-                return true;
+-            if (comma == std::string_view::npos)
+-                break;
+-            begin = comma + 1;
+-        }
+-    }
+-    return false;
+-}
+-
+ // Serializes the response straight into the outgoing backlog, falling back
+ // to the precomputed 500 closing wire when validation or allocation fails.
+ void queue_response(Connection &connection, const Response &response) {
+@@ -122,8 +94,9 @@ void queue_rejection(Connection &connection, ParseError error) {
+     connection.closing_after_flush = true;
+ }
+ 
+-// Serves one complete message: the handler's answer, honoring a request
+-// Connection: close, with a 500 closing response when the handler fails.
++// Serves one complete message: the handler's answer, honoring the request's
++// decoded Connection: close option, with a 500 closing response when the
++// handler fails.
+ void append_response(Connection &connection, const ParsedMessage &message,
+                      const RequestHandler &handler) {
+     Response response;
+@@ -133,7 +106,7 @@ void append_response(Connection &connection, const ParsedMessage &message,
+         queue_rejection(connection, ParseError::resource_exhausted);
+         return;
+     }
+-    response.close = response.close || requests_close(message.request);
++    response.close = response.close || message.close;
+     queue_response(connection, response);
+ }
+ 
+@@ -204,6 +177,29 @@ void write_connection(Connection &connection) {
+         connection.fd.reset();
+ }
+ 
++// The kernel interest set one live connection should hold: reading is
++// disabled while closing, after peer EOF, or under backpressure; the write
++// filter exists only while output is pending — under level-triggered
++// semantics a permanently ready write filter would spin the loop, exactly
++// the trap the poll predecessor's interest mask avoided by never
++// registering POLLOUT unconditionally.
++struct WantedInterest {
++    bool read;
++    bool write;
++};
++WantedInterest wanted_interest(const Connection &connection) {
++    return {!connection.closing_after_flush && !connection.peer_eof &&
++                connection.outgoing.size() - connection.outgoing_offset < read_pause_cap,
++            connection.outgoing_offset < connection.outgoing.size()};
++}
++
++// True when the tracked kernel state differs from the wanted state — an
++// absent filter still needs its add, a registered filter needs its enabled
++// state flipped — so set_interest would emit a changelist entry.
++bool interest_transition_pending(Interest state, bool want_enabled) {
++    return state == Interest::absent ? want_enabled : want_enabled != (state == Interest::enabled);
++}
++
+ // Runs one readiness action with connection-local allocation failure handling.
+ // KS-1: try a nonblocking write immediately after a read queues its response;
+ // the kernel write filter is needed only for bytes that remain afterward.
+@@ -223,11 +219,17 @@ void service_connection(ConnectionStore &connections, Connection &connection,
+     }
+     if (!connection.fd.valid()) {
+         connections.retire(connection);
+-    } else {
+-        if (connection.last_activity != previous_activity)
+-            connections.touch(connection, connection.last_activity);
+-        connections.mark_dirty(connection);
++        return;
+     }
++    if (connection.last_activity != previous_activity)
++        connections.touch(connection, connection.last_activity);
++    // Queue an interest update only when servicing actually changed the set
++    // the kernel should hold; a steady-state exchange would otherwise make a
++    // dirty round-trip whose changelist entries are all no-ops.
++    const auto want = wanted_interest(connection);
++    if (interest_transition_pending(connection.read_interest, want.read) ||
++        interest_transition_pending(connection.write_interest, want.write))
++        connections.mark_dirty(connection);
+ }
+ 
+ // KS-5/KS-6: dispatch in constant time using the kernel's unchanged udata.
+@@ -255,17 +257,14 @@ int next_wake_ms(std::chrono::steady_clock::time_point now, const ConnectionStor
+ // of an emplace_back() call — push first, then fill the back element.
+ void set_interest(std::vector<struct kevent> &changes, Connection &connection, short filter,
+                   Interest &state, bool want_enabled) {
++    if (!interest_transition_pending(state, want_enabled))
++        return; // no registration to add and no enabled state to flip
++    changes.push_back({});
+     if (state == Interest::absent) {
+-        if (!want_enabled)
+-            return; // never registered: nothing to arm or silence
+-        changes.push_back({});
+         EV_SET(&changes.back(), connection.fd.get(), filter, EV_ADD, 0, 0, &connection);
+         state = Interest::enabled;
+         return;
+     }
+-    if (want_enabled == (state == Interest::enabled))
+-        return;
+-    changes.push_back({});
+     EV_SET(&changes.back(), connection.fd.get(), filter, want_enabled ? EV_ENABLE : EV_DISABLE, 0,
+            0, &connection);
+     state = want_enabled ? Interest::enabled : Interest::disabled;
+@@ -273,23 +272,16 @@ void set_interest(std::vector<struct kevent> &changes, Connection &connection, s
+ 
+ // Builds this round's changelist from dirty connections. The listener is
+ // registered once before the loop, so only per-connection transitions
+-// appear here. Reading is disabled while closing, after peer EOF, or under
+-// backpressure; the write filter exists only while output is pending —
+-// under level-triggered semantics a permanently ready write filter would
+-// spin the loop, exactly the trap the poll predecessor's interest mask
+-// avoided by never registering POLLOUT unconditionally.
++// appear here.
+ void build_interest_changes(std::vector<struct kevent> &changes, ConnectionStore &connections) {
+     changes.clear();
+     while (Connection *pending = connections.take_dirty()) {
+         Connection &connection = *pending;
+         if (!connection.fd.valid())
+             continue;
+-        const bool want_read =
+-            !connection.closing_after_flush && !connection.peer_eof &&
+-            connection.outgoing.size() - connection.outgoing_offset < read_pause_cap;
+-        set_interest(changes, connection, EVFILT_READ, connection.read_interest, want_read);
+-        const bool want_write = connection.outgoing_offset < connection.outgoing.size();
+-        set_interest(changes, connection, EVFILT_WRITE, connection.write_interest, want_write);
++        const auto want = wanted_interest(connection);
++        set_interest(changes, connection, EVFILT_READ, connection.read_interest, want.read);
++        set_interest(changes, connection, EVFILT_WRITE, connection.write_interest, want.write);
+     }
+ }
+ 
+diff --git a/tmp/orange-s5-before.RSNCNE/service/tests/http_connection_store_tests.cpp b/service/tests/http_connection_store_tests.cpp
+index dca62be..94c9862 100644
+--- a/tmp/orange-s5-before.RSNCNE/service/tests/http_connection_store_tests.cpp
++++ b/service/tests/http_connection_store_tests.cpp
+@@ -73,8 +73,16 @@ void ordered_deadlines() {
+     store.touch(c, t + 11ms);
+     store.expire(t + 15ms, 10ms);
+     check(!a.fd.valid() && c.fd.valid(), "refresh preserves live peer");
+-    store.expire(t + 21ms, 10ms);
+-    check(!c.fd.valid(), "refreshed deadline expires");
++    // Touching the already-newest node must leave the deadline order intact.
++    store.touch(c, t + 12ms);
++    check(store.next_deadline(10ms) == t + 22ms, "tail touch refreshes the sole deadline");
++    auto &d = store.add(descriptor(), t + 13ms);
++    store.touch(d, t + 14ms);
++    check(store.next_deadline(10ms) == t + 22ms, "touching the newest node keeps the older head");
++    store.expire(t + 22ms, 10ms);
++    check(!c.fd.valid() && d.fd.valid(), "older node expires after a tail-only refresh");
++    store.expire(t + 24ms, 10ms);
++    check(!d.fd.valid(), "tail node expires at its refreshed deadline");
+     check(store.take_dirty() == nullptr, "expired entries removed from pending work");
+     check(store.next_deadline(10ms) == decltype(t)::max(), "all expired deadline");
+     store.collect();
+diff --git a/tmp/orange-s5-before.RSNCNE/service/tests/http_request_decoder_tests.cpp b/service/tests/http_request_decoder_tests.cpp
+index bab997b..f6a1304 100644
+--- a/tmp/orange-s5-before.RSNCNE/service/tests/http_request_decoder_tests.cpp
++++ b/service/tests/http_request_decoder_tests.cpp
+@@ -43,6 +43,45 @@ void check(bool condition, std::string_view description) {
+                      description.data());
+     }
+ }
++// The close connection option (RFC 9110 7.6.1) is resolved in the decoder's
++// single head-policy pass, per message and independent of feed splitting.
++void check_close_option() {
++    const auto close_message =
++        orange::http::parse_message("GET / HTTP/1.1\r\nConnection: close\r\n\r\n");
++    const auto *closing = std::get_if<orange::http::ParsedMessage>(&close_message);
++    check(closing && closing->close, "a Connection: close request sets the message close flag");
++    for (const auto *fields :
++         {"Connection: keep-alive, close\r\n", "connection: Close\r\n", "Connection:  close \t\r\n",
++          "Connection: keep-alive\r\nConnection: close\r\n"}) {
++        const auto result =
++            orange::http::parse_message("GET / HTTP/1.1\r\n" + std::string(fields) + "\r\n");
++        const auto *parsed = std::get_if<orange::http::ParsedMessage>(&result);
++        check(parsed && parsed->close,
++              "close inside option lists, case or duplicate fields still sets the flag");
++    }
++    for (const auto *fields : {"", "Connection: keep-alive\r\n", "Connection: closed\r\n"}) {
++        const auto result =
++            orange::http::parse_message("GET / HTTP/1.1\r\n" + std::string(fields) + "\r\n");
++        const auto *parsed = std::get_if<orange::http::ParsedMessage>(&result);
++        check(parsed && !parsed->close, "no close option leaves the message close flag clear");
++    }
++    // A split feed and a following pipelined message resolve independently.
++    orange::http::RequestDecoder decoder;
++    const std::string first = "POST /api/echo HTTP/1.1\r\nContent-Length: 5\r\n"
++                              "Connection: close\r\n\r\nhe";
++    const auto partial = decoder.feed(first);
++    check(std::holds_alternative<std::monostate>(partial.outcome),
++          "a split closing request remains incomplete");
++    const auto done = decoder.feed("llo");
++    const auto *split = std::get_if<orange::http::ParsedMessage>(&done.outcome);
++    check(split && split->close && split->body == "hello",
++          "fragmented input resolves the same close flag");
++    decoder.reset();
++    const auto next = decoder.feed("GET /next HTTP/1.1\r\n\r\n");
++    const auto *fresh = std::get_if<orange::http::ParsedMessage>(&next.outcome);
++    check(fresh && !fresh->close, "reset clears the close flag with the previous message");
++}
++
+ // RFC 9112 6.3 fixes the body boundary independently of following input.
+ void check_content_length() {
+     const std::string head = "POST /api/echo HTTP/1.1\r\nContent-Length: 5\r\n\r\n";
+@@ -468,6 +507,7 @@ void check_seeded_roundtrips() {
+ }
+ } // namespace
+ int main() {
++    check_close_option();
+     check_content_length();
+     check_length_policy();
+     check_transfer_policy();

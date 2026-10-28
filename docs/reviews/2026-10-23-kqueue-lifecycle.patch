@@ -1,0 +1,1125 @@
+--- a/service/CMakeLists.txt
++++ b/service/CMakeLists.txt
+@@ -40,6 +40,7 @@
+     src/http_messages.cpp
+     src/http_response.cpp
+     src/http_server.cpp
++    src/http_connection_store.cpp
+     src/http_request_decoder.cpp
+     src/http_body_framing.cpp
+     src/http_chunk_line.cpp
+@@ -81,6 +82,10 @@
+ target_link_libraries(http_server_tests PRIVATE orange_http)
+ add_test(NAME http_server_tests COMMAND http_server_tests)
+ 
++add_executable(http_connection_store_tests tests/http_connection_store_tests.cpp)
++target_link_libraries(http_connection_store_tests PRIVATE orange_http)
++add_test(NAME http_connection_store_tests COMMAND http_connection_store_tests)
++
+ # ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
+ add_executable(http_server_scheduling_tests tests/http_server_scheduling_tests.cpp)
+ target_link_libraries(http_server_scheduling_tests PRIVATE orange_http)
+@@ -105,7 +110,11 @@
+     endif()
+     add_executable(http_parser_bench bench/http_parser_bench.cpp)
+     # ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
+-    add_executable(http_server_bench bench/http_server_bench.cpp)
++    add_executable(http_server_bench bench/http_server_bench.cpp bench/http_bench_server.cpp)
++    add_executable(http_bench_process_tests bench/http_bench_process_tests.cpp
++                   bench/http_bench_server.cpp)
++    target_link_libraries(http_bench_process_tests PRIVATE orange_http)
++    add_test(NAME http_bench_process_tests COMMAND http_bench_process_tests)
+     target_link_libraries(http_server_bench PRIVATE orange_http)
+     set_property(TARGET http_server_bench PROPERTY INTERPROCEDURAL_OPTIMIZATION FALSE)
+     target_compile_definitions(http_server_bench PRIVATE
+--- a/service/bench/README.md
++++ b/service/bench/README.md
+@@ -8,31 +8,52 @@
+ ## Real-Socket Server Measurement
+ 
+ The same opt-in Release configuration also builds `http_server_bench`. Run
+-`http_server_bench --duration-ms 500` for all eight scenarios, or select one
++`http_server_bench --duration-ms 2000` for all eight scenarios, or select one
+ with `--case health_c1`. `--quick` uses 20 ms and is a CLI/correctness check.
+ The normal default is 200 ms; explicit durations must be integers 1..10000.
+ Unknown options/cases and invalid durations exit 2; socket, wire or deadline
+ failure exits 1. CTest's `http_server_bench_cli` exercises all eight cases,
+-the metric schema and invalid invocations.
++the metric schema, optional idle scaling cases and invalid invocations.
++`http_bench_process_tests` checks clean/repeated stop, child interruption, invalid
++control transitions and exactly-once child reaping.
+ 
+ The client uses nonblocking sockets multiplexed by poll; the production
+-kqueue server runs on another thread in the same process. Both endpoints use
++kqueue server runs on a worker thread in a separate child process, forked
++before any worker thread starts. Both endpoints use
+ TCP_NODELAY. Cases cover 1/8/64 active health connections, 64 idle plus one
+ active, a depth-16 pipeline, 1 KiB echo at 1/8 connections, and 1 MiB fixed-body
+-echo. Every response is compared byte for byte against independently built
++echo. Explicit `--case health_idle512` and `--case health_idle2048` add
++512/2048 idle sockets plus one active socket; these are excluded from the
++eight-case default. The fixture raises only its own soft descriptor limit,
++within its hard limit, before forking; insufficient budget fails explicitly.
++Every response is compared byte for byte against independently built
+ wire bytes. Setup, a 20 ms warmup and shutdown are outside timing. All issued
+ requests are drained after the timed issuing interval.
+ 
+ Throughput is completions divided by actual elapsed time. Nearest-rank
+ p50/p95/p99 measure each response completion from its window's first-send
+ start, including client scheduling and pipeline queue position; pipeline
+-latencies are not divided by its depth. Process CPU includes client and server;
+-peak RSS is a process-lifetime high-water value, not per-scenario live memory.
+-This is closed-loop load and cannot establish an open-loop saturation point,
+-server-only CPU limit, browser latency or an SLO.
++latencies are not divided by its depth. `client_process_cpu_seconds` uses
++parent RUSAGE_SELF deltas; `server_process_cpu_seconds` uses child RUSAGE_SELF
++deltas. `server_thread_cpu_seconds` samples THREAD_BASIC_INFO user/system CPU
++on the still-live worker's Mach thread at acknowledged begin/end boundaries.
++There is no per-request measurement instrumentation in production. The server
++interval brackets the client interval and includes a small control-boundary
++cost. JSON includes distinct client/server PIDs to verify process separation.
++
++`client_peak_rss_bytes` and `server_peak_rss_bytes` are separate process-lifetime
++high-water values. Fork inherits parent allocator pages and earlier-case
++history; neither field establishes live or per-connection memory savings.
++The 20-second control timeout bounds failed sampling/communication. Normal exit
++and exceptions stop/join the worker and reap the child; abnormal child exit
++fails explicitly. This is closed-loop load on one shared host and cannot
++establish an open-loop saturation point, server CPU capacity limit, browser
++latency or an SLO.
+ 
+ Use byte-identical drivers, -O2 -DNDEBUG without LTO and at least five
+-alternating groups. Retain individual samples and all tails. The 2026-10-22
++alternating groups with the same duration in the same measurement window.
++Retain individual samples and all tails. The 2026-10-23 follow-up uses 2000 ms
++for poll, prior kqueue and optimized kqueue, with separate CPU scopes. The 2026-10-22
+ report additionally compares a disposable poll control with the same parser,
+ serializer and TCP_NODELAY; the control is not a production backend. Exact
+ reconstruction patches, raw runs, source fingerprints and commands are in
+--- a/service/src/http_server.cpp
++++ b/service/src/http_server.cpp
+@@ -8,6 +8,7 @@
+ // and is maintained incrementally through add/enable/disable changes
+ // instead of being rebuilt every round like a poll set.
+ #include "http_server.hpp"
++#include "http_connection_store.hpp"
+ #include "http_syntax.hpp"
+ #include <algorithm>
+ #include <array>
+@@ -17,7 +18,6 @@
+ #include <cstdint>
+ #include <cstring>
+ #include <fcntl.h>
+-#include <memory>
+ #include <netinet/in.h>
+ #include <netinet/tcp.h>
+ #include <string>
+@@ -31,6 +31,10 @@
+ 
+ namespace orange::http {
+ namespace {
++using detail::Connection;
++using detail::ConnectionStore;
++using detail::Interest;
++using detail::OwnedFd;
+ 
+ // Stop-flag latency and idle-sweep granularity: kevent never waits longer.
+ constexpr int wake_slice_ms = 250;
+@@ -47,35 +51,6 @@
+ // True for the two errno values that mean "try again later".
+ bool would_block() { return errno == EAGAIN || errno == EWOULDBLOCK; }
+ 
+-// Move-only owning descriptor; destruction closes, invalid value is -1.
+-class OwnedFd {
+-  public:
+-    OwnedFd() noexcept = default;
+-    explicit OwnedFd(int fd) noexcept : fd_{fd} {}
+-    ~OwnedFd() { reset(); }
+-    OwnedFd(OwnedFd &&other) noexcept : fd_{std::exchange(other.fd_, -1)} {}
+-    OwnedFd &operator=(OwnedFd &&other) noexcept {
+-        if (this != &other) {
+-            reset();
+-            fd_ = std::exchange(other.fd_, -1);
+-        }
+-        return *this;
+-    }
+-    OwnedFd(const OwnedFd &) = delete;
+-    OwnedFd &operator=(const OwnedFd &) = delete;
+-    [[nodiscard]] int get() const noexcept { return fd_; }
+-    [[nodiscard]] bool valid() const noexcept { return fd_ >= 0; }
+-    int release() noexcept { return std::exchange(fd_, -1); }
+-    void reset() noexcept {
+-        if (fd_ >= 0)
+-            ::close(fd_);
+-        fd_ = -1;
+-    }
+-
+-  private:
+-    int fd_ = -1;
+-};
+-
+ // Sets O_NONBLOCK; returns the errno of the failing fcntl.
+ int set_non_blocking(int fd) {
+     const int flags = ::fcntl(fd, F_GETFL, 0);
+@@ -99,32 +74,6 @@
+     const int on = 1;
+     return ::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0 ? errno : 0;
+ }
+-
+-// Per-filter kernel-interest state, tracked so the changelist emits only
+-// transitions: absent (never registered), enabled (kernel reports
+-// readiness), or disabled (registered but silent — backpressure and
+-// termination phases mute a filter instead of deleting its knote).
+-enum class Interest { absent, enabled, disabled };
+-
+-// One served connection: its descriptor, decoding progress, queued output,
+-// and the lifecycle flags the loop transitions.
+-// KS-5: the owner vector moves unique_ptrs, never these objects. Both the
+-// nonmovable decoder and kqueue's borrowed Connection pointer stay in place.
+-struct Connection {
+-    OwnedFd fd;
+-    RequestDecoder decoder;
+-    std::string outgoing;
+-    std::size_t outgoing_offset = 0;
+-    bool closing_after_flush = false;
+-    bool peer_eof = false;
+-    Interest read_interest = Interest::absent;
+-    Interest write_interest = Interest::absent;
+-    std::chrono::steady_clock::time_point last_activity{};
+-};
+-
+-// Stable pointees survive growth and compaction; closed owners are collected
+-// only after both passes over the returned event batch (KS-6).
+-using Connections = std::vector<std::unique_ptr<Connection>>;
+ 
+ // True when a request's Connection field carries the close option
+ // (RFC 9110 7.6.1: comma-separated, case-insensitive option list).
+@@ -258,7 +207,9 @@
+ // Runs one readiness action with connection-local allocation failure handling.
+ // KS-1: try a nonblocking write immediately after a read queues its response;
+ // the kernel write filter is needed only for bytes that remain afterward.
+-void service_connection(Connection &connection, const RequestHandler &handler, bool readable) {
++void service_connection(ConnectionStore &connections, Connection &connection,
++                        const RequestHandler &handler, bool readable) {
++    const auto previous_activity = connection.last_activity;
+     try {
+         if (readable)
+             read_connection(connection, handler);
+@@ -270,6 +221,13 @@
+     } catch (const std::bad_alloc &) {
+         connection.fd.reset();
+     }
++    if (!connection.fd.valid()) {
++        connections.retire(connection);
++    } else {
++        if (connection.last_activity != previous_activity)
++            connections.touch(connection, connection.last_activity);
++        connections.mark_dirty(connection);
++    }
+ }
+ 
+ // KS-5/KS-6: dispatch in constant time using the kernel's unchanged udata.
+@@ -283,11 +241,10 @@
+ }
+ 
+ // Wake budget: the soonest idle deadline, capped so stop stays responsive.
+-int next_wake_ms(std::chrono::steady_clock::time_point now, const Connections &connections,
++int next_wake_ms(std::chrono::steady_clock::time_point now, const ConnectionStore &connections,
+                  std::chrono::milliseconds idle_timeout) {
+     auto deadline = now + std::chrono::milliseconds(wake_slice_ms);
+-    for (const auto &connection : connections)
+-        deadline = std::min(deadline, connection->last_activity + idle_timeout);
++    deadline = std::min(deadline, connections.next_deadline(idle_timeout));
+     const auto wait = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+     return static_cast<int>(std::clamp(wait.count(), 0LL, static_cast<long long>(wake_slice_ms)));
+ }
+@@ -314,17 +271,17 @@
+     state = want_enabled ? Interest::enabled : Interest::disabled;
+ }
+ 
+-// Rebuilds this round's changelist from connection state. The listener is
++// Builds this round's changelist from dirty connections. The listener is
+ // registered once before the loop, so only per-connection transitions
+ // appear here. Reading is disabled while closing, after peer EOF, or under
+ // backpressure; the write filter exists only while output is pending —
+ // under level-triggered semantics a permanently ready write filter would
+ // spin the loop, exactly the trap the poll predecessor's interest mask
+ // avoided by never registering POLLOUT unconditionally.
+-void build_interest_changes(std::vector<struct kevent> &changes, Connections &connections) {
++void build_interest_changes(std::vector<struct kevent> &changes, ConnectionStore &connections) {
+     changes.clear();
+-    for (const auto &owner : connections) {
+-        Connection &connection = *owner;
++    while (Connection *pending = connections.take_dirty()) {
++        Connection &connection = *pending;
+         if (!connection.fd.valid())
+             continue;
+         const bool want_read =
+@@ -337,8 +294,7 @@
+ }
+ 
+ // Accepts every pending connection from the non-blocking listener.
+-void accept_incoming(int listen_fd, Connections &connections,
+-                     std::chrono::steady_clock::time_point now) {
++void accept_incoming(int listen_fd, ConnectionStore &connections) {
+     for (;;) {
+         OwnedFd fd{::accept(listen_fd, nullptr, nullptr)};
+         if (!fd.valid()) {
+@@ -350,10 +306,7 @@
+             set_no_delay(fd.get()) != 0)
+             continue;
+         try {
+-            auto connection = std::make_unique<Connection>();
+-            connection->fd = std::move(fd);
+-            connection->last_activity = now;
+-            connections.push_back(std::move(connection));
++            connections.add(std::move(fd), std::chrono::steady_clock::now());
+         } catch (const std::bad_alloc &) {
+             return; // RAII closes this unregistered accept; existing owners survive.
+         }
+@@ -408,7 +361,7 @@
+     EV_SET(&listener_change, listen_fd_, EVFILT_READ, EV_ADD, 0, 0, nullptr);
+     if (::kevent(kq.get(), &listener_change, 1, nullptr, 0, nullptr) < 0)
+         return errno;
+-    Connections connections;
++    ConnectionStore connections;
+     std::vector<struct kevent> changes;
+     std::array<struct kevent, event_capacity> events{};
+     while (!stop.load(std::memory_order_relaxed)) {
+@@ -437,11 +390,11 @@
+                 if (fd == listen_fd_)
+                     return EINVAL;
+                 if (Connection *connection = event_connection(event))
+-                    connection->fd.reset();
++                    connections.retire(*connection);
+                 continue;
+             }
+             if (fd == listen_fd_) {
+-                accept_incoming(listen_fd_, connections, progressed);
++                accept_incoming(listen_fd_, connections);
+                 continue;
+             }
+             if (event.filter != EVFILT_READ)
+@@ -449,7 +402,7 @@
+             Connection *connection = event_connection(event);
+             if (connection == nullptr)
+                 continue;
+-            service_connection(*connection, handler, true);
++            service_connection(connections, *connection, handler, true);
+         }
+         // Write pass after the read pass, mirroring the predecessor's
+         // per-connection ordering: a read above may queue the very bytes
+@@ -462,17 +415,12 @@
+             Connection *connection = event_connection(event);
+             if (connection == nullptr)
+                 continue;
+-            service_connection(*connection, handler, false);
+-        }
+-        for (const auto &connection : connections)
+-            if (connection->fd.valid() && progressed - connection->last_activity >= idle_timeout)
+-                connection->fd.reset();
+-        // No returned udata is used after this point. close() has removed the
+-        // kernel filters; only now may closed objects and their addresses die.
+-        connections.erase(
+-            std::remove_if(connections.begin(), connections.end(),
+-                           [](const auto &connection) { return !connection->fd.valid(); }),
+-            connections.end());
++            service_connection(connections, *connection, handler, false);
++        }
++        connections.expire(progressed, idle_timeout);
++        // Returned udata may still name a retired node through both event passes.
++        // Destroy those nodes only now; live nodes are never traversed to collect.
++        connections.collect();
+     }
+     return 0;
+ }
+--- /dev/null
++++ b/service/src/http_connection_store.cpp
+@@ -0,0 +1,76 @@
++// ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
++#include "http_connection_store.hpp"
++#include <iterator>
++
++namespace orange::http::detail {
++Connection &ConnectionStore::add(OwnedFd fd, std::chrono::steady_clock::time_point now) {
++    active_.emplace_back(std::move(fd), now);
++    Connection &connection = active_.back();
++    connection.position = std::prev(active_.end());
++    mark_dirty(connection);
++    return connection;
++}
++
++void ConnectionStore::mark_dirty(Connection &connection) noexcept {
++    if (connection.queued || connection.retired)
++        return;
++    connection.queued = true;
++    connection.dirty_previous = dirty_tail_;
++    if (dirty_tail_)
++        dirty_tail_->dirty_next = &connection;
++    else
++        dirty_head_ = &connection;
++    dirty_tail_ = &connection;
++}
++
++void ConnectionStore::unlink_dirty(Connection &connection) noexcept {
++    if (!connection.queued)
++        return;
++    if (connection.dirty_previous)
++        connection.dirty_previous->dirty_next = connection.dirty_next;
++    else
++        dirty_head_ = connection.dirty_next;
++    if (connection.dirty_next)
++        connection.dirty_next->dirty_previous = connection.dirty_previous;
++    else
++        dirty_tail_ = connection.dirty_previous;
++    connection.dirty_previous = connection.dirty_next = nullptr;
++    connection.queued = false;
++}
++
++Connection *ConnectionStore::take_dirty() noexcept {
++    Connection *connection = dirty_head_;
++    if (connection)
++        unlink_dirty(*connection);
++    return connection;
++}
++
++void ConnectionStore::touch(Connection &connection,
++                            std::chrono::steady_clock::time_point now) noexcept {
++    connection.last_activity = now;
++    active_.splice(active_.end(), active_, connection.position);
++}
++
++void ConnectionStore::retire(Connection &connection) noexcept {
++    if (connection.retired)
++        return;
++    connection.fd.reset();
++    unlink_dirty(connection);
++    connection.retired = true;
++    retired_.splice(retired_.end(), active_, connection.position);
++}
++
++std::chrono::steady_clock::time_point
++ConnectionStore::next_deadline(std::chrono::milliseconds idle_timeout) const noexcept {
++    return active_.empty() ? std::chrono::steady_clock::time_point::max()
++                           : active_.front().last_activity + idle_timeout;
++}
++
++void ConnectionStore::expire(std::chrono::steady_clock::time_point now,
++                             std::chrono::milliseconds idle_timeout) noexcept {
++    while (!active_.empty() && active_.front().last_activity + idle_timeout <= now)
++        retire(active_.front());
++}
++
++void ConnectionStore::collect() noexcept { retired_.clear(); }
++} // namespace orange::http::detail
+--- /dev/null
++++ b/service/src/http_connection_store.hpp
+@@ -0,0 +1,109 @@
++// ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
++// Internal transport ownership: stable identities, dirty work and ordered expiry.
++#ifndef ORANGE_HTTP_CONNECTION_STORE_HPP
++#define ORANGE_HTTP_CONNECTION_STORE_HPP
++#include "http_request_decoder.hpp"
++#include <chrono>
++#include <list>
++#include <string>
++#include <unistd.h>
++#include <utility>
++
++namespace orange::http::detail {
++// Owns a POSIX descriptor; invalidation immediately prevents old-batch dispatch.
++class OwnedFd {
++  public:
++    // Empty descriptors own no resource.
++    OwnedFd() noexcept = default;
++    // Adopts one descriptor returned by the operating system.
++    explicit OwnedFd(int fd) noexcept : fd_(fd) {}
++    // Releases the adopted descriptor once.
++    ~OwnedFd() { reset(); }
++    // Transfers ownership without closing the transferred descriptor.
++    OwnedFd(OwnedFd &&other) noexcept : fd_(std::exchange(other.fd_, -1)) {}
++    // Releases the old descriptor and adopts the source's ownership.
++    OwnedFd &operator=(OwnedFd &&other) noexcept {
++        if (this != &other) {
++            reset();
++            fd_ = std::exchange(other.fd_, -1);
++        }
++        return *this;
++    }
++    OwnedFd(const OwnedFd &) = delete;
++    OwnedFd &operator=(const OwnedFd &) = delete;
++    // Borrows the descriptor for a synchronous syscall.
++    int get() const noexcept { return fd_; }
++    // Reports whether dispatch may still use the resource.
++    bool valid() const noexcept { return fd_ >= 0; }
++    // Transfers ownership to the listener owner after successful bind.
++    int release() noexcept { return std::exchange(fd_, -1); }
++    // Closes immediately; repeated invalidation is harmless.
++    void reset() noexcept {
++        if (fd_ >= 0)
++            ::close(fd_);
++        fd_ = -1;
++    }
++
++  private:
++    int fd_ = -1;
++};
++
++// Tracks kernel registration so only actual enabled-state transitions are sent.
++enum class Interest { absent, enabled, disabled };
++
++// Stable connection state remains alive through all events in its closing batch.
++struct Connection {
++    // Constructs the nonmovable decoder directly inside its final owning node.
++    Connection(OwnedFd descriptor, std::chrono::steady_clock::time_point now)
++        : fd(std::move(descriptor)), last_activity(now) {}
++    OwnedFd fd;
++    RequestDecoder decoder;
++    std::string outgoing;
++    std::size_t outgoing_offset = 0;
++    bool closing_after_flush = false;
++    bool peer_eof = false;
++    Interest read_interest = Interest::absent;
++    Interest write_interest = Interest::absent;
++    std::chrono::steady_clock::time_point last_activity{};
++
++  private:
++    friend class ConnectionStore;
++    std::list<Connection>::iterator position;
++    Connection *dirty_previous = nullptr;
++    Connection *dirty_next = nullptr;
++    bool queued = false;
++    bool retired = false;
++};
++
++// Owns connection nodes in activity order. No operation scans live connections;
++// expire/collect visit only due/closed nodes. All calls belong to the loop thread.
++class ConnectionStore {
++  public:
++    // Adopts a connection, initially dirty; allocation failure retains RAII cleanup.
++    Connection &add(OwnedFd fd, std::chrono::steady_clock::time_point now);
++    // Queues at most one pending interest update for a live connection.
++    void mark_dirty(Connection &connection) noexcept;
++    // Removes the next pending update, or returns null when no state changed.
++    Connection *take_dirty() noexcept;
++    // Records successful I/O in monotonically sampled activity order, without allocation.
++    void touch(Connection &connection, std::chrono::steady_clock::time_point now) noexcept;
++    // Closes/unlinks immediately but defers destruction until collect at batch end.
++    void retire(Connection &connection) noexcept;
++    // Returns the oldest live deadline, or max when there is no live connection.
++    std::chrono::steady_clock::time_point
++    next_deadline(std::chrono::milliseconds idle_timeout) const noexcept;
++    // Retires only the consecutive oldest nodes whose deadline has arrived.
++    void expire(std::chrono::steady_clock::time_point now,
++                std::chrono::milliseconds idle_timeout) noexcept;
++    // Destroys only retired nodes after both event passes have finished.
++    void collect() noexcept;
++
++  private:
++    void unlink_dirty(Connection &connection) noexcept;
++    std::list<Connection> active_;
++    std::list<Connection> retired_;
++    Connection *dirty_head_ = nullptr;
++    Connection *dirty_tail_ = nullptr;
++};
++} // namespace orange::http::detail
++#endif
+--- /dev/null
++++ b/service/tests/http_connection_store_tests.cpp
+@@ -0,0 +1,94 @@
++// ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
++// Detects lost/doubled dirty work, incorrect timeout ordering and early reclamation.
++#include "http_connection_store.hpp"
++#include <cerrno>
++#include <chrono>
++#include <cstdio>
++#include <fcntl.h>
++#include <stdexcept>
++
++namespace {
++using namespace std::chrono_literals;
++using namespace orange::http::detail;
++int checks = 0;
++
++// Reports the invariant that failed instead of relying on debug-only assertions.
++void check(bool value, const char *name) {
++    ++checks;
++    if (!value)
++        throw std::runtime_error(name);
++}
++
++// Exercises real descriptor ownership without requiring a listener or wall clock.
++OwnedFd descriptor() {
++    const int fd = ::open("/dev/null", O_RDONLY);
++    if (fd < 0)
++        throw std::runtime_error("descriptor setup");
++    return OwnedFd(fd);
++}
++
++// Mutations that duplicate work or leave a closed pointer queued must fail here.
++void dirty_and_retired() {
++    ConnectionStore store;
++    const auto t = std::chrono::steady_clock::time_point{};
++    auto &a = store.add(descriptor(), t);
++    auto &b = store.add(descriptor(), t + 1ms);
++    auto &c = store.add(descriptor(), t + 2ms);
++    store.mark_dirty(a);
++    store.mark_dirty(b);
++    check(store.take_dirty() == &a, "dirty FIFO first");
++    store.mark_dirty(b);
++    const int closed_fd = b.fd.get();
++    b.outgoing = "batch identity survives close";
++    store.retire(b);
++    store.retire(b);
++    check(!b.fd.valid(), "retire closes descriptor");
++    check(::fcntl(closed_fd, F_GETFD) == -1 && errno == EBADF, "retired fd released");
++    check(b.outgoing == "batch identity survives close", "retire defers object destruction");
++    check(store.take_dirty() == &c, "closed middle entry removed from dirty work");
++    check(store.take_dirty() == nullptr, "dirty work is deduplicated");
++    store.mark_dirty(a);
++    store.mark_dirty(a);
++    check(store.take_dirty() == &a, "processed connection can be queued again");
++    check(store.take_dirty() == nullptr, "repeat marks are idempotent");
++    store.collect();
++    check(a.fd.valid() && c.fd.valid(), "collect preserves live connections");
++}
++
++// Keeping a touched former head in front would expire the wrong connection.
++void ordered_deadlines() {
++    ConnectionStore store;
++    const auto t = std::chrono::steady_clock::time_point{};
++    check(store.next_deadline(10ms) == decltype(t)::max(), "empty deadline");
++    auto &a = store.add(descriptor(), t);
++    auto &b = store.add(descriptor(), t + 1ms);
++    auto &c = store.add(descriptor(), t + 2ms);
++    store.touch(a, t + 5ms);
++    check(store.next_deadline(10ms) == t + 11ms, "activity reorders nearest expiry");
++    store.expire(t + 10ms, 10ms);
++    check(a.fd.valid() && b.fd.valid() && c.fd.valid(), "no early expiry");
++    store.expire(t + 11ms, 10ms);
++    check(!b.fd.valid() && a.fd.valid() && c.fd.valid(), "exact-boundary expiry");
++    check(store.next_deadline(10ms) == t + 12ms, "next oldest deadline");
++    store.touch(c, t + 11ms);
++    store.expire(t + 15ms, 10ms);
++    check(!a.fd.valid() && c.fd.valid(), "refresh preserves live peer");
++    store.expire(t + 21ms, 10ms);
++    check(!c.fd.valid(), "refreshed deadline expires");
++    check(store.take_dirty() == nullptr, "expired entries removed from pending work");
++    check(store.next_deadline(10ms) == decltype(t)::max(), "all expired deadline");
++    store.collect();
++}
++} // namespace
++
++// Each case operates on the actual lifecycle owner used by the event loop.
++int main() {
++    try {
++        dirty_and_retired();
++        ordered_deadlines();
++        std::printf("connection store: %d checks Pass\n", checks);
++    } catch (const std::exception &error) {
++        std::fprintf(stderr, "connection store failed: %s\n", error.what());
++        return 1;
++    }
++}
+--- a/service/bench/http_server_bench.cpp
++++ b/service/bench/http_server_bench.cpp
+@@ -1,11 +1,10 @@
+ // ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
+ // Measures real loopback request completion with independent wire validation.
+ // The single client loop multiplexes nonblocking sockets; the production loop
+-// runs on a second thread. CPU and RSS therefore include both participants.
+-#include "http_server.hpp"
++// runs in a child process. CPU and RSS are attributed separately.
++#include "http_bench_server.hpp"
+ #include "routes.hpp"
+ #include <algorithm>
+-#include <atomic>
+ #include <cerrno>
+ #include <charconv>
+ #include <chrono>
+@@ -21,7 +20,6 @@
+ #include <string_view>
+ #include <sys/resource.h>
+ #include <sys/socket.h>
+-#include <thread>
+ #include <unistd.h>
+ #include <utility>
+ #include <vector>
+@@ -46,31 +44,7 @@
+     Client(const Client &) = delete;
+ };
+ 
+-// Stops and joins the real server even if a client operation throws.
+-class Server {
+-  public:
+-    Server() {
+-        if (const int error = loop_.bind(0, &port); error != 0)
+-            throw std::runtime_error("server bind errno=" + std::to_string(error));
+-        worker_ = std::thread(
+-            [this] { result_ = loop_.serve(orange::http::handle_request, 30s, stop_); });
+-    }
+-    ~Server() { finish(); }
+-    // Joins before examining the event loop's errno-style result.
+-    int finish() {
+-        stop_.store(true);
+-        if (worker_.joinable())
+-            worker_.join();
+-        return result_;
+-    }
+-    std::uint16_t port = 0;
+-
+-  private:
+-    orange::http::LoopbackServer loop_;
+-    std::atomic_bool stop_{false};
+-    std::thread worker_;
+-    int result_ = -1;
+-};
++using Server = orange::bench::ServerProcess;
+ 
+ // Scenario dimensions keep connection count, pipeline depth and body distinct.
+ struct Scenario {
+@@ -84,7 +58,8 @@
+     {"health_c1", 1, 0, 1, 0},          {"health_c8", 8, 0, 1, 0},
+     {"health_c64", 64, 0, 1, 0},        {"health_idle64", 1, 64, 1, 0},
+     {"health_pipeline16", 1, 0, 16, 0}, {"echo_1k_c1", 1, 0, 1, 1024},
+-    {"echo_1k_c8", 8, 0, 1, 1024},      {"echo_1m_c1", 1, 0, 1, 1048576}};
++    {"echo_1k_c8", 8, 0, 1, 1024},      {"echo_1m_c1", 1, 0, 1, 1048576},
++    {"health_idle512", 1, 512, 1, 0},   {"health_idle2048", 1, 2048, 1, 0}};
+ 
+ // Constructs expected protocol bytes without calling the production serializer.
+ std::pair<std::string, std::string> wires(const Scenario &scenario) {
+@@ -217,7 +192,7 @@
+     return std::chrono::duration<double>(Clock::now() - begin).count();
+ }
+ 
+-// Converts process user+system CPU to seconds (client and server combined).
++// Converts the isolated client process CPU to seconds.
+ double cpu_seconds(const rusage &usage) {
+     return usage.ru_utime.tv_sec + usage.ru_stime.tv_sec +
+            (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1000000.0;
+@@ -228,8 +203,22 @@
+     return samples[(samples.size() * percent + 99) / 100 - 1];
+ }
+ 
++// Raises only this disposable process's soft budget before the server inherits it.
++void prepare_descriptor_budget(const Scenario &scenario) {
++    rlimit limit{};
++    const rlim_t needed = static_cast<rlim_t>(scenario.active + scenario.idle + 64);
++    if (::getrlimit(RLIMIT_NOFILE, &limit) != 0 || needed > limit.rlim_max)
++        throw std::runtime_error("insufficient descriptor budget for fixture");
++    if (needed > limit.rlim_cur) {
++        limit.rlim_cur = needed;
++        if (::setrlimit(RLIMIT_NOFILE, &limit) != 0)
++            throw std::runtime_error("fixture descriptor limit setup failed");
++    }
++}
++
+ // Excludes connection setup, warmup and shutdown from timing and CPU deltas.
+ void measure(const Scenario &scenario, int duration_ms) {
++    prepare_descriptor_budget(scenario);
+     Server server;
+     std::vector<Client> idle;
+     for (int i = 0; i < scenario.idle; ++i)
+@@ -250,6 +239,7 @@
+         client.received = 0;
+     }
+     latencies.clear();
++    server.begin();
+     rusage before{}, after{};
+     if (::getrusage(RUSAGE_SELF, &before) != 0)
+         throw std::runtime_error("getrusage failed");
+@@ -257,6 +247,7 @@
+         exercise(clients, request, response, scenario.pipeline, duration_ms, latencies);
+     if (::getrusage(RUSAGE_SELF, &after) != 0)
+         throw std::runtime_error("getrusage failed");
++    const auto server_metrics = server.end();
+     if (latencies.empty())
+         throw std::runtime_error("no completed requests");
+     std::sort(latencies.begin(), latencies.end());
+@@ -268,8 +259,13 @@
+               << ",\"p50_us\":" << percentile(latencies, 50)
+               << ",\"p95_us\":" << percentile(latencies, 95)
+               << ",\"p99_us\":" << percentile(latencies, 99)
+-              << ",\"process_cpu_seconds\":" << cpu_seconds(after) - cpu_seconds(before)
+-              << ",\"process_peak_rss_bytes\":" << after.ru_maxrss << ",\"errors\":0}";
++              << ",\"client_process_cpu_seconds\":" << cpu_seconds(after) - cpu_seconds(before)
++              << ",\"client_peak_rss_bytes\":" << after.ru_maxrss
++              << ",\"server_process_cpu_seconds\":" << server_metrics.process_cpu_seconds
++              << ",\"server_thread_cpu_seconds\":" << server_metrics.thread_cpu_seconds
++              << ",\"server_peak_rss_bytes\":" << server_metrics.peak_rss_bytes
++              << ",\"client_pid\":" << ::getpid() << ",\"server_pid\":" << server.process_id()
++              << ",\"errors\":0}";
+     if (server.finish() != 0)
+         throw std::runtime_error("server loop returned an error");
+ }
+@@ -309,6 +305,9 @@
+                   << "\",\"cases\":[";
+         bool first = true;
+         for (const auto &scenario : scenarios) {
++            // Preserve the eight-case default; large idle fixtures are explicit.
++            if (selected.empty() && scenario.idle > 64)
++                continue;
+             if (!selected.empty() && selected != scenario.name)
+                 continue;
+             if (!first)
+--- /dev/null
++++ b/service/bench/http_bench_server.cpp
+@@ -0,0 +1,196 @@
++// ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
++#include "http_bench_server.hpp"
++#include "http_server.hpp"
++#include "routes.hpp"
++#include <atomic>
++#include <cerrno>
++#include <chrono>
++#include <cstdio>
++#include <mach/mach.h>
++#include <pthread.h>
++#include <stdexcept>
++#include <sys/resource.h>
++#include <sys/socket.h>
++#include <sys/wait.h>
++#include <thread>
++#include <unistd.h>
++
++namespace orange::bench {
++namespace {
++// Transfers one fixed local control frame, preserving short I/O and EINTR.
++void transfer(int fd, void *bytes, std::size_t size, bool sending) {
++    auto *next = static_cast<char *>(bytes);
++    while (size != 0) {
++        const auto n = sending ? ::send(fd, next, size, 0) : ::recv(fd, next, size, 0);
++        if (n < 0 && errno == EINTR)
++            continue;
++        if (n <= 0)
++            throw std::runtime_error("server control channel failed");
++        next += n;
++        size -= static_cast<std::size_t>(n);
++    }
++}
++
++// Captures cumulative process/thread CPU without instrumenting request handling.
++ServerMetrics snapshot(std::thread &thread) {
++    rusage usage{};
++    thread_basic_info_data_t info{};
++    mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
++    if (::getrusage(RUSAGE_SELF, &usage) != 0 ||
++        ::thread_info(::pthread_mach_thread_np(thread.native_handle()), THREAD_BASIC_INFO,
++                      reinterpret_cast<thread_info_t>(&info), &count) != KERN_SUCCESS)
++        throw std::runtime_error("server CPU sampling failed");
++    return {usage.ru_utime.tv_sec + usage.ru_stime.tv_sec +
++                (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1000000.0,
++            info.user_time.seconds + info.system_time.seconds +
++                (info.user_time.microseconds + info.system_time.microseconds) / 1000000.0,
++            static_cast<std::uint64_t>(usage.ru_maxrss)};
++}
++
++// Joins on control failure as well as the normal stop command.
++class Worker {
++  public:
++    // Starts only inside the already-forked child.
++    Worker() {
++        if (server_.bind(0, &port) != 0)
++            throw std::runtime_error("child listener bind failed");
++        thread = std::thread([this] {
++            result_ = server_.serve(http::handle_request, std::chrono::seconds(30), stop_);
++        });
++    }
++    ~Worker() { finish(); }
++    // Makes the thread result visible through join before returning it.
++    int finish() {
++        stop_.store(true);
++        if (thread.joinable())
++            thread.join();
++        return result_;
++    }
++    std::thread thread;
++    std::uint16_t port = 0;
++
++  private:
++    http::LoopbackServer server_;
++    std::atomic_bool stop_{false};
++    int result_ = -1;
++};
++
++// Implements the local B(egin), E(nd), Q(uit) protocol with acknowledged borders.
++int run_child(int channel) {
++    Worker worker;
++    transfer(channel, &worker.port, sizeof(worker.port), true);
++    ServerMetrics before{};
++    bool measuring = false;
++    for (;;) {
++        char command = 0;
++        transfer(channel, &command, 1, false);
++        if (command == 'Q')
++            return worker.finish();
++        if (command == 'B' && !measuring) {
++            before = snapshot(worker.thread);
++            measuring = true;
++            transfer(channel, &command, 1, true);
++        } else if (command == 'E' && measuring) {
++            auto metrics = snapshot(worker.thread);
++            metrics.process_cpu_seconds -= before.process_cpu_seconds;
++            metrics.thread_cpu_seconds -= before.thread_cpu_seconds;
++            transfer(channel, &metrics, sizeof(metrics), true);
++            measuring = false;
++        } else {
++            throw std::runtime_error("invalid server measurement transition");
++        }
++    }
++}
++
++// Bounds both ends of the channel and suppresses SIGPIPE on a crashed peer.
++void configure_channel(int fd) {
++    const timeval timeout{20, 0};
++    const int on = 1;
++    if (::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0 ||
++        ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0 ||
++        ::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) != 0)
++        throw std::runtime_error("server control setup failed");
++}
++} // namespace
++
++ServerProcess::ServerProcess() {
++    int pair[2];
++    if (::socketpair(AF_UNIX, SOCK_STREAM, 0, pair) != 0)
++        throw std::runtime_error("server control socketpair failed");
++    try {
++        configure_channel(pair[0]);
++        configure_channel(pair[1]);
++    } catch (...) {
++        ::close(pair[0]);
++        ::close(pair[1]);
++        throw;
++    }
++    child_ = ::fork();
++    if (child_ == 0) {
++        ::close(pair[0]);
++        int result = 1;
++        try {
++            result = run_child(pair[1]);
++        } catch (const std::exception &error) {
++            std::fprintf(stderr, "server child failed: %s\n", error.what());
++        }
++        ::close(pair[1]);
++        ::_exit(result == 0 ? 0 : 1);
++    }
++    ::close(pair[1]);
++    channel_ = pair[0];
++    if (child_ < 0) {
++        ::close(channel_);
++        channel_ = -1;
++        throw std::runtime_error("server fork failed");
++    }
++    try {
++        transfer(channel_, &port, sizeof(port), false);
++    } catch (...) {
++        finish();
++        throw;
++    }
++}
++
++ServerProcess::~ServerProcess() { finish(); }
++
++void ServerProcess::begin() {
++    char command = 'B';
++    transfer(channel_, &command, 1, true);
++    transfer(channel_, &command, 1, false);
++    if (command != 'B')
++        throw std::runtime_error("server begin acknowledgement failed");
++}
++
++ServerMetrics ServerProcess::end() {
++    char command = 'E';
++    transfer(channel_, &command, 1, true);
++    ServerMetrics metrics{};
++    transfer(channel_, &metrics, sizeof(metrics), false);
++    return metrics;
++}
++
++int ServerProcess::finish() noexcept {
++    if (channel_ >= 0) {
++        try {
++            char command = 'Q';
++            transfer(channel_, &command, 1, true);
++        } catch (...) {
++            result_ = 1;
++        }
++        ::close(channel_);
++        channel_ = -1;
++    }
++    if (child_ > 0) {
++        int status = 0;
++        pid_t waited;
++        do {
++            waited = ::waitpid(child_, &status, 0);
++        } while (waited < 0 && errno == EINTR);
++        if (waited != child_ || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
++            result_ = 1;
++        child_ = -1;
++    }
++    return result_;
++}
++} // namespace orange::bench
+--- /dev/null
++++ b/service/bench/http_bench_server.hpp
+@@ -0,0 +1,41 @@
++// ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
++// Runs the measured transport in a child process with boundary-only CPU sampling.
++#ifndef ORANGE_HTTP_BENCH_SERVER_HPP
++#define ORANGE_HTTP_BENCH_SERVER_HPP
++#include <cstdint>
++#include <sys/types.h>
++
++namespace orange::bench {
++// Server-only counters bracket the issuing/drain window, excluding warmup/stop.
++struct ServerMetrics {
++    double process_cpu_seconds = 0;
++    double thread_cpu_seconds = 0;
++    std::uint64_t peak_rss_bytes = 0;
++};
++
++// Owns a child and its bounded control channel; all socket traffic remains real.
++class ServerProcess {
++  public:
++    // Forks before any worker thread and reports the child's ephemeral listener.
++    ServerProcess();
++    // Closes the channel, stops the child loop and reaps the child on every path.
++    ~ServerProcess();
++    ServerProcess(const ServerProcess &) = delete;
++    ServerProcess &operator=(const ServerProcess &) = delete;
++    // Starts server CPU accounting after the caller completes warmup.
++    void begin();
++    // Samples the still-live server thread after all issued responses drain.
++    ServerMetrics end();
++    // Requests a clean stop, reaps exactly once and returns zero only on success.
++    int finish() noexcept;
++    // Exposes the actual child identity for the measurement-separation contract.
++    pid_t process_id() const noexcept { return child_; }
++    std::uint16_t port = 0;
++
++  private:
++    int channel_ = -1;
++    pid_t child_ = -1;
++    int result_ = 0;
++};
++} // namespace orange::bench
++#endif
+--- /dev/null
++++ b/service/bench/http_bench_process_tests.cpp
+@@ -0,0 +1,71 @@
++// ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
++// Regresses unreaped child processes and control-channel failure concealment.
++#include "http_bench_server.hpp"
++#include <cerrno>
++#include <csignal>
++#include <cstdio>
++#include <stdexcept>
++#include <sys/wait.h>
++#include <unistd.h>
++
++namespace {
++// Verifies the owner reaped its own child; observing ECHILD does not reap others.
++bool reaped(pid_t child) {
++    int status = 0;
++    return ::waitpid(child, &status, WNOHANG) == -1 && errno == ECHILD;
++}
++
++// Removing shutdown/reaping or including an in-process server must fail this case.
++bool clean_stop() {
++    orange::bench::ServerProcess server;
++    const pid_t child = server.process_id();
++    server.begin();
++    const auto metrics = server.end();
++    return child > 0 && child != ::getpid() && server.port != 0 &&
++           metrics.process_cpu_seconds >= 0 && metrics.thread_cpu_seconds >= 0 &&
++           metrics.peak_rss_bytes > 0 && server.finish() == 0 && reaped(child) &&
++           server.finish() == 0;
++}
++
++// A killed owned server must produce a measurement error and still be reaped.
++bool interrupted_child() {
++    orange::bench::ServerProcess server;
++    const pid_t child = server.process_id();
++    server.begin();
++    if (child <= 0 || ::kill(child, SIGKILL) != 0)
++        return false;
++    bool failed = false;
++    try {
++        (void)server.end();
++    } catch (const std::runtime_error &) {
++        failed = true;
++    }
++    return failed && server.finish() != 0 && reaped(child);
++}
++
++// A repeated begin is rejected by the real child state machine, without hanging.
++bool invalid_transition() {
++    orange::bench::ServerProcess server;
++    const pid_t child = server.process_id();
++    server.begin();
++    bool failed = false;
++    try {
++        server.begin();
++    } catch (const std::runtime_error &) {
++        failed = true;
++    }
++    return failed && server.finish() != 0 && reaped(child);
++}
++} // namespace
++
++// Uses actual fork, control sockets, Mach CPU sampling and waitpid boundaries.
++int main() {
++    try {
++        const bool pass = clean_stop() && interrupted_child() && invalid_transition();
++        std::printf("isolated server lifecycle: %s\n", pass ? "Pass" : "Fail");
++        return pass ? 0 : 1;
++    } catch (const std::exception &error) {
++        std::fprintf(stderr, "isolated server lifecycle failed: %s\n", error.what());
++        return 1;
++    }
++}
+--- a/service/bench/verify_server.cmake
++++ b/service/bench/verify_server.cmake
+@@ -10,8 +10,20 @@
+     message(FATAL_ERROR "server benchmark must report all eight scenarios")
+ endif()
+ foreach(index RANGE 7)
++    foreach(field IN ITEMS server_process_cpu_seconds server_thread_cpu_seconds
++                           server_peak_rss_bytes client_pid server_pid)
++        string(JSON value ERROR_VARIABLE missing GET "${report}" cases ${index} ${field})
++        if(missing OR NOT value GREATER 0)
++            message(FATAL_ERROR "isolated server measurement missing: ${field}")
++        endif()
++    endforeach()
++    string(JSON client_pid GET "${report}" cases ${index} client_pid)
++    string(JSON server_pid GET "${report}" cases ${index} server_pid)
++    if(client_pid EQUAL server_pid)
++        message(FATAL_ERROR "client and server must run in distinct processes")
++    endif()
+     foreach(field IN ITEMS requests requests_per_second p50_us p95_us p99_us elapsed_seconds
+-                           process_cpu_seconds process_peak_rss_bytes)
++                           client_process_cpu_seconds client_peak_rss_bytes)
+         string(JSON value GET "${report}" cases ${index} ${field})
+         if(NOT value GREATER 0)
+             message(FATAL_ERROR "${field} must be positive")
+@@ -37,6 +49,19 @@
+         message(FATAL_ERROR "scenario identity disagrees with SB-2")
+     endif()
+ endforeach()
++foreach(idle IN ITEMS 512 2048)
++    execute_process(COMMAND "${BENCHMARK}" --case "health_idle${idle}" --quick
++                    RESULT_VARIABLE status OUTPUT_VARIABLE scale_report
++                    ERROR_VARIABLE diagnostic TIMEOUT 20)
++    if(NOT status STREQUAL "0")
++        message(FATAL_ERROR "idle scaling scenario unavailable: ${idle}: ${diagnostic}")
++    endif()
++    string(JSON actual_idle GET "${scale_report}" cases 0 idle_connections)
++    string(JSON errors GET "${scale_report}" cases 0 errors)
++    if(NOT actual_idle EQUAL idle OR NOT errors EQUAL 0)
++        message(FATAL_ERROR "idle scaling fixture disagrees with its dimensions")
++    endif()
++endforeach()
+ foreach(argument IN ITEMS --unknown --duration-ms --case)
+     execute_process(COMMAND "${BENCHMARK}" "${argument}" RESULT_VARIABLE status
+                     OUTPUT_QUIET ERROR_QUIET)

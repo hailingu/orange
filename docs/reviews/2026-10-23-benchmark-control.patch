@@ -1,0 +1,525 @@
+--- a/service/CMakeLists.txt
++++ b/service/CMakeLists.txt
+@@ -81,6 +81,7 @@
+ target_link_libraries(http_server_tests PRIVATE orange_http)
+ add_test(NAME http_server_tests COMMAND http_server_tests)
+ 
++
+ # ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
+ add_executable(http_server_scheduling_tests tests/http_server_scheduling_tests.cpp)
+ target_link_libraries(http_server_scheduling_tests PRIVATE orange_http)
+@@ -105,7 +106,11 @@
+     endif()
+     add_executable(http_parser_bench bench/http_parser_bench.cpp)
+     # ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
+-    add_executable(http_server_bench bench/http_server_bench.cpp)
++    add_executable(http_server_bench bench/http_server_bench.cpp bench/http_bench_server.cpp)
++    add_executable(http_bench_process_tests bench/http_bench_process_tests.cpp
++                   bench/http_bench_server.cpp)
++    target_link_libraries(http_bench_process_tests PRIVATE orange_http)
++    add_test(NAME http_bench_process_tests COMMAND http_bench_process_tests)
+     target_link_libraries(http_server_bench PRIVATE orange_http)
+     set_property(TARGET http_server_bench PROPERTY INTERPROCEDURAL_OPTIMIZATION FALSE)
+     target_compile_definitions(http_server_bench PRIVATE
+--- a/service/bench/http_server_bench.cpp
++++ b/service/bench/http_server_bench.cpp
+@@ -1,11 +1,10 @@
+ // ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
+ // Measures real loopback request completion with independent wire validation.
+ // The single client loop multiplexes nonblocking sockets; the production loop
+-// runs on a second thread. CPU and RSS therefore include both participants.
+-#include "http_server.hpp"
++// runs in a child process. CPU and RSS are attributed separately.
++#include "http_bench_server.hpp"
+ #include "routes.hpp"
+ #include <algorithm>
+-#include <atomic>
+ #include <cerrno>
+ #include <charconv>
+ #include <chrono>
+@@ -21,7 +20,6 @@
+ #include <string_view>
+ #include <sys/resource.h>
+ #include <sys/socket.h>
+-#include <thread>
+ #include <unistd.h>
+ #include <utility>
+ #include <vector>
+@@ -46,31 +44,7 @@
+     Client(const Client &) = delete;
+ };
+ 
+-// Stops and joins the real server even if a client operation throws.
+-class Server {
+-  public:
+-    Server() {
+-        if (const int error = loop_.bind(0, &port); error != 0)
+-            throw std::runtime_error("server bind errno=" + std::to_string(error));
+-        worker_ = std::thread(
+-            [this] { result_ = loop_.serve(orange::http::handle_request, 30s, stop_); });
+-    }
+-    ~Server() { finish(); }
+-    // Joins before examining the event loop's errno-style result.
+-    int finish() {
+-        stop_.store(true);
+-        if (worker_.joinable())
+-            worker_.join();
+-        return result_;
+-    }
+-    std::uint16_t port = 0;
+-
+-  private:
+-    orange::http::LoopbackServer loop_;
+-    std::atomic_bool stop_{false};
+-    std::thread worker_;
+-    int result_ = -1;
+-};
++using Server = orange::bench::ServerProcess;
+ 
+ // Scenario dimensions keep connection count, pipeline depth and body distinct.
+ struct Scenario {
+@@ -84,7 +58,8 @@
+     {"health_c1", 1, 0, 1, 0},          {"health_c8", 8, 0, 1, 0},
+     {"health_c64", 64, 0, 1, 0},        {"health_idle64", 1, 64, 1, 0},
+     {"health_pipeline16", 1, 0, 16, 0}, {"echo_1k_c1", 1, 0, 1, 1024},
+-    {"echo_1k_c8", 8, 0, 1, 1024},      {"echo_1m_c1", 1, 0, 1, 1048576}};
++    {"echo_1k_c8", 8, 0, 1, 1024},      {"echo_1m_c1", 1, 0, 1, 1048576},
++    {"health_idle512", 1, 512, 1, 0},   {"health_idle2048", 1, 2048, 1, 0}};
+ 
+ // Constructs expected protocol bytes without calling the production serializer.
+ std::pair<std::string, std::string> wires(const Scenario &scenario) {
+@@ -217,7 +192,7 @@
+     return std::chrono::duration<double>(Clock::now() - begin).count();
+ }
+ 
+-// Converts process user+system CPU to seconds (client and server combined).
++// Converts the isolated client process CPU to seconds.
+ double cpu_seconds(const rusage &usage) {
+     return usage.ru_utime.tv_sec + usage.ru_stime.tv_sec +
+            (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1000000.0;
+@@ -228,8 +203,22 @@
+     return samples[(samples.size() * percent + 99) / 100 - 1];
+ }
+ 
++// Raises only this disposable process's soft budget before the server inherits it.
++void prepare_descriptor_budget(const Scenario &scenario) {
++    rlimit limit{};
++    const rlim_t needed = static_cast<rlim_t>(scenario.active + scenario.idle + 64);
++    if (::getrlimit(RLIMIT_NOFILE, &limit) != 0 || needed > limit.rlim_max)
++        throw std::runtime_error("insufficient descriptor budget for fixture");
++    if (needed > limit.rlim_cur) {
++        limit.rlim_cur = needed;
++        if (::setrlimit(RLIMIT_NOFILE, &limit) != 0)
++            throw std::runtime_error("fixture descriptor limit setup failed");
++    }
++}
++
+ // Excludes connection setup, warmup and shutdown from timing and CPU deltas.
+ void measure(const Scenario &scenario, int duration_ms) {
++    prepare_descriptor_budget(scenario);
+     Server server;
+     std::vector<Client> idle;
+     for (int i = 0; i < scenario.idle; ++i)
+@@ -250,6 +239,7 @@
+         client.received = 0;
+     }
+     latencies.clear();
++    server.begin();
+     rusage before{}, after{};
+     if (::getrusage(RUSAGE_SELF, &before) != 0)
+         throw std::runtime_error("getrusage failed");
+@@ -257,6 +247,7 @@
+         exercise(clients, request, response, scenario.pipeline, duration_ms, latencies);
+     if (::getrusage(RUSAGE_SELF, &after) != 0)
+         throw std::runtime_error("getrusage failed");
++    const auto server_metrics = server.end();
+     if (latencies.empty())
+         throw std::runtime_error("no completed requests");
+     std::sort(latencies.begin(), latencies.end());
+@@ -268,8 +259,13 @@
+               << ",\"p50_us\":" << percentile(latencies, 50)
+               << ",\"p95_us\":" << percentile(latencies, 95)
+               << ",\"p99_us\":" << percentile(latencies, 99)
+-              << ",\"process_cpu_seconds\":" << cpu_seconds(after) - cpu_seconds(before)
+-              << ",\"process_peak_rss_bytes\":" << after.ru_maxrss << ",\"errors\":0}";
++              << ",\"client_process_cpu_seconds\":" << cpu_seconds(after) - cpu_seconds(before)
++              << ",\"client_peak_rss_bytes\":" << after.ru_maxrss
++              << ",\"server_process_cpu_seconds\":" << server_metrics.process_cpu_seconds
++              << ",\"server_thread_cpu_seconds\":" << server_metrics.thread_cpu_seconds
++              << ",\"server_peak_rss_bytes\":" << server_metrics.peak_rss_bytes
++              << ",\"client_pid\":" << ::getpid() << ",\"server_pid\":" << server.process_id()
++              << ",\"errors\":0}";
+     if (server.finish() != 0)
+         throw std::runtime_error("server loop returned an error");
+ }
+@@ -309,6 +305,9 @@
+                   << "\",\"cases\":[";
+         bool first = true;
+         for (const auto &scenario : scenarios) {
++            // Preserve the eight-case default; large idle fixtures are explicit.
++            if (selected.empty() && scenario.idle > 64)
++                continue;
+             if (!selected.empty() && selected != scenario.name)
+                 continue;
+             if (!first)
+--- /dev/null
++++ b/service/bench/http_bench_server.cpp
+@@ -0,0 +1,196 @@
++// ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
++#include "http_bench_server.hpp"
++#include "http_server.hpp"
++#include "routes.hpp"
++#include <atomic>
++#include <cerrno>
++#include <chrono>
++#include <cstdio>
++#include <mach/mach.h>
++#include <pthread.h>
++#include <stdexcept>
++#include <sys/resource.h>
++#include <sys/socket.h>
++#include <sys/wait.h>
++#include <thread>
++#include <unistd.h>
++
++namespace orange::bench {
++namespace {
++// Transfers one fixed local control frame, preserving short I/O and EINTR.
++void transfer(int fd, void *bytes, std::size_t size, bool sending) {
++    auto *next = static_cast<char *>(bytes);
++    while (size != 0) {
++        const auto n = sending ? ::send(fd, next, size, 0) : ::recv(fd, next, size, 0);
++        if (n < 0 && errno == EINTR)
++            continue;
++        if (n <= 0)
++            throw std::runtime_error("server control channel failed");
++        next += n;
++        size -= static_cast<std::size_t>(n);
++    }
++}
++
++// Captures cumulative process/thread CPU without instrumenting request handling.
++ServerMetrics snapshot(std::thread &thread) {
++    rusage usage{};
++    thread_basic_info_data_t info{};
++    mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
++    if (::getrusage(RUSAGE_SELF, &usage) != 0 ||
++        ::thread_info(::pthread_mach_thread_np(thread.native_handle()), THREAD_BASIC_INFO,
++                      reinterpret_cast<thread_info_t>(&info), &count) != KERN_SUCCESS)
++        throw std::runtime_error("server CPU sampling failed");
++    return {usage.ru_utime.tv_sec + usage.ru_stime.tv_sec +
++                (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1000000.0,
++            info.user_time.seconds + info.system_time.seconds +
++                (info.user_time.microseconds + info.system_time.microseconds) / 1000000.0,
++            static_cast<std::uint64_t>(usage.ru_maxrss)};
++}
++
++// Joins on control failure as well as the normal stop command.
++class Worker {
++  public:
++    // Starts only inside the already-forked child.
++    Worker() {
++        if (server_.bind(0, &port) != 0)
++            throw std::runtime_error("child listener bind failed");
++        thread = std::thread([this] {
++            result_ = server_.serve(http::handle_request, std::chrono::seconds(30), stop_);
++        });
++    }
++    ~Worker() { finish(); }
++    // Makes the thread result visible through join before returning it.
++    int finish() {
++        stop_.store(true);
++        if (thread.joinable())
++            thread.join();
++        return result_;
++    }
++    std::thread thread;
++    std::uint16_t port = 0;
++
++  private:
++    http::LoopbackServer server_;
++    std::atomic_bool stop_{false};
++    int result_ = -1;
++};
++
++// Implements the local B(egin), E(nd), Q(uit) protocol with acknowledged borders.
++int run_child(int channel) {
++    Worker worker;
++    transfer(channel, &worker.port, sizeof(worker.port), true);
++    ServerMetrics before{};
++    bool measuring = false;
++    for (;;) {
++        char command = 0;
++        transfer(channel, &command, 1, false);
++        if (command == 'Q')
++            return worker.finish();
++        if (command == 'B' && !measuring) {
++            before = snapshot(worker.thread);
++            measuring = true;
++            transfer(channel, &command, 1, true);
++        } else if (command == 'E' && measuring) {
++            auto metrics = snapshot(worker.thread);
++            metrics.process_cpu_seconds -= before.process_cpu_seconds;
++            metrics.thread_cpu_seconds -= before.thread_cpu_seconds;
++            transfer(channel, &metrics, sizeof(metrics), true);
++            measuring = false;
++        } else {
++            throw std::runtime_error("invalid server measurement transition");
++        }
++    }
++}
++
++// Bounds both ends of the channel and suppresses SIGPIPE on a crashed peer.
++void configure_channel(int fd) {
++    const timeval timeout{20, 0};
++    const int on = 1;
++    if (::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0 ||
++        ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0 ||
++        ::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) != 0)
++        throw std::runtime_error("server control setup failed");
++}
++} // namespace
++
++ServerProcess::ServerProcess() {
++    int pair[2];
++    if (::socketpair(AF_UNIX, SOCK_STREAM, 0, pair) != 0)
++        throw std::runtime_error("server control socketpair failed");
++    try {
++        configure_channel(pair[0]);
++        configure_channel(pair[1]);
++    } catch (...) {
++        ::close(pair[0]);
++        ::close(pair[1]);
++        throw;
++    }
++    child_ = ::fork();
++    if (child_ == 0) {
++        ::close(pair[0]);
++        int result = 1;
++        try {
++            result = run_child(pair[1]);
++        } catch (const std::exception &error) {
++            std::fprintf(stderr, "server child failed: %s\n", error.what());
++        }
++        ::close(pair[1]);
++        ::_exit(result == 0 ? 0 : 1);
++    }
++    ::close(pair[1]);
++    channel_ = pair[0];
++    if (child_ < 0) {
++        ::close(channel_);
++        channel_ = -1;
++        throw std::runtime_error("server fork failed");
++    }
++    try {
++        transfer(channel_, &port, sizeof(port), false);
++    } catch (...) {
++        finish();
++        throw;
++    }
++}
++
++ServerProcess::~ServerProcess() { finish(); }
++
++void ServerProcess::begin() {
++    char command = 'B';
++    transfer(channel_, &command, 1, true);
++    transfer(channel_, &command, 1, false);
++    if (command != 'B')
++        throw std::runtime_error("server begin acknowledgement failed");
++}
++
++ServerMetrics ServerProcess::end() {
++    char command = 'E';
++    transfer(channel_, &command, 1, true);
++    ServerMetrics metrics{};
++    transfer(channel_, &metrics, sizeof(metrics), false);
++    return metrics;
++}
++
++int ServerProcess::finish() noexcept {
++    if (channel_ >= 0) {
++        try {
++            char command = 'Q';
++            transfer(channel_, &command, 1, true);
++        } catch (...) {
++            result_ = 1;
++        }
++        ::close(channel_);
++        channel_ = -1;
++    }
++    if (child_ > 0) {
++        int status = 0;
++        pid_t waited;
++        do {
++            waited = ::waitpid(child_, &status, 0);
++        } while (waited < 0 && errno == EINTR);
++        if (waited != child_ || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
++            result_ = 1;
++        child_ = -1;
++    }
++    return result_;
++}
++} // namespace orange::bench
+--- /dev/null
++++ b/service/bench/http_bench_server.hpp
+@@ -0,0 +1,41 @@
++// ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
++// Runs the measured transport in a child process with boundary-only CPU sampling.
++#ifndef ORANGE_HTTP_BENCH_SERVER_HPP
++#define ORANGE_HTTP_BENCH_SERVER_HPP
++#include <cstdint>
++#include <sys/types.h>
++
++namespace orange::bench {
++// Server-only counters bracket the issuing/drain window, excluding warmup/stop.
++struct ServerMetrics {
++    double process_cpu_seconds = 0;
++    double thread_cpu_seconds = 0;
++    std::uint64_t peak_rss_bytes = 0;
++};
++
++// Owns a child and its bounded control channel; all socket traffic remains real.
++class ServerProcess {
++  public:
++    // Forks before any worker thread and reports the child's ephemeral listener.
++    ServerProcess();
++    // Closes the channel, stops the child loop and reaps the child on every path.
++    ~ServerProcess();
++    ServerProcess(const ServerProcess &) = delete;
++    ServerProcess &operator=(const ServerProcess &) = delete;
++    // Starts server CPU accounting after the caller completes warmup.
++    void begin();
++    // Samples the still-live server thread after all issued responses drain.
++    ServerMetrics end();
++    // Requests a clean stop, reaps exactly once and returns zero only on success.
++    int finish() noexcept;
++    // Exposes the actual child identity for the measurement-separation contract.
++    pid_t process_id() const noexcept { return child_; }
++    std::uint16_t port = 0;
++
++  private:
++    int channel_ = -1;
++    pid_t child_ = -1;
++    int result_ = 0;
++};
++} // namespace orange::bench
++#endif
+--- /dev/null
++++ b/service/bench/http_bench_process_tests.cpp
+@@ -0,0 +1,71 @@
++// ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
++// Regresses unreaped child processes and control-channel failure concealment.
++#include "http_bench_server.hpp"
++#include <cerrno>
++#include <csignal>
++#include <cstdio>
++#include <stdexcept>
++#include <sys/wait.h>
++#include <unistd.h>
++
++namespace {
++// Verifies the owner reaped its own child; observing ECHILD does not reap others.
++bool reaped(pid_t child) {
++    int status = 0;
++    return ::waitpid(child, &status, WNOHANG) == -1 && errno == ECHILD;
++}
++
++// Removing shutdown/reaping or including an in-process server must fail this case.
++bool clean_stop() {
++    orange::bench::ServerProcess server;
++    const pid_t child = server.process_id();
++    server.begin();
++    const auto metrics = server.end();
++    return child > 0 && child != ::getpid() && server.port != 0 &&
++           metrics.process_cpu_seconds >= 0 && metrics.thread_cpu_seconds >= 0 &&
++           metrics.peak_rss_bytes > 0 && server.finish() == 0 && reaped(child) &&
++           server.finish() == 0;
++}
++
++// A killed owned server must produce a measurement error and still be reaped.
++bool interrupted_child() {
++    orange::bench::ServerProcess server;
++    const pid_t child = server.process_id();
++    server.begin();
++    if (child <= 0 || ::kill(child, SIGKILL) != 0)
++        return false;
++    bool failed = false;
++    try {
++        (void)server.end();
++    } catch (const std::runtime_error &) {
++        failed = true;
++    }
++    return failed && server.finish() != 0 && reaped(child);
++}
++
++// A repeated begin is rejected by the real child state machine, without hanging.
++bool invalid_transition() {
++    orange::bench::ServerProcess server;
++    const pid_t child = server.process_id();
++    server.begin();
++    bool failed = false;
++    try {
++        server.begin();
++    } catch (const std::runtime_error &) {
++        failed = true;
++    }
++    return failed && server.finish() != 0 && reaped(child);
++}
++} // namespace
++
++// Uses actual fork, control sockets, Mach CPU sampling and waitpid boundaries.
++int main() {
++    try {
++        const bool pass = clean_stop() && interrupted_child() && invalid_transition();
++        std::printf("isolated server lifecycle: %s\n", pass ? "Pass" : "Fail");
++        return pass ? 0 : 1;
++    } catch (const std::exception &error) {
++        std::fprintf(stderr, "isolated server lifecycle failed: %s\n", error.what());
++        return 1;
++    }
++}
+--- a/service/bench/verify_server.cmake
++++ b/service/bench/verify_server.cmake
+@@ -10,8 +10,20 @@
+     message(FATAL_ERROR "server benchmark must report all eight scenarios")
+ endif()
+ foreach(index RANGE 7)
++    foreach(field IN ITEMS server_process_cpu_seconds server_thread_cpu_seconds
++                           server_peak_rss_bytes client_pid server_pid)
++        string(JSON value ERROR_VARIABLE missing GET "${report}" cases ${index} ${field})
++        if(missing OR NOT value GREATER 0)
++            message(FATAL_ERROR "isolated server measurement missing: ${field}")
++        endif()
++    endforeach()
++    string(JSON client_pid GET "${report}" cases ${index} client_pid)
++    string(JSON server_pid GET "${report}" cases ${index} server_pid)
++    if(client_pid EQUAL server_pid)
++        message(FATAL_ERROR "client and server must run in distinct processes")
++    endif()
+     foreach(field IN ITEMS requests requests_per_second p50_us p95_us p99_us elapsed_seconds
+-                           process_cpu_seconds process_peak_rss_bytes)
++                           client_process_cpu_seconds client_peak_rss_bytes)
+         string(JSON value GET "${report}" cases ${index} ${field})
+         if(NOT value GREATER 0)
+             message(FATAL_ERROR "${field} must be positive")
+@@ -37,6 +49,19 @@
+         message(FATAL_ERROR "scenario identity disagrees with SB-2")
+     endif()
+ endforeach()
++foreach(idle IN ITEMS 512 2048)
++    execute_process(COMMAND "${BENCHMARK}" --case "health_idle${idle}" --quick
++                    RESULT_VARIABLE status OUTPUT_VARIABLE scale_report
++                    ERROR_VARIABLE diagnostic TIMEOUT 20)
++    if(NOT status STREQUAL "0")
++        message(FATAL_ERROR "idle scaling scenario unavailable: ${idle}: ${diagnostic}")
++    endif()
++    string(JSON actual_idle GET "${scale_report}" cases 0 idle_connections)
++    string(JSON errors GET "${scale_report}" cases 0 errors)
++    if(NOT actual_idle EQUAL idle OR NOT errors EQUAL 0)
++        message(FATAL_ERROR "idle scaling fixture disagrees with its dimensions")
++    endif()
++endforeach()
+ foreach(argument IN ITEMS --unknown --duration-ms --case)
+     execute_process(COMMAND "${BENCHMARK}" "${argument}" RESULT_VARIABLE status
+                     OUTPUT_QUIET ERROR_QUIET)

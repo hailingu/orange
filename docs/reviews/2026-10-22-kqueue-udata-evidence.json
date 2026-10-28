@@ -1,0 +1,2026 @@
+{
+  "base_commit": "08f85e9733e91ea5ffaf261f6b1b7a9cc433ca3b",
+  "prior_source_patch": "docs/reviews/2026-10-22-http-performance-source.patch",
+  "before_sha256": {
+    "service/src/http_server.cpp": "a8d3e8b5dd02a2aae35753b8fff03136da38884bcb27b5fb23bb4a9c3bbb29f3",
+    "service/CMakeLists.txt": "dd77e6180ddaa79e49039219bde7306a049cf54c6a049768d20df93435dc02fb"
+  },
+  "measurement_plan": {
+    "scenarios": 8,
+    "pairs": 5,
+    "duration_ms": 2000,
+    "order": "before/after on odd pairs; after/before on even pairs",
+    "driver": "Byte-identical existing real-socket driver; no new timing instrumentation",
+    "retention": "All behavior/lifetime checks pass; zero measured socket/wire errors; no median throughput reduction greater than 15%; gains reported only with all five paired differences positive, with ranges disclosed."
+  },
+  "verification": {
+    "dispatch_red": {
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/red/http_server_dispatch_tests"
+      ],
+      "exit_code": 1,
+      "stdout": "KS-5/KS-6: wire=Pass stable_udata=Fail registrations=161 same_batch_write_hints=258\n",
+      "stderr": ""
+    },
+    "dispatch_green": {
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/red/http_server_dispatch_tests"
+      ],
+      "exit_code": 0,
+      "stdout": "KS-5/KS-6: wire=Pass stable_udata=Pass registrations=161 same_batch_write_hints=258\n",
+      "stderr": ""
+    },
+    "debug": {
+      "command": [
+        "ctest",
+        "--test-dir",
+        "service/build",
+        "--output-on-failure"
+      ],
+      "exit_code": 0,
+      "stdout": "Test project /Users/guhailin/Git/orange/service/build\n      Start  1: http_message_tests\n 1/11 Test  #1: http_message_tests ...............   Passed    0.62 sec\n      Start  2: http_request_decoder_tests\n 2/11 Test  #2: http_request_decoder_tests .......   Passed    0.43 sec\n      Start  3: http_chunk_line_tests\n 3/11 Test  #3: http_chunk_line_tests ............   Passed    0.39 sec\n      Start  4: http_head_fields_tests\n 4/11 Test  #4: http_head_fields_tests ...........   Passed    0.34 sec\n      Start  5: http_request_storage_tests\n 5/11 Test  #5: http_request_storage_tests .......   Passed    0.45 sec\n      Start  6: http_response_tests\n 6/11 Test  #6: http_response_tests ..............   Passed    0.34 sec\n      Start  7: http_server_tests\n 7/11 Test  #7: http_server_tests ................   Passed    1.44 sec\n      Start  8: http_server_scheduling_tests\n 8/11 Test  #8: http_server_scheduling_tests .....   Passed    0.35 sec\n      Start  9: http_server_input_tests\n 9/11 Test  #9: http_server_input_tests ..........   Passed    0.36 sec\n      Start 10: http_server_dispatch_tests\n10/11 Test #10: http_server_dispatch_tests .......   Passed    0.67 sec\n      Start 11: http_routes_tests\n11/11 Test #11: http_routes_tests ................   Passed    0.35 sec\n\n100% tests passed, 0 tests failed out of 11\n\nTotal Test time (real) =   5.74 sec\n",
+      "stderr": ""
+    },
+    "release": {
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/private/tmp/orange-udata-68uzzyeq/after",
+        "--output-on-failure"
+      ],
+      "exit_code": 0,
+      "stdout": "Test project /private/tmp/orange-udata-68uzzyeq/after\n      Start  1: http_message_tests\n 1/13 Test  #1: http_message_tests ...............   Passed    0.37 sec\n      Start  2: http_request_decoder_tests\n 2/13 Test  #2: http_request_decoder_tests .......   Passed    0.39 sec\n      Start  3: http_chunk_line_tests\n 3/13 Test  #3: http_chunk_line_tests ............   Passed    0.35 sec\n      Start  4: http_head_fields_tests\n 4/13 Test  #4: http_head_fields_tests ...........   Passed    0.35 sec\n      Start  5: http_request_storage_tests\n 5/13 Test  #5: http_request_storage_tests .......   Passed    0.35 sec\n      Start  6: http_response_tests\n 6/13 Test  #6: http_response_tests ..............   Passed    0.35 sec\n      Start  7: http_server_tests\n 7/13 Test  #7: http_server_tests ................   Passed    1.41 sec\n      Start  8: http_server_scheduling_tests\n 8/13 Test  #8: http_server_scheduling_tests .....   Passed    0.46 sec\n      Start  9: http_server_input_tests\n 9/13 Test  #9: http_server_input_tests ..........   Passed    0.36 sec\n      Start 10: http_server_dispatch_tests\n10/13 Test #10: http_server_dispatch_tests .......   Passed    0.64 sec\n      Start 11: http_routes_tests\n11/13 Test #11: http_routes_tests ................   Passed    0.35 sec\n      Start 12: http_server_bench_cli\n12/13 Test #12: http_server_bench_cli ............   Passed    2.77 sec\n      Start 13: http_parser_bench_cli\n13/13 Test #13: http_parser_bench_cli ............   Passed    0.99 sec\n\n100% tests passed, 0 tests failed out of 13\n\nTotal Test time (real) =   9.14 sec\n",
+      "stderr": ""
+    },
+    "sanitizers": {
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/private/tmp/orange-udata-68uzzyeq/sanitizers",
+        "--output-on-failure"
+      ],
+      "exit_code": 0,
+      "stdout": "Test project /private/tmp/orange-udata-68uzzyeq/sanitizers\n      Start  1: http_message_tests\n 1/11 Test  #1: http_message_tests ...............   Passed    0.41 sec\n      Start  2: http_request_decoder_tests\n 2/11 Test  #2: http_request_decoder_tests .......   Passed    0.53 sec\n      Start  3: http_chunk_line_tests\n 3/11 Test  #3: http_chunk_line_tests ............   Passed    0.39 sec\n      Start  4: http_head_fields_tests\n 4/11 Test  #4: http_head_fields_tests ...........   Passed    0.40 sec\n      Start  5: http_request_storage_tests\n 5/11 Test  #5: http_request_storage_tests .......   Passed    0.40 sec\n      Start  6: http_response_tests\n 6/11 Test  #6: http_response_tests ..............   Passed    0.35 sec\n      Start  7: http_server_tests\n 7/11 Test  #7: http_server_tests ................   Passed    1.46 sec\n      Start  8: http_server_scheduling_tests\n 8/11 Test  #8: http_server_scheduling_tests .....   Passed    0.37 sec\n      Start  9: http_server_input_tests\n 9/11 Test  #9: http_server_input_tests ..........   Passed    0.39 sec\n      Start 10: http_server_dispatch_tests\n10/11 Test #10: http_server_dispatch_tests .......   Passed    0.77 sec\n      Start 11: http_routes_tests\n11/11 Test #11: http_routes_tests ................   Passed    0.36 sec\n\n100% tests passed, 0 tests failed out of 11\n\nTotal Test time (real) =   5.84 sec\n",
+      "stderr": ""
+    },
+    "parser_smoke": {
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/after/http_parser_bench",
+        "--smoke-scale",
+        "1"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"compiler\":\"AppleClang 21.0.0.21000334\",\"flags\":\" -O2 -DNDEBUG\",\"architecture\":\"arm64\",\"cases\":[{\"name\":\"head_long_values_16\",\"wire_bytes\":2178,\"content_bytes\":0,\"iterations\":16384,\"repetitions\":11,\"median_ns\":315.247,\"min_ns\":296.344,\"max_ns\":387.909,\"smoke_limit_ns\":10000.000,\"pass\":true},{\"name\":\"head_short_fields_1000\",\"wire_bytes\":8018,\"content_bytes\":0,\"iterations\":1024,\"repetitions\":11,\"median_ns\":7910.970,\"min_ns\":7725.138,\"max_ns\":11617.676,\"smoke_limit_ns\":200000.000,\"pass\":true},{\"name\":\"head_ows_7800\",\"wire_bytes\":7824,\"content_bytes\":0,\"iterations\":16384,\"repetitions\":11,\"median_ns\":398.666,\"min_ns\":380.145,\"max_ns\":417.091,\"smoke_limit_ns\":10000.000,\"pass\":true},{\"name\":\"head_ows_8_fields\",\"wire_bytes\":6466,\"content_bytes\":0,\"iterations\":16384,\"repetitions\":11,\"median_ns\":443.047,\"min_ns\":434.784,\"max_ns\":623.815,\"smoke_limit_ns\":10000.000,\"pass\":true},{\"name\":\"head_one_short_field\",\"wire_bytes\":26,\"content_bytes\":0,\"iterations\":131072,\"repetitions\":11,\"median_ns\":54.198,\"min_ns\":52.459,\"max_ns\":56.291,\"smoke_limit_ns\":1000.000,\"pass\":true},{\"name\":\"head_minimal\",\"wire_bytes\":18,\"content_bytes\":0,\"iterations\":262144,\"repetitions\":11,\"median_ns\":20.225,\"min_ns\":19.894,\"max_ns\":21.246,\"smoke_limit_ns\":500.000,\"pass\":true},{\"name\":\"head_realistic_434\",\"wire_bytes\":434,\"content_bytes\":0,\"iterations\":32768,\"repetitions\":11,\"median_ns\":183.784,\"min_ns\":175.336,\"max_ns\":187.358,\"smoke_limit_ns\":5000.000,\"pass\":true},{\"name\":\"head_full_8192\",\"wire_bytes\":8192,\"content_bytes\":0,\"iterations\":1024,\"repetitions\":11,\"median_ns\":5047.934,\"min_ns\":4848.593,\"max_ns\":15438.721,\"smoke_limit_ns\":100000.000,\"pass\":true},{\"name\":\"head_decoder_whole\",\"wire_bytes\":434,\"content_bytes\":0,\"iterations\":1024,\"repetitions\":11,\"median_ns\":229.004,\"min_ns\":227.417,\"max_ns\":9075.928,\"smoke_limit_ns\":10000.000,\"pass\":true},{\"name\":\"head_decoder_feed17\",\"wire_bytes\":434,\"content_bytes\":0,\"iterations\":2048,\"repetitions\":11,\"median_ns\":1003.336,\"min_ns\":787.760,\"max_ns\":2333.964,\"smoke_limit_ns\":20000.000,\"pass\":true},{\"name\":\"echo_chunked_1024\",\"wire_bytes\":1083,\"content_bytes\":1024,\"iterations\":32768,\"repetitions\":11,\"median_ns\":174.302,\"min_ns\":170.319,\"max_ns\":184.217,\"smoke_limit_ns\":10000.000,\"pass\":true},{\"name\":\"body_1m_chunk1024\",\"wire_bytes\":1055796,\"content_bytes\":1048576,\"iterations\":128,\"repetitions\":11,\"median_ns\":42120.438,\"min_ns\":40106.117,\"max_ns\":43777.992,\"smoke_limit_ns\":500000.000,\"pass\":true},{\"name\":\"body_1m_chunk16384\",\"wire_bytes\":1049140,\"content_bytes\":1048576,\"iterations\":256,\"repetitions\":11,\"median_ns\":27979.332,\"min_ns\":27209.473,\"max_ns\":28270.020,\"smoke_limit_ns\":500000.000,\"pass\":true},{\"name\":\"body_1m_fixed_feed16384\",\"wire_bytes\":1048620,\"content_bytes\":1048576,\"iterations\":512,\"repetitions\":11,\"median_ns\":16570.557,\"min_ns\":15707.764,\"max_ns\":31717.773,\"smoke_limit_ns\":500000.000,\"pass\":true},{\"name\":\"extension_7000\",\"wire_bytes\":7055,\"content_bytes\":0,\"iterations\":4096,\"repetitions\":11,\"median_ns\":1827.291,\"min_ns\":1789.907,\"max_ns\":1894.999,\"smoke_limit_ns\":200000.000,\"pass\":true},{\"name\":\"trailer_7000\",\"wire_bytes\":7057,\"content_bytes\":0,\"iterations\":2048,\"repetitions\":11,\"median_ns\":1897.847,\"min_ns\":1833.618,\"max_ns\":1941.650,\"smoke_limit_ns\":200000.000,\"pass\":true},{\"name\":\"head_cr_dense\",\"wire_bytes\":8192,\"content_bytes\":0,\"iterations\":32768,\"repetitions\":11,\"median_ns\":151.207,\"min_ns\":140.827,\"max_ns\":154.629,\"smoke_limit_ns\":20000.000,\"pass\":true},{\"name\":\"respond_echo_chunked_1024\",\"wire_bytes\":1024,\"content_bytes\":0,\"iterations\":131072,\"repetitions\":11,\"median_ns\":52.650,\"min_ns\":51.751,\"max_ns\":53.893,\"smoke_limit_ns\":10000.000,\"pass\":true}],\"checksum\":32048788127}\n",
+      "stderr": ""
+    },
+    "allocations_before": {
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/before/http_parser_allocations"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"metric\":\"ordinary operator new calls and requested bytes\",\"request_size\":64,\"cases\":[{\"name\":\"head_long_values_16\",\"calls\":2,\"requested_bytes\":2312,\"checksum\":2194},{\"name\":\"head_short_fields_1000\",\"calls\":2,\"requested_bytes\":16024,\"checksum\":9018},{\"name\":\"head_ows_7800\",\"calls\":1,\"requested_bytes\":8,\"checksum\":7825},{\"name\":\"head_ows_8_fields\",\"calls\":2,\"requested_bytes\":96,\"checksum\":6474},{\"name\":\"head_one_short_field\",\"calls\":1,\"requested_bytes\":8,\"checksum\":27},{\"name\":\"head_minimal\",\"calls\":0,\"requested_bytes\":0,\"checksum\":18},{\"name\":\"head_realistic_434\",\"calls\":2,\"requested_bytes\":512,\"checksum\":443},{\"name\":\"head_full_8192\",\"calls\":2,\"requested_bytes\":11472,\"checksum\":8601},{\"name\":\"head_decoder_whole\",\"calls\":3,\"requested_bytes\":744,\"checksum\":443},{\"name\":\"head_decoder_feed17\",\"calls\":9,\"requested_bytes\":2360,\"checksum\":443},{\"name\":\"echo_chunked_1024\",\"calls\":4,\"requested_bytes\":1320,\"checksum\":2348},{\"name\":\"body_1m_chunk1024\",\"calls\":14,\"requested_bytes\":2112792,\"checksum\":2104613},{\"name\":\"body_1m_chunk16384\",\"calls\":10,\"requested_bytes\":2082072,\"checksum\":2097957},{\"name\":\"body_1m_fixed_feed16384\",\"calls\":4,\"requested_bytes\":1048872,\"checksum\":2097437},{\"name\":\"extension_7000\",\"calls\":3,\"requested_bytes\":288,\"checksum\":7056},{\"name\":\"trailer_7000\",\"calls\":3,\"requested_bytes\":288,\"checksum\":7058},{\"name\":\"head_cr_dense\",\"calls\":0,\"requested_bytes\":0,\"checksum\":1},{\"name\":\"respond_echo_chunked_1024\",\"calls\":1,\"requested_bytes\":1088,\"checksum\":1165}]}\n",
+      "stderr": ""
+    },
+    "allocations_after": {
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/after/http_parser_allocations"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"metric\":\"ordinary operator new calls and requested bytes\",\"request_size\":64,\"cases\":[{\"name\":\"head_long_values_16\",\"calls\":2,\"requested_bytes\":2312,\"checksum\":2194},{\"name\":\"head_short_fields_1000\",\"calls\":2,\"requested_bytes\":16024,\"checksum\":9018},{\"name\":\"head_ows_7800\",\"calls\":1,\"requested_bytes\":8,\"checksum\":7825},{\"name\":\"head_ows_8_fields\",\"calls\":2,\"requested_bytes\":96,\"checksum\":6474},{\"name\":\"head_one_short_field\",\"calls\":1,\"requested_bytes\":8,\"checksum\":27},{\"name\":\"head_minimal\",\"calls\":0,\"requested_bytes\":0,\"checksum\":18},{\"name\":\"head_realistic_434\",\"calls\":2,\"requested_bytes\":512,\"checksum\":443},{\"name\":\"head_full_8192\",\"calls\":2,\"requested_bytes\":11472,\"checksum\":8601},{\"name\":\"head_decoder_whole\",\"calls\":3,\"requested_bytes\":744,\"checksum\":443},{\"name\":\"head_decoder_feed17\",\"calls\":9,\"requested_bytes\":2360,\"checksum\":443},{\"name\":\"echo_chunked_1024\",\"calls\":4,\"requested_bytes\":1320,\"checksum\":2348},{\"name\":\"body_1m_chunk1024\",\"calls\":14,\"requested_bytes\":2112792,\"checksum\":2104613},{\"name\":\"body_1m_chunk16384\",\"calls\":10,\"requested_bytes\":2082072,\"checksum\":2097957},{\"name\":\"body_1m_fixed_feed16384\",\"calls\":4,\"requested_bytes\":1048872,\"checksum\":2097437},{\"name\":\"extension_7000\",\"calls\":3,\"requested_bytes\":288,\"checksum\":7056},{\"name\":\"trailer_7000\",\"calls\":3,\"requested_bytes\":288,\"checksum\":7058},{\"name\":\"head_cr_dense\",\"calls\":0,\"requested_bytes\":0,\"checksum\":1},{\"name\":\"respond_echo_chunked_1024\",\"calls\":1,\"requested_bytes\":1088,\"checksum\":1165}]}\n",
+      "stderr": ""
+    },
+    "equivalence_before": {
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/before/http_parser_equivalence"
+      ],
+      "exit_code": 0,
+      "bytes": 68241183,
+      "sha256": "6a27c498cb9910a9d961ecc4795c9b045de4ee8314a23a8f8dff6dfb4eb2dbac",
+      "stderr": "semantic cases: 95480; seed: 0x53544F52\n"
+    },
+    "equivalence_after": {
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/after/http_parser_equivalence"
+      ],
+      "exit_code": 0,
+      "bytes": 68241183,
+      "sha256": "6a27c498cb9910a9d961ecc4795c9b045de4ee8314a23a8f8dff6dfb4eb2dbac",
+      "stderr": "semantic cases: 95480; seed: 0x53544F52\n"
+    },
+    "source_reconstruction": {
+      "command": "git archive base service; git apply --check/apply first-round source patch; git apply --check/apply incremental kqueue-udata patch; compare all after hashes",
+      "exit_code": 0,
+      "stdout": "All three updated implementation files reconstruct exactly. All nine Before files match the first-round manifest.",
+      "stderr": ""
+    },
+    "complexity_review": {
+      "result": "Pass",
+      "production_file_lines": 489,
+      "serve_code_lines_excluding_comments": 67,
+      "dispatch_test_file_lines": 214,
+      "largest_new_test_function_lines": 34,
+      "nesting": "At most four executable levels in affected helpers; serve retains its cohesive readiness/lifetime batch under the 80-code-line cap.",
+      "cyclomatic_complexity": "N/A \u2014 no configured complexity tool."
+    },
+    "governance_tests": {
+      "command": [
+        "npm",
+        "test",
+        "--prefix",
+        "tools/governance-validator"
+      ],
+      "exit_code": 0,
+      "stdout": "\n> test\n> node --test test/*.test.mjs\n\n\u2714 accepts reasoned N/A source-only sections in a governance Full ADR (833.938458ms)\n\u2714 accepts a reasoned N/A applicability for one risk dimension (515.392208ms)\n\u2714 requires touchpoints from a newly terminal source Full ADR (570.784959ms)\n\u2714 rejects a touchpoint pipe block without a Markdown separator row (538.509792ms)\n\u2714 accepts a valid touchpoint table after pipe-delimited prose (557.628417ms)\n\u2714 RA-1 accepts the concrete required approver for Full ADR (834.891542ms)\n\u2714 RA-1 rejects an unrelated approver for Full ADR (495.630083ms)\n\u2714 RA-1 accepts the concrete required approver for Lightweight ADR (582.839584ms)\n\u2714 RA-1 rejects an unrelated approver for Lightweight ADR (528.78925ms)\n\u2714 RA-1 accepts the concrete required approver for OCR (496.795125ms)\n\u2714 RA-1 rejects an unrelated approver for OCR (467.852458ms)\n\u2714 RA-1 accepts the concrete required approver for ADD (503.985208ms)\n\u2714 RA-1 rejects an unrelated approver for ADD (442.619792ms)\n\u2714 RA-1 compares concrete actor identities case-sensitively (485.227084ms)\n\u2714 RA-2 rejects self-approval despite matching actors (534.924292ms)\n\u2714 RA-2 rejects a role label despite matching actors (455.030334ms)\n\u2714 RA-2 rejects an invalid timestamp despite matching actors (478.863ms)\n\u2714 RA-2 rejects non-exact evidence despite matching actors (491.322083ms)\n\u2714 RA-3 preserves the existing rejection of descriptive approver rules (479.507542ms)\n\u2714 RA-3 leaves Proposed ADR and Draft ADD approval untriggered (469.01825ms)\n\u2714 RA-3 ignores authorized metadata in a comment for Full ADR (474.252375ms)\n\u2714 RA-3 ignores authorized metadata in a fenced example for Full ADR (430.449958ms)\n\u2714 RA-3 ignores authorized metadata in a Change Log for Full ADR (400.416459ms)\n\u2714 RA-3 ignores authorized metadata in a comment for Lightweight ADR (383.2865ms)\n\u2714 RA-3 ignores authorized metadata in a fenced example for Lightweight ADR (398.7465ms)\n\u2714 RA-3 ignores authorized metadata in a Change Log for Lightweight ADR (402.350167ms)\n\u2714 RA-3 ignores authorized metadata in a comment for OCR (388.545209ms)\n\u2714 RA-3 ignores authorized metadata in a fenced example for OCR (421.715ms)\n\u2714 RA-3 ignores authorized metadata in a Change Log for OCR (382.729708ms)\n\u2714 RA-3 ignores authorized metadata in a comment for ADD (419.6305ms)\n\u2714 RA-3 ignores authorized metadata in a fenced example for ADD (410.629416ms)\n\u2714 RA-3 ignores authorized metadata in a Change Log for ADD (374.928958ms)\n\u2714 fixture cleanup after success (53.118333ms)\n\u2714 fixture cleanup after multiple (42.302083ms)\n\u2714 fixture cleanup after removed (45.241584ms)\n\u2714 fixture cleanup after throw (43.462583ms)\n\u2714 fixture cleanup after outside (40.976125ms)\n\u2714 one child cannot delete another live child's fixtures (82.518417ms)\n\u2714 rejects a blank index Path without trying to read the repository root (834.207083ms)\n\u2714 rejects index Paths that are directories or escape the repository (1052.572334ms)\n\u2714 rejects an ADR Task Candidates pipe block without a Markdown separator (517.239125ms)\n\u2714 rejects an index pipe block without a Markdown separator (539.875042ms)\n\u2714 rejects relationship index titles that disagree with recognized record H1 forms (1904.895959ms)\n\u2714 accepts relationship values that differ only by Markdown backticks (532.509875ms)\n\u2714 rejects an adversarial index-path without timing out (450.583958ms)\n\u2714 rejects a candidate ADR link that resolves to a directory without crashing (472.631666ms)\n\u2714 rejects an Architecture Source link that resolves to a directory without crashing (475.846542ms)\n\u2714 IX-1 accepts one table with archived records and same-number ADRs (834.668417ms)\n\u2714 IX-1 accepts two tables with archived records and same-number ADRs (516.128792ms)\n\u2714 IX-1 accepts reversed tables with archived records and same-number ADRs (550.758459ms)\n\u2714 IX-1 accepts three tables with archived records and same-number ADRs (552.198167ms)\n\u2714 IX-2 rejects a duplicate full path in docs/adr/INDEX.md, reverse=false (553.610667ms)\n\u2714 IX-2 rejects a duplicate full path in docs/adr/INDEX.md, reverse=true (492.036875ms)\n\u2714 IX-1 rejects a later table without Path in docs/adr/INDEX.md (518.0655ms)\n\u2714 IX-2 rejects a duplicate full path in docs/architecture/INDEX.md, reverse=false (477.235958ms)\n\u2714 IX-2 rejects a duplicate full path in docs/architecture/INDEX.md, reverse=true (459.4605ms)\n\u2714 IX-1 rejects a later table without Path in docs/architecture/INDEX.md (562.377791ms)\n\u2714 IX-2 validates later-table Type in docs/adr/INDEX.md (471.357ms)\n\u2714 IX-2 validates later-table ID in docs/adr/INDEX.md (445.282542ms)\n\u2714 IX-2 validates later-table Title in docs/adr/INDEX.md (539.344875ms)\n\u2714 IX-2 validates later-table Decision Status in docs/adr/INDEX.md (434.742375ms)\n\u2714 IX-2 validates later-table Implementation Status in docs/adr/INDEX.md (462.463625ms)\n\u2714 IX-2 validates later-table Scope in docs/adr/INDEX.md (480.891291ms)\n\u2714 IX-2 validates later-table Architecture Source in docs/adr/INDEX.md (442.966ms)\n\u2714 IX-2 validates later-table Superseded By in docs/adr/INDEX.md (417.632959ms)\n\u2714 IX-2 validates later-table Path in docs/adr/INDEX.md (413.830792ms)\n\u2714 IX-2 validates later-table ID in docs/architecture/INDEX.md (407.781834ms)\n\u2714 IX-2 validates later-table Title in docs/architecture/INDEX.md (394.030292ms)\n\u2714 IX-2 validates later-table Design Status in docs/architecture/INDEX.md (424.943625ms)\n\u2714 IX-2 validates later-table Scope Level in docs/architecture/INDEX.md (438.040625ms)\n\u2714 IX-2 validates later-table Scope in docs/architecture/INDEX.md (418.647833ms)\n\u2714 IX-2 validates later-table Demand Source in docs/architecture/INDEX.md (418.800583ms)\n\u2714 IX-2 validates later-table Superseded By in docs/architecture/INDEX.md (392.327834ms)\n\u2714 IX-2 validates later-table Path in docs/architecture/INDEX.md (389.489458ms)\n\u2714 IX-3 ignores example rows before multiple real tables in docs/adr/INDEX.md (404.287792ms)\n\u2714 IX-3 requires a real table in docs/adr/INDEX.md (383.147958ms)\n\u2714 IX-3 rejects example-only record membership in docs/adr/INDEX.md (408.173916ms)\n\u2714 IX-3 ignores example rows before multiple real tables in docs/architecture/INDEX.md (360.489042ms)\n\u2714 IX-3 requires a real table in docs/architecture/INDEX.md (381.348333ms)\n\u2714 IX-3 rejects example-only record membership in docs/architecture/INDEX.md (412.935375ms)\n\u2714 IX-3 enumerates only real tables and preserves their independent cells (0.822833ms)\n\u2714 IX-3 returns no tables for example-only or unstructured input (0.080584ms)\n\u2714 IX-4 keeps the legacy first-table or undefined result (0.129041ms)\n\u2714 exits with usage guidance when --root is missing (800.648ms)\n\u2714 rejects an illegal Implementation Status value (504.141083ms)\n\u2714 rejects a Rejected record that is not Not Applicable (570.928917ms)\n\u2714 rejects a Deprecated record without a terminal Implementation Status (511.061ms)\n\u2714 rejects an illegal ADD Design Status (548.424416ms)\n\u2714 recognizes metadata fields carrying a requirement-level suffix (463.575625ms)\n\u2714 rejects a Superseded record whose replacement is not Accepted (503.102916ms)\n\u2714 rejects a Superseded record whose replacement does not reciprocate (446.886375ms)\n\u2714 rejects a Superseded record whose replacement is not indexed (482.748917ms)\n\u2714 rejects a Superseded record naming a non-record replacement (539.053459ms)\n\u2714 reports unresolved template variables in instantiated documents (449.809916ms)\n\u2714 reports undeclared and unused variables in template documents (477.424209ms)\n\u2714 reports an index path that resolves outside the repository root (472.714167ms)\n\u2714 rejects an ADD candidate table missing a required column (470.544375ms)\n\u2714 reports an index Demand Source that disagrees with the record (465.094708ms)\n\u2714 rejects a Current ADD whose Architecture Design diagram is not a flowchart (480.157ms)\n\u2714 rejects a Current ADD Control Flow diagram of a disallowed type (445.355625ms)\n\u2714 rejects mismatched record location: docs/adr/ocr/ADR-0001-example.md (833.816792ms)\n\u2714 rejects mismatched record location: docs/adr/ADD-0001-example.md (499.398042ms)\n\u2714 syntax-checks Mermaid in docs/adr/ADR-0001-example.md (546.48275ms)\n\u2714 syntax-checks Mermaid in docs/adr/ocr/OCR-0002-example.md (499.03075ms)\n\u2714 syntax-checks Mermaid in docs/guide.md (552.376625ms)\n\u2714 OCR prefix requires the ocr directory (474.766541ms)\n\u2714 ordinary diagrams do not acquire ADD completeness gates (521.22975ms)\n\u2714 Deferred candidate needs a recorded reason (431.628625ms)\n\u2714 Deferred candidate accepts an explicit reason column (487.768583ms)\n\u2714 risk legend is not a baseline dimension table (527.250083ms)\n\u2714 fenced and commented template examples are inactive (451.836458ms)\n\u2714 active unresolved variables still reject (468.920709ms)\n\u2714 authoring templates may retain declared variables inside Mermaid (480.519ms)\n\u2714 OCR eligibility clauses are independent of list position (471.638708ms)\n\u2714 a missing required eligibility confirmation still rejects after reordering (473.43575ms)\n\u2714 a checked duplicate cannot hide an unconfirmed eligibility clause (472.66325ms)\n\u2714 archiving a record requires updating source provenance markers (841.171417ms)\n\u2714 a multiline source example is not a file provenance marker (390.86675ms)\n\u2714 Markdown link supersession retains a complete service-root identity (405.843208ms)\n\u2714 rejects a dangling active record reference: See `docs/adr/ADR-9999-missing.md`. (830.410125ms)\n\u2714 rejects a dangling active record reference: See [decision](docs/adr/ADR-9999-missing.md). (496.090459ms)\n\u2714 rejects a dangling active record reference: See docs/adr/ADR-9999-missing.md. (542.5095ms)\n\u2714 accepts concrete references, relative Markdown links and inert examples (523.670916ms)\n\u2714 rejects a dangling document-relative record link (576.516042ms)\n\u2714 active records retain inactive future archival instructions (492.534042ms)\n\u2714 an ordinary Archival heading does not suppress an active reference (486.517333ms)\n\u2714 RR-2 rejects a Rejected Full ADR whose Rejection Reason is missing (828.317541ms)\n\u2714 RR-2 rejects a Rejected Full ADR with an empty Rejection Reason (504.937125ms)\n\u2714 RR-2 rejects a Rejected Full ADR with a whitespace-only Rejection Reason (570.814458ms)\n\u2714 RR-2 rejects a Rejected Full ADR with a Pending Rejection Reason (535.805792ms)\n\u2714 RR-2 rejects a Rejected Full ADR with an annotated Pending Rejection Reason (586.438833ms)\n\u2714 RR-2 rejects a Rejected Full ADR with an N/A Rejection Reason (469.647ms)\n\u2714 RR-2 rejects a Rejected Full ADR with a template-placeholder Rejection Reason (480.38475ms)\n\u2714 RR-2 rejects a missing Rejection Reason for a Rejected Lightweight ADR in the project archive (431.4595ms)\n\u2714 RR-2 rejects a missing Rejection Reason for a Rejected Full ADR in a service archive (484.57425ms)\n\u2714 RR-2 rejects a missing Rejection Reason for a Rejected Lightweight ADR in a service archive (532.069541ms)\n\u2714 RR-2 accepts a Rejected Full ADR with a concrete plain Rejection Reason (503.511125ms)\n\u2714 RR-2 accepts a Rejected Lightweight ADR with a requirement-labeled reason in a service archive (435.959958ms)\n\u2714 RR-2 restores validity after the missing reason is corrected (967.153292ms)\n\u2714 RR-3 does not satisfy the reason from an HTML comment (482.095125ms)\n\u2714 RR-3 does not satisfy the reason from a fenced code block (468.196583ms)\n\u2714 RR-3 does not satisfy the reason from the Change Log (441.578917ms)\n\u2714 RR-3 does not satisfy the reason from a narrative section (414.34175ms)\n\u2714 RR-3 does not satisfy the reason from duplicate active metadata and retains the duplicate diagnostic (372.115334ms)\n\u2714 RR-4 leaves a Proposed ADR without the field valid (393.766ms)\n\u2714 RR-4 leaves an Accepted ADR without the field valid (397.8605ms)\n\u2714 RR-4 leaves a Rejected OCR without the field valid (402.661833ms)\n\u2714 RR-4 still requires the Rejector metadata when the reason is complete (408.334667ms)\n\u2714 RR-4 still requires Not Applicable implementation for a Rejected ADR with a complete reason (374.480083ms)\n\u2714 RR-4 still requires archive residence for a Rejected ADR with a complete reason (406.073875ms)\n\u2714 accepts a fully evidenced Complete ADR (829.186834ms)\n\u2714 rejects a terminal ADR without an Implementation Plan table (519.875833ms)\n\u2714 rejects a terminal ADR without an Acceptance Checks table (551.493459ms)\n\u2714 rejects a terminal subtask row with an illegal ID (535.882167ms)\n\u2714 rejects a duplicated terminal subtask ID (542.633ms)\n\u2714 rejects a terminal subtask that is not Complete (491.267208ms)\n\u2714 rejects a terminal acceptance check that is not Pass (503.044291ms)\n\u2714 rejects a Passing terminal acceptance check without actual evidence (431.38925ms)\n\u2714 rejects a terminal Completion Checklist missing an item (488.43425ms)\n\u2714 rejects a duplicated Completion Checklist item (534.54025ms)\n\u2714 rejects a terminal ADR whose A-1 approval item is not Complete (502.849792ms)\n\u2714 rejects a terminal risk dimension that is not Pass (436.02275ms)\n\u2714 rejects a Passing terminal risk row without stable evidence (495.859583ms)\n\u2714 accepts a fully evidenced Complete OCR (471.502458ms)\n\u2714 rejects a terminal OCR runbook stage without actual evidence (478.8635ms)\n\u2714 rejects a terminal OCR whose Governance validation review is not Pass (461.314625ms)\n\u2714 rejects a terminal OCR without a complete Final result (441.437833ms)\n\u2714 rejects Pending as a Retirement Reason (824.380958ms)\n\u2714 rejects a Superseded record without a replacement (513.387625ms)\n\u2714 rejects an Author approving their own ADR (570.465583ms)\n\u2714 rejects an Author approving their own ADD (536.32525ms)\n\u2714 rejects a Current ADD whose Control Flow lacks a Mermaid diagram (543.550542ms)\n\u2714 requires every conditional design section in a Current ADD (1897.220667ms)\n\u2714 does not read risk dimensions from inside a code block (526.828375ms)\n\u2714 rejects an Accepted ADR missing the Author field (466.629834ms)\n\u2714 rejects a Complete ADR whose subtask is not Complete (445.274709ms)\n\u2714 rejects a Superseded By target that is not an indexed record (491.079042ms)\n\u2714 rejects supersession checklist and risk contracts with trailing path content (1403.680375ms)\n\u2714 rejects a Complete ADR whose Implementation Plan has no table (417.915875ms)\n\u2714 rejects a Complete subtask whose evidence is Pending (409.637375ms)\n\u2714 rejects a Complete OCR whose Task Definition subtask is not Complete (389.033875ms)\n\u2714 rejects an ADD missing the Scope Level metadata (394.434ms)\n\u2714 rejects a terminal table missing the actual evidence column (400.232834ms)\n\u2714 rejects an illegal subtask ID in a terminal Implementation Plan (393.209417ms)\n\u2714 rejects a terminal Implementation Plan with more than three subtasks (415.400375ms)\n\u2714 rejects a Complete OCR whose runbook lacks required stages (391.857458ms)\n\u2714 rejects a terminal ADR whose risk row is not Pass (417.274958ms)\n\u2714 rejects a terminal risk row whose Pass evidence is a placeholder (407.285167ms)\n\u2714 rejects a Completion Checklist with too few items (400.68675ms)\n\u2714 rejects a Completion Checklist whose A-1 is N/A (392.089792ms)\n\u2714 rejects an OCR runbook whose Execute stage is missing (354.412459ms)\n\u2714 rejects a terminal OCR whose Closure fields are Pending (370.093584ms)\n\u2714 rejects an Accepted ADR whose Decision body is Pending (379.145625ms)\n\u2714 rejects a terminal ADR missing checklist item A-6 through A-8 (341.379042ms)\n\u2714 rejects an OCR Closure with Fail in a review field (373.944458ms)\n\u2714 rejects an Accepted OCR with Pending expected evidence (395.905667ms)\n\u2714 rejects an Accepted OCR with an unchecked eligibility item (349.483334ms)\n\u2714 requires Conditional Extensions in an Accepted OCR (380.939333ms)\n\u2714 rejects Pending required content in a retired Complete OCR (398.515958ms)\n\u2714 rejects an Accepted ADR with incomplete Acceptance Checks columns (355.703625ms)\n\u2714 rejects an Accepted ADR acceptance check that references an undeclared subtask (383.0775ms)\n\u2714 rejects Contract-To-Check Traceability referencing an undeclared check (388.749458ms)\n\u2714 rejects an Accepted ADR acceptance check with a Pending status (378.775333ms)\n\u2714 rejects an Accepted ADR traceability table missing template columns (373.561375ms)\n\u2714 rejects an Accepted ADR risk matrix missing approval-gate columns (341.725625ms)\n\u2714 rejects an Accepted OCR with terse eligibility keywords (361.711917ms)\n\u2714 rejects invalid Mermaid in a non-authoritative translation (385.867375ms)\n\u2714 requires a terminal ADR using legacy traceability to retain risk-matrix fields (336.062458ms)\n\u2714 rejects an OCR eligibility item that negates the required boundary (371.954916ms)\n\u2714 requires Stable Implementation Touchpoints for an Accepted Lightweight ADR (393.621708ms)\n\u2714 requires Stable Implementation Touchpoints for an Accepted Full source ADR (348.447375ms)\n\u2714 rejects a whole-section N/A for Stable Implementation Touchpoints in an active Accepted Full ADR (384.41575ms)\n\u2714 accepts a reasoned N/A excerpt when a stable touchpoint symbol is present (361.317791ms)\n\u2714 accepts a structurally valid governance repository (823.752458ms)\n\u2714 rejects a record missing a required section (501.24375ms)\n\u2714 rejects a duplicated normalized required section (542.229458ms)\n\u2714 rejects a required section without a requirement-level label (509.481084ms)\n\u2714 rejects structural parsing contracts split across lines (546.797417ms)\n\u2714 rejects an illegal lifecycle status (478.4395ms)\n\u2714 rejects a dangling index path (509.552833ms)\n\u2714 rejects a stale ADD to ADR reciprocal link (437.459375ms)\n\u2714 rejects a Selected ADD candidate whose ADR path is missing (485.932583ms)\n\u2714 rejects an ADR whose Architecture Source has no reciprocal ADD link (532.241625ms)\n\u2714 rejects invalid Mermaid syntax (459.288458ms)\n\u2714 rejects unresolved template variables in instantiated records (469.894542ms)\n\u2714 rejects Current ADD content without complete approval metadata (477.953334ms)\n\u2714 rejects a Mermaid architecture diagram that omits a component table ID (471.33875ms)\n\u2714 rejects a Mermaid ID prefix that omits the complete component ID (465.444917ms)\n\u2714 rejects index status that disagrees with the indexed record (476.331209ms)\n\u2714 rejects a decision record omitted from the repository index (431.948708ms)\n\u2714 rejects an undeclared template variable (414.373542ms)\n\u2714 ignores pseudo-headings inside fenced code blocks (384.091834ms)\n\u2714 accepts record classification contracts outside fenced code (415.608ms)\n\u2714 does not satisfy the Decision section with Decision Drivers (395.970667ms)\n\u2714 rejects a Full ADR missing a required Options Considered section (385.558916ms)\n\u2714 rejects an ADD missing a required Cross-Cutting Design section (424.128958ms)\n\u2714 rejects a Lightweight ADR missing its required eligibility check (389.641459ms)\n\u2714 accepts a complete Lightweight ADR (410.052417ms)\n\u2714 rejects an Architecture Source that is neither an ADD link nor N/A (397.64825ms)\n\u2714 rejects a missing Architecture Source field (390.931083ms)\n\u2714 rejects a reciprocal candidate ID matched only by substring (412.305375ms)\n\u2714 rejects a Full ADR missing Contract-To-Check Traceability (364.784709ms)\n\u2714 rejects a Full ADR missing its Risk Coverage Matrix (360.835625ms)\n\u2714 rejects a Risk Coverage Matrix missing a baseline dimension (385.373834ms)\n\u2714 does not read metadata from inside fenced code blocks (348.7385ms)\n\u2714 reads the ADR path only from the candidate table column (359.993708ms)\n\u2714 rejects a malformed ADR Task Candidates table instead of skipping validation (395.184667ms)\n\u2714 rejects a Risk Coverage Matrix with a duplicated dimension (349.760542ms)\n\u2714 rejects a Risk Coverage Matrix with a non-baseline dimension row (388.353167ms)\n\u2714 rejects an ADD candidate with an illegal status (391.141959ms)\n\u2714 rejects a Selected candidate whose linked ADR is already terminal (358.364542ms)\n\u2714 rejects a Complete candidate whose linked ADR is not terminal (385.813792ms)\n\u2714 rejects a Rejected ADR without rejection evidence (386.812334ms)\n\u2714 rejects a retired ADR without retirement evidence (375.167916ms)\n\u2714 rejects an empty Risk Coverage Matrix without an explicit N/A (373.38ms)\n\u2714 accepts an explicit N/A Risk Coverage Matrix with a reason (353.641833ms)\n\u2714 rejects a Deprecated ADD without retirement evidence (355.6715ms)\n\u2714 rejects a Deprecated ADR whose retirement evidence does not match (376.448833ms)\n\u2714 rejects duplicate ADD candidate IDs (344.144208ms)\n\u2714 rejects a role label as an Approver (374.978625ms)\n\u2714 ignores metadata inside tilde-fenced code blocks (392.347125ms)\n\u2714 rejects a template placeholder as an Approver (345.128334ms)\n\u2714 rejects a Blocked ADR without blocker evidence (382.895666ms)\n\u2714 rejects an ADD candidate row with an illegal ID (357.873875ms)\n\u2714 rejects an ADD whose Architecture Design flowchart is only in another section (365.440041ms)\n\u2714 rejects a retired ADD that remains in the active directory (355.138417ms)\n\u2714 does not close a four-backtick fence with three backticks (373.291459ms)\n\u2714 rejects a Proposed ADR that has entered In Progress (384.716ms)\n\u2714 rejects Pending as Blocked blocker evidence (341.1565ms)\n\u2714 rejects a non-existent ISO approval time (359.052792ms)\n\u2714 rejects a retired ADD with a non-terminal candidate (351.707ms)\n\u2714 rejects a Rejected ADR that remains in the active directory (334.5805ms)\n\u2714 rejects a Current ADD that skips Architecture Design via N/A (301.810583ms)\n\u2714 allows a Draft ADD with incomplete Architecture Design (338.578791ms)\n\u2714 does not force-archive a Blocked OCR that may be re-attempted (329.895167ms)\n\u2714 rejects duplicate active Decision Status metadata (821.840125ms)\n\u2714 rejects duplicate active Approver metadata (522.163208ms)\n\u2714 rejects duplicate active Approval Evidence metadata (553.329709ms)\n\u2714 does not satisfy Accepted approval metadata from Change Log history (536.598417ms)\n\u2714 does not satisfy Accepted approval metadata from an HTML comment (537.189ms)\n\u2714 does not satisfy a required section from an HTML comment (502.363625ms)\n\u2714 does not satisfy a structured table from an HTML comment (501.584542ms)\n\u2714 does not satisfy an eligibility checklist item from an HTML comment (426.277375ms)\n\u2714 rejects an Accepted OCR with a missing required runbook stage (487.42525ms)\n\u2714 rejects an Accepted OCR with missing Operation Type metadata (535.952083ms)\n\u2714 rejects an Accepted OCR with missing Target Scope / Operation Owner metadata (502.351959ms)\n\u2714 rejects an Accepted OCR with missing Input Source or Version metadata (447.499292ms)\n\u2714 rejects an Accepted OCR with missing Expected Output or Target State metadata (483.517625ms)\n\u2714 rejects an Accepted OCR with a missing stage actual-result field (466.611542ms)\n\u2714 rejects a standalone Pending placeholder later in a conditional section (477.191834ms)\n\u2714 accepts a reasoned N/A in a retained optional section (468.4485ms)\n\u2714 rejects a bare unreasoned N/A in a retained optional section (428.401709ms)\n\u2714 rejects a Pending value inside a Markdown field (424.488958ms)\n\u2714 rejects a Pending value inside a Markdown table cell (382.283875ms)\n\u2714 rejects a standalone Pending placeholder later in a required section (394.668458ms)\n\u2714 rejects a blank retained optional section at a final lifecycle gate (392.689083ms)\n\u2714 does not count a Mermaid comment as covering a flow ID (404.45425ms)\n\u2714 does not exempt a triggered flow section from its diagram when N/A appears after real content (415.439875ms)\n\u2714 does not count a Mermaid example nested inside an outer fence as the required diagram (355.7415ms)\n\u2714 does not syntax-check a Mermaid example nested inside an outer fence (399.51275ms)\n\u2714 rejects a Current ADD component list without a Markdown table separator (386.174334ms)\n\u2714 rejects a Current ADD Control Flow Design list without a Markdown table separator (380.4235ms)\n\u2714 rejects a Current ADD Interaction Flow Design list without a Markdown table separator (424.063125ms)\n\u2139 tests 303\n\u2139 suites 0\n\u2139 pass 303\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 25437.620959\n",
+      "stderr": ""
+    },
+    "governance_validation": {
+      "command": [
+        "npm",
+        "run",
+        "validate",
+        "--prefix",
+        "tools/governance-validator"
+      ],
+      "exit_code": 0,
+      "stdout": "\n> validate\n> node validate.mjs --root ../..\n\nGovernance validation passed.\n",
+      "stderr": ""
+    },
+    "format": {
+      "command": [
+        "clang-format",
+        "--dry-run",
+        "--Werror",
+        "service/src/http_request_decoder.hpp",
+        "service/src/http_body_framing.cpp",
+        "service/src/http_chunk_line.cpp",
+        "service/src/http_response.hpp",
+        "service/src/http_messages.cpp",
+        "service/src/routes.hpp",
+        "service/src/http_syntax.hpp",
+        "service/src/http_server.hpp",
+        "service/src/http_head_fields.hpp",
+        "service/src/routes.cpp",
+        "service/src/http_messages.hpp",
+        "service/src/http_server.cpp",
+        "service/src/http_request_decoder.cpp",
+        "service/src/http_chunk_line.hpp",
+        "service/src/http_body_framing.hpp",
+        "service/src/http_response.cpp",
+        "service/tests/http_server_dispatch_tests.cpp",
+        "service/tests/http_head_fields_tests.cpp",
+        "service/tests/http_server_tests.cpp",
+        "service/tests/http_request_storage_tests.cpp",
+        "service/tests/http_server_input_tests.cpp",
+        "service/tests/http_routes_tests.cpp",
+        "service/tests/http_request_decoder_tests.cpp",
+        "service/tests/http_response_tests.cpp",
+        "service/tests/http_server_scheduling_tests.cpp",
+        "service/tests/http_message_tests.cpp",
+        "service/tests/http_chunk_line_tests.cpp",
+        "service/bench/http_server_bench.cpp",
+        "service/bench/http_parser_equivalence.cpp",
+        "service/bench/http_parser_bench.cpp",
+        "service/bench/http_parser_allocations.cpp",
+        "service/bench/http_parser_workloads.hpp"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "whitespace": {
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "structured_review": {
+      "result": "Pass",
+      "contracts": "KS-1 through KS-6 map to AC-1 through AC-6; all applicable rows in the five-dimension risk matrix pass with actual historical waiver evidence.",
+      "lifetime": "Connection pointees do not move. All filter transitions retain their Connection token. Closed objects survive all read/write/error dispatch in the returned batch; fd validity/equality prevents stale same-batch identity reuse. close removes kernel filters before end-batch owner collection. RAII covers accepted sockets if Connection/decoder/vector allocation fails.",
+      "complexity": "Each event is resolved by one udata cast plus local descriptor check; no per-event owner scan. Interest/deadline/idle/collection loops intentionally remain linear.",
+      "scope_and_authority": "Same HTTP transport boundary, three cohesive subtasks. Explicit prior dispatch waiver and follow-up user instruction recorded. Existing proposed approval metadata unchanged; no new ADR, dependency, runtime thread, build flag or remote operation.",
+      "documents": "All required sections, conditional assessments, retained optional metadata, central index title/path/status and stable touchpoints reviewed. Pending restricted to eligible individual approval; historical first-round evidence remains separate.",
+      "measurements": "Fresh Before from prior frozen After source; byte-identical driver and options; five 2000-ms alternating pairs; 18,457,885 zero-error completions. All distributions overlap, paired signs mixed and adverse tails/throughput disclosed; no repeatable gain claimed."
+    },
+    "disposable_cleanup": {
+      "result": "Pass",
+      "removed_scratch_root": "/private/tmp/orange-udata-68uzzyeq",
+      "routed_compiler_outputs_removed": [
+        "service/build/CMakeFiles/http_chunk_line_tests.dir/tests/http_chunk_line_tests.cpp.o",
+        "service/build/CMakeFiles/http_chunk_line_tests.dir/tests/http_chunk_line_tests.cpp.o.d",
+        "service/build/CMakeFiles/http_head_fields_tests.dir/tests/http_head_fields_tests.cpp.o",
+        "service/build/CMakeFiles/http_head_fields_tests.dir/tests/http_head_fields_tests.cpp.o.d",
+        "service/build/CMakeFiles/http_message_tests.dir/tests/http_message_tests.cpp.o",
+        "service/build/CMakeFiles/http_message_tests.dir/tests/http_message_tests.cpp.o.d",
+        "service/build/CMakeFiles/http_request_decoder_tests.dir/tests/http_request_decoder_tests.cpp.o",
+        "service/build/CMakeFiles/http_request_decoder_tests.dir/tests/http_request_decoder_tests.cpp.o.d",
+        "service/build/CMakeFiles/http_request_storage_tests.dir/tests/http_request_storage_tests.cpp.o",
+        "service/build/CMakeFiles/http_request_storage_tests.dir/tests/http_request_storage_tests.cpp.o.d",
+        "service/build/CMakeFiles/http_response_tests.dir/tests/http_response_tests.cpp.o",
+        "service/build/CMakeFiles/http_response_tests.dir/tests/http_response_tests.cpp.o.d",
+        "service/build/CMakeFiles/http_routes_tests.dir/tests/http_routes_tests.cpp.o",
+        "service/build/CMakeFiles/http_routes_tests.dir/tests/http_routes_tests.cpp.o.d",
+        "service/build/CMakeFiles/http_server_dispatch_tests.dir/tests/http_server_dispatch_tests.cpp.o",
+        "service/build/CMakeFiles/http_server_dispatch_tests.dir/tests/http_server_dispatch_tests.cpp.o.d",
+        "service/build/CMakeFiles/http_server_input_tests.dir/tests/http_server_input_tests.cpp.o",
+        "service/build/CMakeFiles/http_server_input_tests.dir/tests/http_server_input_tests.cpp.o.d",
+        "service/build/CMakeFiles/http_server_scheduling_tests.dir/tests/http_server_scheduling_tests.cpp.o",
+        "service/build/CMakeFiles/http_server_scheduling_tests.dir/tests/http_server_scheduling_tests.cpp.o.d",
+        "service/build/CMakeFiles/http_server_tests.dir/tests/http_server_tests.cpp.o",
+        "service/build/CMakeFiles/http_server_tests.dir/tests/http_server_tests.cpp.o.d",
+        "service/build/CMakeFiles/orange_http.dir/src/http_body_framing.cpp.o",
+        "service/build/CMakeFiles/orange_http.dir/src/http_body_framing.cpp.o.d",
+        "service/build/CMakeFiles/orange_http.dir/src/http_chunk_line.cpp.o",
+        "service/build/CMakeFiles/orange_http.dir/src/http_chunk_line.cpp.o.d",
+        "service/build/CMakeFiles/orange_http.dir/src/http_messages.cpp.o",
+        "service/build/CMakeFiles/orange_http.dir/src/http_messages.cpp.o.d",
+        "service/build/CMakeFiles/orange_http.dir/src/http_request_decoder.cpp.o",
+        "service/build/CMakeFiles/orange_http.dir/src/http_request_decoder.cpp.o.d",
+        "service/build/CMakeFiles/orange_http.dir/src/http_response.cpp.o",
+        "service/build/CMakeFiles/orange_http.dir/src/http_response.cpp.o.d",
+        "service/build/CMakeFiles/orange_http.dir/src/http_server.cpp.o",
+        "service/build/CMakeFiles/orange_http.dir/src/http_server.cpp.o.d",
+        "service/build/CMakeFiles/orange_http.dir/src/routes.cpp.o",
+        "service/build/CMakeFiles/orange_http.dir/src/routes.cpp.o.d",
+        "service/build/http_chunk_line_tests",
+        "service/build/http_head_fields_tests",
+        "service/build/http_message_tests",
+        "service/build/http_request_decoder_tests",
+        "service/build/http_request_storage_tests",
+        "service/build/http_response_tests",
+        "service/build/http_routes_tests",
+        "service/build/http_server_dispatch_tests",
+        "service/build/http_server_input_tests",
+        "service/build/http_server_scheduling_tests",
+        "service/build/http_server_tests",
+        "service/build/liborange_http.a"
+      ],
+      "preexisting_build_directory_and_configuration_preserved": true,
+      "retained_runtime_artifacts": false,
+      "published_promoted_or_deployed": false,
+      "retained_evidence": "Source patch, source files, measurement JSON and report only."
+    }
+  },
+  "server_runs": [
+    {
+      "pair": 1,
+      "variant": "before",
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/before/http_server_bench",
+        "--duration-ms",
+        "2000"
+      ],
+      "started_utc": "2026-10-22T05:32:15.580420+00:00",
+      "completed_utc": "2026-10-22T05:32:34.196694+00:00",
+      "report": {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "health_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 70277,
+            "elapsed_seconds": 2.00006,
+            "requests_per_second": 35137.5,
+            "p50_us": 24.667,
+            "p95_us": 33.583,
+            "p99_us": 66.625,
+            "process_cpu_seconds": 1.55159,
+            "process_peak_rss_bytes": 2555904,
+            "errors": 0
+          },
+          {
+            "name": "health_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 207262,
+            "elapsed_seconds": 2.01379,
+            "requests_per_second": 102921,
+            "p50_us": 49.709,
+            "p95_us": 81.834,
+            "p99_us": 111.416,
+            "process_cpu_seconds": 3.63647,
+            "process_peak_rss_bytes": 3686400,
+            "errors": 0
+          },
+          {
+            "name": "health_c64",
+            "active_connections": 64,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 222093,
+            "elapsed_seconds": 2.00027,
+            "requests_per_second": 111031,
+            "p50_us": 264.334,
+            "p95_us": 481.5,
+            "p99_us": 712.875,
+            "process_cpu_seconds": 3.68173,
+            "process_peak_rss_bytes": 5537792,
+            "errors": 0
+          },
+          {
+            "name": "health_idle64",
+            "active_connections": 1,
+            "idle_connections": 64,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 69807,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 34903.2,
+            "p50_us": 24.959,
+            "p95_us": 32.208,
+            "p99_us": 50.584,
+            "process_cpu_seconds": 1.55173,
+            "process_peak_rss_bytes": 5619712,
+            "errors": 0
+          },
+          {
+            "name": "health_pipeline16",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 16,
+            "body_bytes": 0,
+            "requests": 965984,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 482986,
+            "p50_us": 29.334,
+            "p95_us": 38.208,
+            "p99_us": 67.375,
+            "process_cpu_seconds": 1.54383,
+            "process_peak_rss_bytes": 18006016,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 70773,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 35386.2,
+            "p50_us": 25,
+            "p95_us": 34.791,
+            "p99_us": 59.542,
+            "process_cpu_seconds": 1.54069,
+            "process_peak_rss_bytes": 18055168,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 209600,
+            "elapsed_seconds": 2.00004,
+            "requests_per_second": 104798,
+            "p50_us": 49.75,
+            "p95_us": 81.625,
+            "p99_us": 111.959,
+            "process_cpu_seconds": 3.66797,
+            "process_peak_rss_bytes": 18087936,
+            "errors": 0
+          },
+          {
+            "name": "echo_1m_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1048576,
+            "requests": 6983,
+            "elapsed_seconds": 2.00025,
+            "requests_per_second": 3491.06,
+            "p50_us": 265.375,
+            "p95_us": 324.042,
+            "p99_us": 485.792,
+            "process_cpu_seconds": 2.45509,
+            "process_peak_rss_bytes": 21413888,
+            "errors": 0
+          }
+        ]
+      },
+      "stderr": ""
+    },
+    {
+      "pair": 1,
+      "variant": "after",
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/after/http_server_bench",
+        "--duration-ms",
+        "2000"
+      ],
+      "started_utc": "2026-10-22T05:32:34.197672+00:00",
+      "completed_utc": "2026-10-22T05:32:52.455473+00:00",
+      "report": {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "health_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 73293,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 36646.1,
+            "p50_us": 24.416,
+            "p95_us": 31.458,
+            "p99_us": 52.333,
+            "process_cpu_seconds": 1.56814,
+            "process_peak_rss_bytes": 2555904,
+            "errors": 0
+          },
+          {
+            "name": "health_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 223253,
+            "elapsed_seconds": 2.00004,
+            "requests_per_second": 111624,
+            "p50_us": 47.875,
+            "p95_us": 77.042,
+            "p99_us": 104.375,
+            "process_cpu_seconds": 3.73352,
+            "process_peak_rss_bytes": 3801088,
+            "errors": 0
+          },
+          {
+            "name": "health_c64",
+            "active_connections": 64,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 239966,
+            "elapsed_seconds": 2.00029,
+            "requests_per_second": 119966,
+            "p50_us": 247.417,
+            "p95_us": 458.333,
+            "p99_us": 651.625,
+            "process_cpu_seconds": 3.68487,
+            "process_peak_rss_bytes": 5816320,
+            "errors": 0
+          },
+          {
+            "name": "health_idle64",
+            "active_connections": 1,
+            "idle_connections": 64,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 71376,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 35687.7,
+            "p50_us": 24.625,
+            "p95_us": 30.875,
+            "p99_us": 54.875,
+            "process_cpu_seconds": 1.57215,
+            "process_peak_rss_bytes": 5832704,
+            "errors": 0
+          },
+          {
+            "name": "health_pipeline16",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 16,
+            "body_bytes": 0,
+            "requests": 978000,
+            "elapsed_seconds": 2,
+            "requests_per_second": 488999,
+            "p50_us": 29,
+            "p95_us": 38.75,
+            "p99_us": 64.834,
+            "process_cpu_seconds": 1.55405,
+            "process_peak_rss_bytes": 18186240,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 69313,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 34656.1,
+            "p50_us": 25.834,
+            "p95_us": 33.708,
+            "p99_us": 58.542,
+            "process_cpu_seconds": 1.55289,
+            "process_peak_rss_bytes": 18825216,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 200938,
+            "elapsed_seconds": 2.00005,
+            "requests_per_second": 100467,
+            "p50_us": 50.958,
+            "p95_us": 83.083,
+            "p99_us": 104.625,
+            "process_cpu_seconds": 3.6321,
+            "process_peak_rss_bytes": 19906560,
+            "errors": 0
+          },
+          {
+            "name": "echo_1m_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1048576,
+            "requests": 8331,
+            "elapsed_seconds": 2.00019,
+            "requests_per_second": 4165.11,
+            "p50_us": 218.5,
+            "p95_us": 296.459,
+            "p99_us": 401.041,
+            "process_cpu_seconds": 2.57085,
+            "process_peak_rss_bytes": 22675456,
+            "errors": 0
+          }
+        ]
+      },
+      "stderr": ""
+    },
+    {
+      "pair": 2,
+      "variant": "after",
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/after/http_server_bench",
+        "--duration-ms",
+        "2000"
+      ],
+      "started_utc": "2026-10-22T05:32:52.456239+00:00",
+      "completed_utc": "2026-10-22T05:33:10.716554+00:00",
+      "report": {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "health_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 71904,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 35951.7,
+            "p50_us": 24.542,
+            "p95_us": 31.25,
+            "p99_us": 48.792,
+            "process_cpu_seconds": 1.55567,
+            "process_peak_rss_bytes": 2555904,
+            "errors": 0
+          },
+          {
+            "name": "health_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 215343,
+            "elapsed_seconds": 2.00004,
+            "requests_per_second": 107669,
+            "p50_us": 48.459,
+            "p95_us": 79.417,
+            "p99_us": 103.458,
+            "process_cpu_seconds": 3.68465,
+            "process_peak_rss_bytes": 4325376,
+            "errors": 0
+          },
+          {
+            "name": "health_c64",
+            "active_connections": 64,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 244757,
+            "elapsed_seconds": 2.00012,
+            "requests_per_second": 122371,
+            "p50_us": 241.417,
+            "p95_us": 420.875,
+            "p99_us": 563.709,
+            "process_cpu_seconds": 3.70025,
+            "process_peak_rss_bytes": 5767168,
+            "errors": 0
+          },
+          {
+            "name": "health_idle64",
+            "active_connections": 1,
+            "idle_connections": 64,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 73267,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 36633.1,
+            "p50_us": 24.666,
+            "p95_us": 30.959,
+            "p99_us": 50.709,
+            "process_cpu_seconds": 1.61825,
+            "process_peak_rss_bytes": 6389760,
+            "errors": 0
+          },
+          {
+            "name": "health_pipeline16",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 16,
+            "body_bytes": 0,
+            "requests": 1003040,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 501517,
+            "p50_us": 28.5,
+            "p95_us": 37.25,
+            "p99_us": 61.708,
+            "process_cpu_seconds": 1.56331,
+            "process_peak_rss_bytes": 19005440,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 71032,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 35515.9,
+            "p50_us": 25.5,
+            "p95_us": 31.292,
+            "p99_us": 50,
+            "process_cpu_seconds": 1.56812,
+            "process_peak_rss_bytes": 19054592,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 229184,
+            "elapsed_seconds": 2.00004,
+            "requests_per_second": 114590,
+            "p50_us": 47.417,
+            "p95_us": 72.042,
+            "p99_us": 97.417,
+            "process_cpu_seconds": 3.72362,
+            "process_peak_rss_bytes": 19070976,
+            "errors": 0
+          },
+          {
+            "name": "echo_1m_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1048576,
+            "requests": 8856,
+            "elapsed_seconds": 2.00019,
+            "requests_per_second": 4427.58,
+            "p50_us": 210.417,
+            "p95_us": 270.458,
+            "p99_us": 379.666,
+            "process_cpu_seconds": 2.62091,
+            "process_peak_rss_bytes": 21938176,
+            "errors": 0
+          }
+        ]
+      },
+      "stderr": ""
+    },
+    {
+      "pair": 2,
+      "variant": "before",
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/before/http_server_bench",
+        "--duration-ms",
+        "2000"
+      ],
+      "started_utc": "2026-10-22T05:33:10.717062+00:00",
+      "completed_utc": "2026-10-22T05:33:28.949961+00:00",
+      "report": {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "health_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 73899,
+            "elapsed_seconds": 2.00006,
+            "requests_per_second": 36948.3,
+            "p50_us": 24.458,
+            "p95_us": 30.709,
+            "p99_us": 43.291,
+            "process_cpu_seconds": 1.59802,
+            "process_peak_rss_bytes": 2572288,
+            "errors": 0
+          },
+          {
+            "name": "health_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 219657,
+            "elapsed_seconds": 2.00003,
+            "requests_per_second": 109827,
+            "p50_us": 48.125,
+            "p95_us": 77.75,
+            "p99_us": 101.583,
+            "process_cpu_seconds": 3.70277,
+            "process_peak_rss_bytes": 4390912,
+            "errors": 0
+          },
+          {
+            "name": "health_c64",
+            "active_connections": 64,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 212153,
+            "elapsed_seconds": 2.00037,
+            "requests_per_second": 106057,
+            "p50_us": 282.875,
+            "p95_us": 503.041,
+            "p99_us": 837.083,
+            "process_cpu_seconds": 3.62675,
+            "process_peak_rss_bytes": 6160384,
+            "errors": 0
+          },
+          {
+            "name": "health_idle64",
+            "active_connections": 1,
+            "idle_connections": 64,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 71108,
+            "elapsed_seconds": 2.00003,
+            "requests_per_second": 35553.5,
+            "p50_us": 24.834,
+            "p95_us": 32.416,
+            "p99_us": 53.084,
+            "process_cpu_seconds": 1.58972,
+            "process_peak_rss_bytes": 6275072,
+            "errors": 0
+          },
+          {
+            "name": "health_pipeline16",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 16,
+            "body_bytes": 0,
+            "requests": 1015392,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 507690,
+            "p50_us": 28.416,
+            "p95_us": 36.166,
+            "p99_us": 56.458,
+            "process_cpu_seconds": 1.56929,
+            "process_peak_rss_bytes": 19021824,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 70654,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 35326.9,
+            "p50_us": 25.541,
+            "p95_us": 32.041,
+            "p99_us": 50.541,
+            "process_cpu_seconds": 1.56708,
+            "process_peak_rss_bytes": 19054592,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 210868,
+            "elapsed_seconds": 2.00004,
+            "requests_per_second": 105432,
+            "p50_us": 50.042,
+            "p95_us": 83.542,
+            "p99_us": 113.375,
+            "process_cpu_seconds": 3.74877,
+            "process_peak_rss_bytes": 20168704,
+            "errors": 0
+          },
+          {
+            "name": "echo_1m_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1048576,
+            "requests": 8423,
+            "elapsed_seconds": 2.0002,
+            "requests_per_second": 4211.08,
+            "p50_us": 216.458,
+            "p95_us": 278.709,
+            "p99_us": 371.375,
+            "process_cpu_seconds": 2.54551,
+            "process_peak_rss_bytes": 22757376,
+            "errors": 0
+          }
+        ]
+      },
+      "stderr": ""
+    },
+    {
+      "pair": 3,
+      "variant": "before",
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/before/http_server_bench",
+        "--duration-ms",
+        "2000"
+      ],
+      "started_utc": "2026-10-22T05:33:28.950723+00:00",
+      "completed_utc": "2026-10-22T05:33:47.205962+00:00",
+      "report": {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "health_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 70668,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 35333.6,
+            "p50_us": 24.791,
+            "p95_us": 33.458,
+            "p99_us": 53.416,
+            "process_cpu_seconds": 1.55716,
+            "process_peak_rss_bytes": 2572288,
+            "errors": 0
+          },
+          {
+            "name": "health_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 206603,
+            "elapsed_seconds": 2.00004,
+            "requests_per_second": 103299,
+            "p50_us": 49.875,
+            "p95_us": 83,
+            "p99_us": 108.208,
+            "process_cpu_seconds": 3.66716,
+            "process_peak_rss_bytes": 4276224,
+            "errors": 0
+          },
+          {
+            "name": "health_c64",
+            "active_connections": 64,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 234926,
+            "elapsed_seconds": 2.0003,
+            "requests_per_second": 117445,
+            "p50_us": 251.125,
+            "p95_us": 462.917,
+            "p99_us": 672.375,
+            "process_cpu_seconds": 3.72809,
+            "process_peak_rss_bytes": 5652480,
+            "errors": 0
+          },
+          {
+            "name": "health_idle64",
+            "active_connections": 1,
+            "idle_connections": 64,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 67143,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 33571.2,
+            "p50_us": 24.75,
+            "p95_us": 37.291,
+            "p99_us": 70.708,
+            "process_cpu_seconds": 1.49259,
+            "process_peak_rss_bytes": 5734400,
+            "errors": 0
+          },
+          {
+            "name": "health_pipeline16",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 16,
+            "body_bytes": 0,
+            "requests": 1006704,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 503347,
+            "p50_us": 27.792,
+            "p95_us": 39.042,
+            "p99_us": 60.167,
+            "process_cpu_seconds": 1.55425,
+            "process_peak_rss_bytes": 20135936,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 63754,
+            "elapsed_seconds": 2.00039,
+            "requests_per_second": 31870.7,
+            "p50_us": 26.042,
+            "p95_us": 40.083,
+            "p99_us": 80.959,
+            "process_cpu_seconds": 1.46957,
+            "process_peak_rss_bytes": 20168704,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 187066,
+            "elapsed_seconds": 2.00006,
+            "requests_per_second": 93530.1,
+            "p50_us": 55.041,
+            "p95_us": 89.625,
+            "p99_us": 132.708,
+            "process_cpu_seconds": 3.57217,
+            "process_peak_rss_bytes": 20201472,
+            "errors": 0
+          },
+          {
+            "name": "echo_1m_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1048576,
+            "requests": 8036,
+            "elapsed_seconds": 2.0252,
+            "requests_per_second": 3968.01,
+            "p50_us": 219.792,
+            "p95_us": 319.75,
+            "p99_us": 521.75,
+            "process_cpu_seconds": 2.5445,
+            "process_peak_rss_bytes": 22659072,
+            "errors": 0
+          }
+        ]
+      },
+      "stderr": ""
+    },
+    {
+      "pair": 3,
+      "variant": "after",
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/after/http_server_bench",
+        "--duration-ms",
+        "2000"
+      ],
+      "started_utc": "2026-10-22T05:33:47.206968+00:00",
+      "completed_utc": "2026-10-22T05:34:05.478991+00:00",
+      "report": {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "health_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 70707,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 35353.3,
+            "p50_us": 24.709,
+            "p95_us": 35.959,
+            "p99_us": 60.917,
+            "process_cpu_seconds": 1.55288,
+            "process_peak_rss_bytes": 2539520,
+            "errors": 0
+          },
+          {
+            "name": "health_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 193407,
+            "elapsed_seconds": 2.00005,
+            "requests_per_second": 96701.1,
+            "p50_us": 54.416,
+            "p95_us": 85.333,
+            "p99_us": 104.084,
+            "process_cpu_seconds": 3.6444,
+            "process_peak_rss_bytes": 4145152,
+            "errors": 0
+          },
+          {
+            "name": "health_c64",
+            "active_connections": 64,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 221960,
+            "elapsed_seconds": 2.00037,
+            "requests_per_second": 110959,
+            "p50_us": 269,
+            "p95_us": 451.083,
+            "p99_us": 664.708,
+            "process_cpu_seconds": 3.67642,
+            "process_peak_rss_bytes": 5406720,
+            "errors": 0
+          },
+          {
+            "name": "health_idle64",
+            "active_connections": 1,
+            "idle_connections": 64,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 71263,
+            "elapsed_seconds": 2.00836,
+            "requests_per_second": 35483.2,
+            "p50_us": 25.083,
+            "p95_us": 31.959,
+            "p99_us": 46.583,
+            "process_cpu_seconds": 1.5975,
+            "process_peak_rss_bytes": 5423104,
+            "errors": 0
+          },
+          {
+            "name": "health_pipeline16",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 16,
+            "body_bytes": 0,
+            "requests": 967968,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 483979,
+            "p50_us": 29.458,
+            "p95_us": 37.417,
+            "p99_us": 52.75,
+            "process_cpu_seconds": 1.54497,
+            "process_peak_rss_bytes": 17711104,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 68105,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 34052.3,
+            "p50_us": 25.959,
+            "p95_us": 35,
+            "p99_us": 57.25,
+            "process_cpu_seconds": 1.5507,
+            "process_peak_rss_bytes": 18350080,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 190829,
+            "elapsed_seconds": 2.01416,
+            "requests_per_second": 94743.9,
+            "p50_us": 55.917,
+            "p95_us": 87.167,
+            "p99_us": 105.083,
+            "process_cpu_seconds": 3.67871,
+            "process_peak_rss_bytes": 19349504,
+            "errors": 0
+          },
+          {
+            "name": "echo_1m_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1048576,
+            "requests": 6814,
+            "elapsed_seconds": 2.00003,
+            "requests_per_second": 3406.95,
+            "p50_us": 273.791,
+            "p95_us": 352.25,
+            "p99_us": 413.209,
+            "process_cpu_seconds": 2.47991,
+            "process_peak_rss_bytes": 22151168,
+            "errors": 0
+          }
+        ]
+      },
+      "stderr": ""
+    },
+    {
+      "pair": 4,
+      "variant": "after",
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/after/http_server_bench",
+        "--duration-ms",
+        "2000"
+      ],
+      "started_utc": "2026-10-22T05:34:05.480058+00:00",
+      "completed_utc": "2026-10-22T05:34:23.715976+00:00",
+      "report": {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "health_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 71136,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 35567.7,
+            "p50_us": 24.791,
+            "p95_us": 32.459,
+            "p99_us": 50.375,
+            "process_cpu_seconds": 1.55619,
+            "process_peak_rss_bytes": 2539520,
+            "errors": 0
+          },
+          {
+            "name": "health_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 210234,
+            "elapsed_seconds": 2.00004,
+            "requests_per_second": 105115,
+            "p50_us": 48.583,
+            "p95_us": 80.084,
+            "p99_us": 96.458,
+            "process_cpu_seconds": 3.63023,
+            "process_peak_rss_bytes": 3686400,
+            "errors": 0
+          },
+          {
+            "name": "health_c64",
+            "active_connections": 64,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 210283,
+            "elapsed_seconds": 2.00027,
+            "requests_per_second": 105127,
+            "p50_us": 299.625,
+            "p95_us": 441.708,
+            "p99_us": 673.792,
+            "process_cpu_seconds": 3.66866,
+            "process_peak_rss_bytes": 5439488,
+            "errors": 0
+          },
+          {
+            "name": "health_idle64",
+            "active_connections": 1,
+            "idle_connections": 64,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 69944,
+            "elapsed_seconds": 2,
+            "requests_per_second": 34971.9,
+            "p50_us": 24.958,
+            "p95_us": 33.459,
+            "p99_us": 56.833,
+            "process_cpu_seconds": 1.5797,
+            "process_peak_rss_bytes": 5455872,
+            "errors": 0
+          },
+          {
+            "name": "health_pipeline16",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 16,
+            "body_bytes": 0,
+            "requests": 940736,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 470366,
+            "p50_us": 29.5,
+            "p95_us": 40.083,
+            "p99_us": 72.916,
+            "process_cpu_seconds": 1.52239,
+            "process_peak_rss_bytes": 17629184,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 67892,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 33945.7,
+            "p50_us": 25.375,
+            "p95_us": 35.875,
+            "p99_us": 58.666,
+            "process_cpu_seconds": 1.50412,
+            "process_peak_rss_bytes": 18268160,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 195750,
+            "elapsed_seconds": 2.00005,
+            "requests_per_second": 97872.8,
+            "p50_us": 52.667,
+            "p95_us": 86.125,
+            "p99_us": 112.5,
+            "process_cpu_seconds": 3.64144,
+            "process_peak_rss_bytes": 19300352,
+            "errors": 0
+          },
+          {
+            "name": "echo_1m_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1048576,
+            "requests": 8190,
+            "elapsed_seconds": 2.00005,
+            "requests_per_second": 4094.9,
+            "p50_us": 219.667,
+            "p95_us": 300.083,
+            "p99_us": 428.375,
+            "process_cpu_seconds": 2.54148,
+            "process_peak_rss_bytes": 22069248,
+            "errors": 0
+          }
+        ]
+      },
+      "stderr": ""
+    },
+    {
+      "pair": 4,
+      "variant": "before",
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/before/http_server_bench",
+        "--duration-ms",
+        "2000"
+      ],
+      "started_utc": "2026-10-22T05:34:23.716660+00:00",
+      "completed_utc": "2026-10-22T05:34:41.963166+00:00",
+      "report": {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "health_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 71782,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 35890.7,
+            "p50_us": 24.542,
+            "p95_us": 32.208,
+            "p99_us": 50.584,
+            "process_cpu_seconds": 1.56625,
+            "process_peak_rss_bytes": 2555904,
+            "errors": 0
+          },
+          {
+            "name": "health_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 202671,
+            "elapsed_seconds": 2.00005,
+            "requests_per_second": 101333,
+            "p50_us": 50.209,
+            "p95_us": 82.75,
+            "p99_us": 101.708,
+            "process_cpu_seconds": 3.63139,
+            "process_peak_rss_bytes": 3637248,
+            "errors": 0
+          },
+          {
+            "name": "health_c64",
+            "active_connections": 64,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 212142,
+            "elapsed_seconds": 2.00025,
+            "requests_per_second": 106058,
+            "p50_us": 283.5,
+            "p95_us": 451.25,
+            "p99_us": 677.333,
+            "process_cpu_seconds": 3.65539,
+            "process_peak_rss_bytes": 5390336,
+            "errors": 0
+          },
+          {
+            "name": "health_idle64",
+            "active_connections": 1,
+            "idle_connections": 64,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 71035,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 35517.1,
+            "p50_us": 24.875,
+            "p95_us": 33.458,
+            "p99_us": 53,
+            "process_cpu_seconds": 1.58897,
+            "process_peak_rss_bytes": 5472256,
+            "errors": 0
+          },
+          {
+            "name": "health_pipeline16",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 16,
+            "body_bytes": 0,
+            "requests": 986528,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 493261,
+            "p50_us": 28.834,
+            "p95_us": 36.333,
+            "p99_us": 56.375,
+            "process_cpu_seconds": 1.55459,
+            "process_peak_rss_bytes": 19709952,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 67959,
+            "elapsed_seconds": 2.00003,
+            "requests_per_second": 33979,
+            "p50_us": 25.917,
+            "p95_us": 32.5,
+            "p99_us": 46.459,
+            "process_cpu_seconds": 1.5222,
+            "process_peak_rss_bytes": 19775488,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 199062,
+            "elapsed_seconds": 2.00005,
+            "requests_per_second": 99528.3,
+            "p50_us": 50.833,
+            "p95_us": 83.917,
+            "p99_us": 103.792,
+            "process_cpu_seconds": 3.61663,
+            "process_peak_rss_bytes": 19824640,
+            "errors": 0
+          },
+          {
+            "name": "echo_1m_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1048576,
+            "requests": 8441,
+            "elapsed_seconds": 2.00009,
+            "requests_per_second": 4220.31,
+            "p50_us": 212.083,
+            "p95_us": 281.125,
+            "p99_us": 381.416,
+            "process_cpu_seconds": 2.52628,
+            "process_peak_rss_bytes": 22085632,
+            "errors": 0
+          }
+        ]
+      },
+      "stderr": ""
+    },
+    {
+      "pair": 5,
+      "variant": "before",
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/before/http_server_bench",
+        "--duration-ms",
+        "2000"
+      ],
+      "started_utc": "2026-10-22T05:34:41.963987+00:00",
+      "completed_utc": "2026-10-22T05:35:00.200713+00:00",
+      "report": {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "health_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 71467,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 35733.3,
+            "p50_us": 24.541,
+            "p95_us": 31.208,
+            "p99_us": 45.209,
+            "process_cpu_seconds": 1.55232,
+            "process_peak_rss_bytes": 2539520,
+            "errors": 0
+          },
+          {
+            "name": "health_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 197191,
+            "elapsed_seconds": 2.00006,
+            "requests_per_second": 98592.3,
+            "p50_us": 53.5,
+            "p95_us": 84.208,
+            "p99_us": 103.042,
+            "process_cpu_seconds": 3.67658,
+            "process_peak_rss_bytes": 4177920,
+            "errors": 0
+          },
+          {
+            "name": "health_c64",
+            "active_connections": 64,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 213199,
+            "elapsed_seconds": 2.00023,
+            "requests_per_second": 106587,
+            "p50_us": 282.666,
+            "p95_us": 458.708,
+            "p99_us": 671.375,
+            "process_cpu_seconds": 3.64586,
+            "process_peak_rss_bytes": 5373952,
+            "errors": 0
+          },
+          {
+            "name": "health_idle64",
+            "active_connections": 1,
+            "idle_connections": 64,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 70163,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 35081.4,
+            "p50_us": 25.041,
+            "p95_us": 33.458,
+            "p99_us": 53.125,
+            "process_cpu_seconds": 1.58725,
+            "process_peak_rss_bytes": 5455872,
+            "errors": 0
+          },
+          {
+            "name": "health_pipeline16",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 16,
+            "body_bytes": 0,
+            "requests": 965712,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 482855,
+            "p50_us": 29.25,
+            "p95_us": 39.709,
+            "p99_us": 63.458,
+            "process_cpu_seconds": 1.55294,
+            "process_peak_rss_bytes": 19529728,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 69379,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 34689.2,
+            "p50_us": 25.75,
+            "p95_us": 33.667,
+            "p99_us": 52,
+            "process_cpu_seconds": 1.5478,
+            "process_peak_rss_bytes": 19595264,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 198702,
+            "elapsed_seconds": 2.00006,
+            "requests_per_second": 99348.2,
+            "p50_us": 51.541,
+            "p95_us": 84.583,
+            "p99_us": 103.875,
+            "process_cpu_seconds": 3.65069,
+            "process_peak_rss_bytes": 19644416,
+            "errors": 0
+          },
+          {
+            "name": "echo_1m_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1048576,
+            "requests": 6679,
+            "elapsed_seconds": 2.00003,
+            "requests_per_second": 3339.45,
+            "p50_us": 272.875,
+            "p95_us": 337.125,
+            "p99_us": 413.292,
+            "process_cpu_seconds": 2.3991,
+            "process_peak_rss_bytes": 22265856,
+            "errors": 0
+          }
+        ]
+      },
+      "stderr": ""
+    },
+    {
+      "pair": 5,
+      "variant": "after",
+      "command": [
+        "/private/tmp/orange-udata-68uzzyeq/after/http_server_bench",
+        "--duration-ms",
+        "2000"
+      ],
+      "started_utc": "2026-10-22T05:35:00.201977+00:00",
+      "completed_utc": "2026-10-22T05:35:18.516714+00:00",
+      "report": {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "health_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 72874,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 36436.8,
+            "p50_us": 24.5,
+            "p95_us": 30.208,
+            "p99_us": 40.625,
+            "process_cpu_seconds": 1.56637,
+            "process_peak_rss_bytes": 2572288,
+            "errors": 0
+          },
+          {
+            "name": "health_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 230759,
+            "elapsed_seconds": 2.00006,
+            "requests_per_second": 115376,
+            "p50_us": 46.708,
+            "p95_us": 70,
+            "p99_us": 87.042,
+            "process_cpu_seconds": 3.66665,
+            "process_peak_rss_bytes": 4456448,
+            "errors": 0
+          },
+          {
+            "name": "health_c64",
+            "active_connections": 64,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 247051,
+            "elapsed_seconds": 2.02165,
+            "requests_per_second": 122202,
+            "p50_us": 241.833,
+            "p95_us": 429.167,
+            "p99_us": 495.25,
+            "process_cpu_seconds": 3.71517,
+            "process_peak_rss_bytes": 4669440,
+            "errors": 0
+          },
+          {
+            "name": "health_idle64",
+            "active_connections": 1,
+            "idle_connections": 64,
+            "pipeline": 1,
+            "body_bytes": 0,
+            "requests": 72666,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 36332.6,
+            "p50_us": 24.458,
+            "p95_us": 30.375,
+            "p99_us": 38.25,
+            "process_cpu_seconds": 1.59179,
+            "process_peak_rss_bytes": 4685824,
+            "errors": 0
+          },
+          {
+            "name": "health_pipeline16",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 16,
+            "body_bytes": 0,
+            "requests": 1018480,
+            "elapsed_seconds": 2.00002,
+            "requests_per_second": 509234,
+            "p50_us": 28.375,
+            "p95_us": 35.375,
+            "p99_us": 46.625,
+            "process_cpu_seconds": 1.56567,
+            "process_peak_rss_bytes": 17186816,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 70136,
+            "elapsed_seconds": 2.00001,
+            "requests_per_second": 35067.8,
+            "p50_us": 25.417,
+            "p95_us": 31.5,
+            "p99_us": 42.875,
+            "process_cpu_seconds": 1.54387,
+            "process_peak_rss_bytes": 17825792,
+            "errors": 0
+          },
+          {
+            "name": "echo_1k_c8",
+            "active_connections": 8,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1024,
+            "requests": 228353,
+            "elapsed_seconds": 2.00003,
+            "requests_per_second": 114175,
+            "p50_us": 47.708,
+            "p95_us": 72.583,
+            "p99_us": 99.583,
+            "process_cpu_seconds": 3.73286,
+            "process_peak_rss_bytes": 17842176,
+            "errors": 0
+          },
+          {
+            "name": "echo_1m_c1",
+            "active_connections": 1,
+            "idle_connections": 0,
+            "pipeline": 1,
+            "body_bytes": 1048576,
+            "requests": 8550,
+            "elapsed_seconds": 2.00006,
+            "requests_per_second": 4274.87,
+            "p50_us": 215.5,
+            "p95_us": 254.875,
+            "p99_us": 347.291,
+            "process_cpu_seconds": 2.54917,
+            "process_peak_rss_bytes": 22134784,
+            "errors": 0
+          }
+        ]
+      },
+      "stderr": ""
+    }
+  ],
+  "after_sha256": {
+    "service/src/http_server.cpp": "02ca53e3acff21f30e95fca4e96b8ac5cf474b28ba118e0427d3775b77904669",
+    "service/CMakeLists.txt": "03e96c458884b9738983538e0617949666fac1289b8b1d71bbb9633ce7608977",
+    "service/tests/http_server_dispatch_tests.cpp": "8861870c50f67063ed8357c7b99193469ae281efa3a5b23986d079a53dc8fe1d"
+  },
+  "incremental_patch_sha256": "b0415ce6b0bd77dcbf4316386bd87147ec2a0eff4959628be88af80654940ed9",
+  "driver_sha256": "bc92430e4e9e747fd1376e87aafe6cc78df8c9f6fd9958a40e11674c4e8ec2de",
+  "environment": {
+    "compiler": "Apple clang version 21.0.0 (clang-2100.3.34.2)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+    "cmake": "cmake version 4.2.3",
+    "release_flags": "-O2 -DNDEBUG",
+    "lto": false,
+    "architecture": "arm64",
+    "cpu": "Apple M4 Max, 16 cores, 64 GiB (same host as preceding run)",
+    "os": "27.0.1"
+  },
+  "timing_started_utc": "2026-10-22T05:32:15.580234+00:00",
+  "timing_completed_utc": "2026-10-22T05:35:18.517636+00:00",
+  "server_summary": [
+    {
+      "scenario": "health_c1",
+      "before_median_requests_per_second": 35733.3,
+      "after_median_requests_per_second": 35951.7,
+      "median_change_percent": 0.6111945999949464,
+      "paired_changes_percent": [
+        4.293418712202057,
+        -2.6972824189475775,
+        0.05575429619399941,
+        -0.8999545843352164,
+        1.9687518365222312
+      ],
+      "ranges": {
+        "before": [
+          35137.5,
+          36948.3
+        ],
+        "after": [
+          35353.3,
+          36646.1
+        ]
+      },
+      "repeatable_gain_by_declared_rule": false
+    },
+    {
+      "scenario": "health_c8",
+      "before_median_requests_per_second": 102921,
+      "after_median_requests_per_second": 107669,
+      "median_change_percent": 4.613247053565361,
+      "paired_changes_percent": [
+        8.456000233188554,
+        -1.9649084469210654,
+        -6.387186710423132,
+        3.732249119240527,
+        17.02333752230143
+      ],
+      "ranges": {
+        "before": [
+          98592.3,
+          109827
+        ],
+        "after": [
+          96701.1,
+          115376
+        ]
+      },
+      "repeatable_gain_by_declared_rule": false
+    },
+    {
+      "scenario": "health_c64",
+      "before_median_requests_per_second": 106587,
+      "after_median_requests_per_second": 119966,
+      "median_change_percent": 12.552187414975569,
+      "paired_changes_percent": [
+        8.047302104817566,
+        15.382294426581922,
+        -5.522585039805872,
+        -0.877821569329984,
+        14.650004221903234
+      ],
+      "ranges": {
+        "before": [
+          106057,
+          117445
+        ],
+        "after": [
+          105127,
+          122371
+        ]
+      },
+      "repeatable_gain_by_declared_rule": false
+    },
+    {
+      "scenario": "health_idle64",
+      "before_median_requests_per_second": 35081.4,
+      "after_median_requests_per_second": 35687.7,
+      "median_change_percent": 1.7282662607535526,
+      "paired_changes_percent": [
+        2.2476449150794275,
+        3.0365505505786983,
+        5.6953579258411935,
+        -1.5350352365480213,
+        3.566562337877044
+      ],
+      "ranges": {
+        "before": [
+          33571.2,
+          35553.5
+        ],
+        "after": [
+          34971.9,
+          36633.1
+        ]
+      },
+      "repeatable_gain_by_declared_rule": false
+    },
+    {
+      "scenario": "health_pipeline16",
+      "before_median_requests_per_second": 493261,
+      "after_median_requests_per_second": 488999,
+      "median_change_percent": -0.8640456066869251,
+      "paired_changes_percent": [
+        1.2449636221339766,
+        -1.2158994662096911,
+        -3.847842542023694,
+        -4.6415589312757355,
+        5.463130753538836
+      ],
+      "ranges": {
+        "before": [
+          482855,
+          507690
+        ],
+        "after": [
+          470366,
+          509234
+        ]
+      },
+      "repeatable_gain_by_declared_rule": false
+    },
+    {
+      "scenario": "echo_1k_c1",
+      "before_median_requests_per_second": 34689.2,
+      "after_median_requests_per_second": 34656.1,
+      "median_change_percent": -0.09541874704518394,
+      "paired_changes_percent": [
+        -2.0632336899695347,
+        0.5350030713139331,
+        6.845158719450795,
+        -0.09800170693664567,
+        1.091405970734427
+      ],
+      "ranges": {
+        "before": [
+          31870.7,
+          35386.2
+        ],
+        "after": [
+          33945.7,
+          35515.9
+        ]
+      },
+      "repeatable_gain_by_declared_rule": false
+    },
+    {
+      "scenario": "echo_1k_c8",
+      "before_median_requests_per_second": 99528.3,
+      "after_median_requests_per_second": 100467,
+      "median_change_percent": 0.9431488330454707,
+      "paired_changes_percent": [
+        -4.132712456344589,
+        8.686167387510423,
+        1.2977640353212472,
+        -1.6633460030966107,
+        14.924075121642865
+      ],
+      "ranges": {
+        "before": [
+          93530.1,
+          105432
+        ],
+        "after": [
+          94743.9,
+          114590
+        ]
+      },
+      "repeatable_gain_by_declared_rule": false
+    },
+    {
+      "scenario": "echo_1m_c1",
+      "before_median_requests_per_second": 3968.01,
+      "after_median_requests_per_second": 4165.11,
+      "median_change_percent": 4.96722538501666,
+      "paired_changes_percent": [
+        19.30788929436904,
+        5.141198932340396,
+        -14.139581301458426,
+        -2.971582656250382,
+        28.01119944901107
+      ],
+      "ranges": {
+        "before": [
+          3339.45,
+          4220.31
+        ],
+        "after": [
+          3406.95,
+          4427.58
+        ]
+      },
+      "repeatable_gain_by_declared_rule": false
+    }
+  ],
+  "prior_source_manifest_match": true,
+  "reproduction": {
+    "base_commit": "08f85e9733e91ea5ffaf261f6b1b7a9cc433ca3b",
+    "before": "Apply 2026-10-22-http-performance-source.patch to the base; this is the previous round After, freshly timed here.",
+    "after": "Apply 2026-10-22-kqueue-udata.patch on top; verify after_sha256.",
+    "compile": "Same Release -O2 -DNDEBUG, ORANGE_BUILD_BENCHMARKS=ON; no IPO/LTO.",
+    "run": "Five pairs alternating order; each binary runs all eight scenarios with --duration-ms 2000.",
+    "latency": "Per-response completion from window first-send, nearest rank; table statistics are medians of five per-run statistics.",
+    "resources": "Process CPU and lifetime peak RSS include both client and server; not independent server CPU or live per-connection memory."
+  },
+  "build_commands": [
+    [
+      "cmake",
+      "-S",
+      "service",
+      "-B",
+      "service/build"
+    ],
+    [
+      "cmake",
+      "--build",
+      "service/build",
+      "--parallel",
+      "3"
+    ],
+    [
+      "cmake",
+      "-S",
+      "/private/tmp/orange-udata-68uzzyeq/before-source/service",
+      "-B",
+      "/private/tmp/orange-udata-68uzzyeq/before",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -DNDEBUG",
+      "-DORANGE_BUILD_BENCHMARKS=ON"
+    ],
+    [
+      "cmake",
+      "-S",
+      "service",
+      "-B",
+      "/private/tmp/orange-udata-68uzzyeq/after",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -DNDEBUG",
+      "-DORANGE_BUILD_BENCHMARKS=ON"
+    ],
+    [
+      "cmake",
+      "--build",
+      "/private/tmp/orange-udata-68uzzyeq/after",
+      "--parallel",
+      "3"
+    ],
+    [
+      "cmake",
+      "-S",
+      "service",
+      "-B",
+      "/private/tmp/orange-udata-68uzzyeq/sanitizers",
+      "-DCMAKE_BUILD_TYPE=Debug",
+      "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer",
+      "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
+    ],
+    [
+      "cmake",
+      "--build",
+      "/private/tmp/orange-udata-68uzzyeq/sanitizers",
+      "--parallel",
+      "3"
+    ]
+  ],
+  "sanitizer_environment": {
+    "ASAN_OPTIONS": "detect_leaks=0",
+    "UBSAN_OPTIONS": "halt_on_error=1"
+  }
+}
