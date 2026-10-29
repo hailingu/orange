@@ -25,12 +25,15 @@ jobs:
     defaults:
       run:
         shell: bash
-    env:
-      ORANGE_VERIFY_ROOT: ${{ runner.temp }}/orange-http-verification
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The runner context is unavailable in job-level env (the first hosted
+      # run failed on exactly that), so derive the disposable root from the
+      # RUNNER_TEMP shell variable and persist it for every later step.
+      - name: Locate disposable verification root
+        run: echo "ORANGE_VERIFY_ROOT=$RUNNER_TEMP/orange-http-verification" >> "$GITHUB_ENV"
       - name: Record toolchain and machine
         run: |
           clang++ --version
