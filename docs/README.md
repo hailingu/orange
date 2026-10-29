@@ -74,10 +74,11 @@ scope matches the affected paths, in full.
 | --- | --- |
 | All maintained source and test code, any language | [`docs/development/software-engineering-standard.md`](development/software-engineering-standard.md) |
 | C++20 compilation units (`service/**`) | [`docs/development/cpp-development-standard.md`](development/cpp-development-standard.md) |
+| TypeScript compilation units (`web/**`) | [`docs/development/typescript-development-standard.md`](development/typescript-development-standard.md) |
 
-TypeScript does not yet have a language standard; when web client source
-first lands, its standard is authored and cataloged in the same governed
-change that adds its Scope Routing row.
+The TypeScript standard was authored and cataloged with the first web
+client source landing under
+[ADR-0003](adr/ADR-0003-local-runtime-path.md), as required above.
 
 ## Verification Tooling
 
