@@ -2,16 +2,17 @@
 
 ## Metadata [Required]
 
-- **Decision Status**: Proposed
-- **Implementation Status**: Not Started
+- **Decision Status**: Accepted
+- **Implementation Status**: In Progress
 - **Date**: 2026-10-22
 - **Author**: @codex
 - **Decision Owner**: @hailingu
 - **Required Approver**: @hailingu
 - **Record Scope**: Service internal — service
-- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — reapproval required
-- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — reapproval required
-- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Pending — reapproval required
+- **Approver [Conditionally Required — Decision Status is or has been `Accepted`]**: @hailingu
+- **Approval Time [Conditionally Required — Decision Status is or has been `Accepted`]**: 2026-10-29T02:33:00Z
+- **Approval Evidence [Conditionally Required — Decision Status is or has been `Accepted`]**: Approve
+- **Approval Context Revision [Optional — informational and non-binding]**: 41fa1fd — immutable revision whose document content equals the content present for approval (the merged-subtask Proposed revision with approval fields still `Pending — reapproval required`); the approval edits were made after approval within the same change
 - **Rejector [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
 - **Rejection Time [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
 - **Rejection Evidence [Conditionally Required — Decision Status is `Rejected`]**: N/A — not rejected
@@ -392,7 +393,7 @@ span and nesting are reviewed instead.
 
 | ID | Item | Completion Criterion | Expected Evidence | Status | Actual Evidence |
 | --- | --- | --- | --- | --- | --- |
-| A-1 | ADR approved | Eligible non-author approver responds exactly Approve in this record's sole context | Approval metadata | Not Started | Pending — reapproval required after the 2026-10-28 compliance merge of subtasks T-3/T-4; prior: Approver @hailingu (non-author; author @codex), Approval Time 2026-10-28T14:32:45Z, Approval Evidence: Approve in this record's sole context, invalidated in the same change by the subtask-list merge and retained in the Change Log as history |
+| A-1 | ADR approved | Eligible non-author approver responds exactly Approve in this record's sole context | Approval metadata | Complete | Reapproved 2026-10-29 on the merged-subtask plan: Approver @hailingu (non-author; author @codex), Approval Time 2026-10-29T02:33:00Z, Approval Evidence: Approve in this record's sole context; informational Approval Context Revision commit 41fa1fd exactly represents the approved document content. Prior: prior: Approver @hailingu (non-author; author @codex), Approval Time 2026-10-28T14:32:45Z, Approval Evidence: Approve in this record's sole context, invalidated in the same change by the subtask-list merge and retained in the Change Log as history |
 | A-2 | Complete task delivered | Every applicable acceptance check passes and every subtask has actual evidence after acceptance | Checks and evidence JSON | Not Started | Historical exception execution only; formal completion follows individual approval |
 | A-3 | Reciprocal ADD link | N/A — corrective performance maintenance | Architecture Source assessment | N/A — no product-demand handoff | No ADD candidate changed |
 | A-4 | Requirement levels | Every required item and conditional assessment is complete | Structured review | Complete | Reviewed at drafting; approval fields remain pending in Proposed |
@@ -411,6 +412,7 @@ index, and preserve reciprocal supersession paths when applicable.
 
 | Date | Change | Author |
 | --- | --- | --- |
+| 2026-10-29 | Reapproval of the merged plan: repository owner @hailingu responded with the exact word Approve in this record's sole context (a one-record approval question naming this path). Decision Status Proposed→Accepted; Implementation Status Not Started→In Progress; Approver, Approval Time and Approval Evidence recorded; Approval Context Revision recorded informationally at commit 41fa1fd. Fresh three-tree verification and the immutable commit anchor precede completion | @zcode |
 | 2026-10-28 | Invalidate the 14:32:45Z approval in the same change that records it: the governance validator enforces the AGENTS.md at-most-three-subtask cap on Accepted records, and this record's Implementation Plan carried four subtasks, so the former T-3 and T-4 rows — owner-directed extension rounds of one transport slice — merge into one T-3 row with every AC-9..AC-13 subtask reference and all evidence preserved. A subtask-list change is approval-invalidating under AGENTS.md: Decision Status returns Accepted→Proposed and Implementation Status In Progress→Not Started; the 14:32:45Z approval (Approver @hailingu, Approval Evidence: Approve, in this record's sole context; informational Approval Context Revision 15ee45a) is retained here as history, and reapproval of the merged plan is requested | @zcode |
 | 2026-10-28 | Approval: repository owner @hailingu responded with the exact word Approve in this record's sole context (one-record approval question naming this path). Decision Status Proposed→Accepted; Implementation Status Not Started→In Progress; Approver, Approval Time and Approval Evidence recorded; Approval Context Revision recorded informationally at commit 15ee45a. Fresh HEAD verification and the immutable commit anchor precede completion | @zcode |
 | 2026-10-28 | Record the owner's re-selection of the receive-buffer candidate as KS-11 with the 64 KiB window, subtask T-4 extension, AC-12/AC-13 and the round-3 measured rerun; approval pending | @zcode |

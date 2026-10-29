@@ -129,7 +129,7 @@ which no waiver or approval in this section provides.
 | Full ADR | ADR-0006 | Answer rejections with precomputed static wires | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability | `service/docs/adr/ADR-0006-static-rejection-wires.md` | None — not superseded |
 | Full ADR | ADR-0007 | Serialize responses straight into the outgoing backlog | Accepted | Complete | Service internal — service | N/A — corrective performance maintenance of an existing serializer and its verification, not a new product-demand capability | `service/docs/adr/ADR-0007-append-form-response-serialization.md` | None — not superseded |
 | Full ADR | ADR-0010 | Measure real loopback HTTP serving separately from parsing | Accepted | Complete | Project | N/A — corrective performance verification, not product-demand implementation | `docs/adr/ADR-0010-http-server-performance-measurement.md` | None — not superseded |
-| Full ADR | ADR-0008 | Use stable kqueue connection identities and avoid redundant request-path work | Proposed | Not Started | Service internal — service | N/A — corrective performance maintenance, not product-demand implementation | `service/docs/adr/ADR-0008-kqueue-response-scheduling.md` | None — not superseded |
+| Full ADR | ADR-0008 | Use stable kqueue connection identities and avoid redundant request-path work | Accepted | In Progress | Service internal — service | N/A — corrective performance maintenance, not product-demand implementation | `service/docs/adr/ADR-0008-kqueue-response-scheduling.md` | None — not superseded |
 
 ## Archived Records
 
