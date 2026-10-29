@@ -3,7 +3,7 @@
 ## Metadata [Required]
 
 - **Decision Status**: Accepted
-- **Implementation Status**: In Progress
+- **Implementation Status**: Complete
 - **Date**: 2026-10-22
 - **Author**: @codex
 - **Decision Owner**: @hailingu
@@ -394,7 +394,7 @@ span and nesting are reviewed instead.
 | ID | Item | Completion Criterion | Expected Evidence | Status | Actual Evidence |
 | --- | --- | --- | --- | --- | --- |
 | A-1 | ADR approved | Eligible non-author approver responds exactly Approve in this record's sole context | Approval metadata | Complete | Reapproved 2026-10-29 on the merged-subtask plan: Approver @hailingu (non-author; author @codex), Approval Time 2026-10-29T02:33:00Z, Approval Evidence: Approve in this record's sole context; informational Approval Context Revision commit 41fa1fd exactly represents the approved document content. Prior: prior: Approver @hailingu (non-author; author @codex), Approval Time 2026-10-28T14:32:45Z, Approval Evidence: Approve in this record's sole context, invalidated in the same change by the subtask-list merge and retained in the Change Log as history |
-| A-2 | Complete task delivered | Every applicable acceptance check passes and every subtask has actual evidence after acceptance | Checks and evidence JSON | Not Started | Historical exception execution only; formal completion follows individual approval |
+| A-2 | Complete task delivered | Every applicable acceptance check passes and every subtask has actual evidence after acceptance | Checks and evidence JSON | Complete | Completed 2026-10-29 after the merged-plan reapproval: fresh three-tree verification at anchor `8e2803d` — Debug trio 17/17, Release tree 17/17, ASan/UBSan tree 17/17, zero build warnings in both fresh trees, with the named suites (scheduling/input/dispatch/receive/connection-store/decoder) green inside the full runs; the measurement-comparison checks keep their retained raw artifacts, patches and fingerprints as their immutable evidence |
 | A-3 | Reciprocal ADD link | N/A — corrective performance maintenance | Architecture Source assessment | N/A — no product-demand handoff | No ADD candidate changed |
 | A-4 | Requirement levels | Every required item and conditional assessment is complete | Structured review | Complete | Reviewed at drafting; approval fields remain pending in Proposed |
 | A-5 | Decidable checks | Every check has input, binary expected result and deterministic method | Acceptance table | Complete | Checks below identify executable contracts and exact outcomes |
@@ -412,6 +412,7 @@ index, and preserve reciprocal supersession paths when applicable.
 
 | Date | Change | Author |
 | --- | --- | --- |
+| 2026-10-29 | Complete the record after the merged-plan reapproval: fresh three-tree verification at anchor `8e2803d` — Debug 17/17, Release 17/17, ASan/UBSan 17/17 with zero warnings; every historical acceptance check keeps its executed evidence and the deterministic suites re-verify green; A-2 records Complete with the immutable anchor bound; Implementation Status → Complete | @zcode |
 | 2026-10-29 | Reapproval of the merged plan: repository owner @hailingu responded with the exact word Approve in this record's sole context (a one-record approval question naming this path). Decision Status Proposed→Accepted; Implementation Status Not Started→In Progress; Approver, Approval Time and Approval Evidence recorded; Approval Context Revision recorded informationally at commit 41fa1fd. Fresh three-tree verification and the immutable commit anchor precede completion | @zcode |
 | 2026-10-28 | Invalidate the 14:32:45Z approval in the same change that records it: the governance validator enforces the AGENTS.md at-most-three-subtask cap on Accepted records, and this record's Implementation Plan carried four subtasks, so the former T-3 and T-4 rows — owner-directed extension rounds of one transport slice — merge into one T-3 row with every AC-9..AC-13 subtask reference and all evidence preserved. A subtask-list change is approval-invalidating under AGENTS.md: Decision Status returns Accepted→Proposed and Implementation Status In Progress→Not Started; the 14:32:45Z approval (Approver @hailingu, Approval Evidence: Approve, in this record's sole context; informational Approval Context Revision 15ee45a) is retained here as history, and reapproval of the merged plan is requested | @zcode |
 | 2026-10-28 | Approval: repository owner @hailingu responded with the exact word Approve in this record's sole context (one-record approval question naming this path). Decision Status Proposed→Accepted; Implementation Status Not Started→In Progress; Approver, Approval Time and Approval Evidence recorded; Approval Context Revision recorded informationally at commit 15ee45a. Fresh HEAD verification and the immutable commit anchor precede completion | @zcode |
