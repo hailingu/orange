@@ -15,6 +15,7 @@ exist and defers lifecycle status to the indexes below.
 | `docs/adr/` | Decision records: Full and Lightweight ADRs and OCRs, with their index, templates, and review fixtures |
 | `docs/architecture/` | Architecture Design Documents (ADDs), with their index and shared template |
 | `docs/development/` | Development standards for repository work |
+| `docs/knowledge/` | Non-normative study notes indexing the C++, CMake, network-programming, compilation, SIMD, and testing knowledge exercised by ADR-0001 through ADR-0009 |
 
 ## Decision Records — `docs/adr/`
 
@@ -40,25 +41,55 @@ exist and defers lifecycle status to the indexes below.
 
 ## Development Standards — `docs/development/`
 
+- [`docs/development/software-engineering-standard.md`](development/software-engineering-standard.md) —
+  the repository-wide engineering baseline: size and complexity guardrails,
+  module boundaries, dependency direction, abstraction guidance, testing,
+  and the engineering-exception process.
+- [`docs/development/cpp-development-standard.md`](development/cpp-development-standard.md) —
+  the C++20 standard narrowing the baseline for `service/**`: toolchain,
+  verification commands, error policy, resource and event-loop rules, and
+  testing.
 - [`docs/development/issue-standard.md`](development/issue-standard.md) —
   issue title, severity, label, body, evidence, and closure rules for the
   `hailingu/orange` tracker, governed by
   [`docs/adr/ADR-0001-orange-issue-governance.md`](adr/ADR-0001-orange-issue-governance.md).
 
+## Knowledge Notes — `docs/knowledge/`
+
+- [`docs/knowledge/README.md`](knowledge/README.md) — the knowledge-point
+  index and reading order for non-normative study notes. Each topic file
+  (C++ language, HTTP protocol, parser design, network programming, build
+  and toolchain, performance and SIMD, testing and verification) maps its
+  concepts to the ADRs and source symbols where they are used. The notes are
+  learning material in Chinese; ADRs, ADDs, and the standards above remain
+  authoritative wherever they differ.
+
 ## Language And Platform Standards Catalog
 
-orange's backend is C++20 and its frontend is TypeScript. No repository-owned
-C++20, TypeScript, or general software-engineering standard has been authored
-yet. When one is added under `docs/development/`, list it here with its scope
-so the AGENTS.md required-reading rule can find it. Until then this catalog
-has no language or platform entries, and AGENTS.md plus the documents routed
-above are the complete documentation baseline.
+This catalog is what the AGENTS.md required-reading rule resolves: before
+writing, modifying, or reviewing source code, read every entry below whose
+scope matches the affected paths, in full.
+
+| Scope | Matching standard |
+| --- | --- |
+| All maintained source and test code, any language | [`docs/development/software-engineering-standard.md`](development/software-engineering-standard.md) |
+| C++20 compilation units (`service/**`) | [`docs/development/cpp-development-standard.md`](development/cpp-development-standard.md) |
+| TypeScript compilation units (`web/**`) | [`docs/development/typescript-development-standard.md`](development/typescript-development-standard.md) |
+
+The TypeScript standard was authored and cataloged with the first web
+client source landing under
+[ADR-0003](adr/ADR-0003-local-runtime-path.md), as required above.
 
 ## Verification Tooling
 
-The configured governance validator at `tools/governance-validator/` does not
-exist yet, so the `npm test --prefix tools/governance-validator` and
-`npm run validate --prefix tools/governance-validator` checks referenced by
-AGENTS.md Scope Routing cannot run. This is the recorded open prerequisite of
-ADR-0001 (AC-06) and is not a passing state; structured review supplements it
-until the validator is supplied.
+The configured governance validator is available at
+[`tools/governance-validator/`](../tools/governance-validator/README.md), adopted
+under [ADR-0002](adr/ADR-0002-governance-validator-adoption.md). Its configured
+checks, executed from the repository root, are:
+
+- `npm test --prefix tools/governance-validator`
+- `npm run validate --prefix tools/governance-validator`
+
+The original missing-tool prerequisite of ADR-0001 (AC-06) has been resolved;
+the decision-record index records its completed status. Automated validation
+supplements the structured review required by AGENTS.md.

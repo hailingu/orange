@@ -1,4 +1,4 @@
-// ADR: docs/adr/ADR-0002-governance-validator-adoption.md
+// ADR: docs/adr/ADR-0002-governance-validator-adoption.md, docs/adr/ADR-0007-governance-fixture-lifecycle.md
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -11,8 +11,8 @@ import { run, validRepository } from "./fixtures.mjs";
 
 const validator = fileURLToPath(new URL("../validate.mjs", import.meta.url));
 
-test("rejects a blank index Path without trying to read the repository root", () => {
-  const root = validRepository();
+test("rejects a blank index Path without trying to read the repository root", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/INDEX.md");
   const content = readFileSync(path, "utf8").replace(
     "N/A — governance-only example | docs/adr/ADR-0001-example.md |",
@@ -26,12 +26,12 @@ test("rejects a blank index Path without trying to read the repository root", ()
   assert.doesNotMatch(result.stderr, /EISDIR/i);
 });
 
-test("rejects index Paths that are directories or escape the repository", () => {
+test("rejects index Paths that are directories or escape the repository", (t) => {
   for (const [indexedPath, expected] of [
     ["docs/adr", /not a regular file/i],
     ["../../outside.md", /escapes the repository root/i],
   ]) {
-    const root = validRepository();
+    const root = validRepository(t);
     const path = join(root, "docs/adr/INDEX.md");
     writeFileSync(
       path,
@@ -44,8 +44,8 @@ test("rejects index Paths that are directories or escape the repository", () => 
   }
 });
 
-test("rejects an ADR Task Candidates pipe block without a Markdown separator", () => {
-  const root = validRepository();
+test("rejects an ADR Task Candidates pipe block without a Markdown separator", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -60,8 +60,8 @@ test("rejects an ADR Task Candidates pipe block without a Markdown separator", (
   assert.match(result.stderr, /ADR Task Candidates.*structured Markdown table/i);
 });
 
-test("rejects an index pipe block without a Markdown separator", () => {
-  const root = validRepository();
+test("rejects an index pipe block without a Markdown separator", (t) => {
+  const root = validRepository(t);
   const indexPath = join(root, "docs/architecture/INDEX.md");
   writeFileSync(
     indexPath,
@@ -76,14 +76,14 @@ test("rejects an index pipe block without a Markdown separator", () => {
   assert.match(result.stderr, /index requires a structured Markdown table/i);
 });
 
-test("rejects relationship index titles that disagree with recognized record H1 forms", () => {
+test("rejects relationship index titles that disagree with recognized record H1 forms", (t) => {
   for (const heading of [
     "# ADR-0001: Updated title",
     "# OCR-0001: Updated title",
     "# ADD-0001: Updated title",
     "# Lightweight ADR-0001: Updated title",
   ]) {
-    const root = validRepository();
+    const root = validRepository(t);
     const recordPath = join(root, "docs/adr/ADR-0001-example.md");
     writeFileSync(
       recordPath,
@@ -99,8 +99,8 @@ test("rejects relationship index titles that disagree with recognized record H1 
   }
 });
 
-test("accepts relationship values that differ only by Markdown backticks", () => {
-  const root = validRepository();
+test("accepts relationship values that differ only by Markdown backticks", (t) => {
+  const root = validRepository(t);
   const indexPath = join(root, "docs/adr/INDEX.md");
   writeFileSync(
     indexPath,
@@ -114,8 +114,8 @@ test("accepts relationship values that differ only by Markdown backticks", () =>
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("rejects an adversarial index-path without timing out", () => {
-  const root = validRepository();
+test("rejects an adversarial index-path without timing out", (t) => {
+  const root = validRepository(t);
   const indexPath = join(root, "docs/adr/INDEX.md");
   const adversarialPath = `${"segment/".repeat(24)}docs`;
   writeFileSync(
@@ -136,8 +136,8 @@ test("rejects an adversarial index-path without timing out", () => {
   assert.match(result.stderr, /index path/i);
 });
 
-test("rejects a candidate ADR link that resolves to a directory without crashing", () => {
-  const root = validRepository();
+test("rejects a candidate ADR link that resolves to a directory without crashing", (t) => {
+  const root = validRepository(t);
   mkdirSync(join(root, "docs/adr/ADR-9999-directory.md"));
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
@@ -154,8 +154,8 @@ test("rejects a candidate ADR link that resolves to a directory without crashing
   assert.doesNotMatch(result.stderr, /EISDIR/i);
 });
 
-test("rejects an Architecture Source link that resolves to a directory without crashing", () => {
-  const root = validRepository();
+test("rejects an Architecture Source link that resolves to a directory without crashing", (t) => {
+  const root = validRepository(t);
   mkdirSync(join(root, "docs/architecture/ADD-9999-directory.md"));
   const adrPath = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(

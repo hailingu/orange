@@ -1,0 +1,315 @@
+{
+  "basis": {
+    "head": "1f876464862c69c5a54424d91fbfd6937983e23c",
+    "branch": "feat/cand-0001-local-runtime",
+    "date": "2026-10-16",
+    "attachment_id": "5fd214c6-2248-4fb8-8076-8ef049764454",
+    "attachment_sha256": "d64bb5101d6599f3641b826c6fb7136502cdf0f9da7f6d3b3739fa9d3409e4f5",
+    "workspace": "preexisting uncommitted repairs preserved; manifest hashes identify current source"
+  },
+  "authorization": "Owner explicitly waived ADR preapproval and serialization for confirmed repairs, then requested this follow-up. No Approve or Accepted status inferred.",
+  "toolchain": {
+    "node": "v22.11.0",
+    "clang": "Apple clang 21.0.0 (clang-2100.3.34.2), arm64-apple-darwin27.0.0",
+    "cmake": "4.2.3"
+  },
+  "verification_root": "/private/tmp/orange-followup-review-OHSXOf",
+  "baseline": {
+    "command": "TMPDIR=/private/tmp/orange-followup-review-OHSXOf/baseline npm test --prefix tools/governance-validator",
+    "exit_code": 0,
+    "summary": {
+      "tests": 290,
+      "pass": 290,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "duration_ms": 28133.319458
+    },
+    "remaining_fixture_directories": 192,
+    "global_historical_directories": "Not counted or removed"
+  },
+  "red": {
+    "command": "node --test tools/governance-validator/test/fixture-lifecycle.test.mjs tools/governance-validator/test/record-references.test.mjs",
+    "exit_code": 1,
+    "summary": {
+      "tests": 11,
+      "pass": 2,
+      "fail": 9,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "duration_ms": 1856.307875
+    },
+    "observations": [
+      "Success, multiple, deliberate-throw and concurrent cleanup assertions expected root absence but observed existence",
+      "Three repository-identity forms and one relative link expected CLI exit 1 but observed 0",
+      "The additional outside-helper probe failed because temporaryDirectory did not yet exist; this is not counted as evidence of the cleanup bug"
+    ],
+    "inactive_archival_control": {
+      "exit_code": 1,
+      "summary": {
+        "tests": 7,
+        "pass": 6,
+        "fail": 1,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0,
+        "duration_ms": 2342.892875
+      },
+      "observation": "Future archive target produced RECORD_REFERENCE_INVALID before active-record archival guidance was excluded"
+    }
+  },
+  "focused_final": {
+    "command": "node --test tools/governance-validator/test/record-references.test.mjs tools/governance-validator/test/fixture-lifecycle.test.mjs",
+    "exit_code": 0,
+    "summary": {
+      "tests": 13,
+      "pass": 13,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "duration_ms": 3327.254666
+    },
+    "note": "Same 13 cases also pass in the final full suite, including the subsequently added relative-link assertion"
+  },
+  "full_suite": {
+    "command": "TMPDIR=/private/tmp/orange-followup-review-OHSXOf/after npm test --prefix tools/governance-validator",
+    "exit_code": 0,
+    "summary": {
+      "tests": 303,
+      "pass": 303,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "duration_ms": 28934.048542
+    },
+    "remaining_entries": [
+      "sentinel"
+    ],
+    "sentinel_content": "preserve this unrelated sibling\n",
+    "remaining_fixture_directories": 0
+  },
+  "commands": [
+    {
+      "command": "npm run validate --prefix tools/governance-validator",
+      "exit_code": 0,
+      "stdout": "Governance validation passed."
+    },
+    {
+      "command": "cmake -S service -B /private/tmp/orange-followup-review-OHSXOf/build",
+      "exit_code": 0
+    },
+    {
+      "command": "cmake --build /private/tmp/orange-followup-review-OHSXOf/build",
+      "exit_code": 0,
+      "warnings": 0
+    },
+    {
+      "command": "ctest --test-dir /private/tmp/orange-followup-review-OHSXOf/build --output-on-failure",
+      "exit_code": 0,
+      "tests": 2,
+      "passed": 2,
+      "decoder_checks": 19274,
+      "decoder_failures": 0
+    },
+    {
+      "command": "cmake -S service -B /private/tmp/orange-followup-review-OHSXOf/asan -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'",
+      "exit_code": 0
+    },
+    {
+      "command": "cmake --build /private/tmp/orange-followup-review-OHSXOf/asan",
+      "exit_code": 0,
+      "warnings": 0
+    },
+    {
+      "command": "ctest --test-dir /private/tmp/orange-followup-review-OHSXOf/asan --output-on-failure",
+      "exit_code": 0,
+      "tests": 2,
+      "passed": 2,
+      "stdout": "Test project /private/tmp/orange-followup-review-OHSXOf/asan\n    Start 1: http_message_tests\n1/2 Test #1: http_message_tests ...............   Passed    1.77 sec\n    Start 2: http_request_decoder_tests\n2/2 Test #2: http_request_decoder_tests .......   Passed    0.57 sec\n\n100% tests passed, 0 tests failed out of 2\n\nTotal Test time (real) =   2.35 sec\n"
+    },
+    {
+      "command": "node --check <each maintained tools/governance-validator/**/*.mjs, excluding node_modules>",
+      "exit_code": 0,
+      "modules": 31
+    },
+    {
+      "command": "clang-format --dry-run --Werror service/tests/http_request_decoder_tests.cpp",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "resource_policy": {
+    "decoded_content_cap": 1048576,
+    "aggregate_metadata_cap": 8192,
+    "one_MiB_with_1024_byte_chunks": {
+      "metadata_bytes": 7173,
+      "result": "success"
+    },
+    "one_MiB_with_512_byte_chunks": {
+      "metadata_bytes_if_complete": 14341,
+      "result": "chunk_metadata_too_long before completion"
+    },
+    "feed_sizes": [
+      17,
+      8192,
+      "whole wire input"
+    ],
+    "result_depends_on_feed_size": false
+  },
+  "structured_review": {
+    "source_context_only_callbacks_over_60": [
+      {
+        "path": "tools/governance-validator/test/validate-structure.test.mjs",
+        "start": 1134,
+        "end": 1211,
+        "noncomment_span": 78
+      },
+      {
+        "path": "tools/governance-validator/test/validate-lifecycle.test.mjs",
+        "start": 258,
+        "end": 334,
+        "noncomment_span": 77
+      },
+      {
+        "path": "tools/governance-validator/test/validate-lifecycle.test.mjs",
+        "start": 392,
+        "end": 452,
+        "noncomment_span": 61
+      },
+      {
+        "path": "tools/governance-validator/test/validate-lifecycle.test.mjs",
+        "start": 557,
+        "end": 620,
+        "noncomment_span": 64
+      }
+    ],
+    "new_executable_units": "all below 60 code lines; nesting at most 4",
+    "fixture_factory_code_lines": 5,
+    "temporary_directory_code_lines": 6,
+    "cyclomatic_complexity": "N/A — no configured complexity tool",
+    "assertions": "Original validation assertions unchanged; full suite passes",
+    "dependencies": "No package or lock-file edits",
+    "formal_status": "ADR-0003 and ADR-0007 remain Proposed / Not Started; actual exception execution evidence is separate"
+  },
+  "source_inventory": [
+    {
+      "path": "service/src/http_messages.hpp",
+      "git_blob": "6e33453901bfc0bd2e5a6d6c9a1bfee3a9f6da5b",
+      "physical_lines": 131
+    },
+    {
+      "path": "service/src/http_request_decoder.cpp",
+      "git_blob": "cb3c08acefa1482386474fc9422edea46d48a4b8",
+      "physical_lines": 287
+    },
+    {
+      "path": "service/src/http_request_decoder.hpp",
+      "git_blob": "f2eda67bd70c1cc2d53d554aa37c916172abe829",
+      "physical_lines": 59
+    },
+    {
+      "path": "service/tests/http_request_decoder_tests.cpp",
+      "git_blob": "b0d27d2b15c1a5ae8e3ed3a177ba9a70facc474d",
+      "physical_lines": 486
+    },
+    {
+      "path": "tools/governance-validator/lib/record-reference-validation.mjs",
+      "git_blob": "d8cb1b6b14fc7c379f370dded2231a18399f31f9",
+      "physical_lines": 58
+    },
+    {
+      "path": "tools/governance-validator/test/accepted-source-contracts.test.mjs",
+      "git_blob": "6e768b658ace3313ba6d98c8aae28b06596c914a",
+      "physical_lines": 146
+    },
+    {
+      "path": "tools/governance-validator/test/approval-authorization.test.mjs",
+      "git_blob": "81ed774d78cb3e6be905cf2bcd2e02947ba7cc7d",
+      "physical_lines": 149
+    },
+    {
+      "path": "tools/governance-validator/test/fixture-lifecycle.test.mjs",
+      "git_blob": "6eea1ba564fa2fd5929ed3ad2a08dc5b49af6c9a",
+      "physical_lines": 71
+    },
+    {
+      "path": "tools/governance-validator/test/fixtures/fixture-lifecycle-child.mjs",
+      "git_blob": "c52aa9bcdcf0117269533bbf7fb2c19006bc789c",
+      "physical_lines": 24
+    },
+    {
+      "path": "tools/governance-validator/test/fixtures.mjs",
+      "git_blob": "9be3a69fd913f2194b95dd35d8366b78fd9268b6",
+      "physical_lines": 400
+    },
+    {
+      "path": "tools/governance-validator/test/index-path-validation.test.mjs",
+      "git_blob": "1a236904444150133543cfc295ab950914411fd8",
+      "physical_lines": 173
+    },
+    {
+      "path": "tools/governance-validator/test/index-tables.test.mjs",
+      "git_blob": "08e8df62f5df551636b0841367a64b235d14d7d3",
+      "physical_lines": 233
+    },
+    {
+      "path": "tools/governance-validator/test/lifecycle-edge-contracts.test.mjs",
+      "git_blob": "f15ae4aa35819b88ba520278be33d11ca4f73a58",
+      "physical_lines": 297
+    },
+    {
+      "path": "tools/governance-validator/test/peer-review-regressions.test.mjs",
+      "git_blob": "8c270afb388ce1f819cbad662da9a35140181952",
+      "physical_lines": 173
+    },
+    {
+      "path": "tools/governance-validator/test/record-references.test.mjs",
+      "git_blob": "61e8b8ca24b44baf2eefe10780ba1e9feffafde0",
+      "physical_lines": 61
+    },
+    {
+      "path": "tools/governance-validator/test/rejection-reason.test.mjs",
+      "git_blob": "9a086045aba9957efb973c13d90ea4e29883bc9a",
+      "physical_lines": 346
+    },
+    {
+      "path": "tools/governance-validator/test/terminal-evidence.test.mjs",
+      "git_blob": "1644539511705565df11aa467b8c571d38605a49",
+      "physical_lines": 320
+    },
+    {
+      "path": "tools/governance-validator/test/validate-lifecycle.test.mjs",
+      "git_blob": "59f11db2032e74d178ab3c7b8bdd000db16dcd6c",
+      "physical_lines": 1163
+    },
+    {
+      "path": "tools/governance-validator/test/validate-structure.test.mjs",
+      "git_blob": "cf6630286749986b635c4b8fd6a633919e4c3a44",
+      "physical_lines": 1211
+    },
+    {
+      "path": "tools/governance-validator/test/validation-boundary-regressions.test.mjs",
+      "git_blob": "16ec9b0e96fa7e337391d9de0597822b46ef9c81",
+      "physical_lines": 407
+    },
+    {
+      "path": "tools/governance-validator/validate.mjs",
+      "git_blob": "3a5f3e5041217fe0489adbefd1d78a53b95ffe14",
+      "physical_lines": 765
+    }
+  ],
+  "cleanup": {
+    "scope": "Only /private/tmp/orange-followup-review-OHSXOf and its own descendants",
+    "performed": true,
+    "root_absent_after_cleanup": true,
+    "retained": "Command summaries, source inventory and filesystem observations in this JSON; no reusable artifacts",
+    "historical_shared_temporary_directories_removed": false
+  }
+}

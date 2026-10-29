@@ -1,0 +1,955 @@
+diff --git a/service/CMakeLists.txt b/service/CMakeLists.txt
+index 69e5e77..dbfa6f4 100644
+--- a/service/CMakeLists.txt
++++ b/service/CMakeLists.txt
+@@ -1,4 +1,6 @@
+ # ADR: docs/adr/ADR-0008-http-parser-benchmarks.md
++# ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
++# ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
+ # ADR: service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md
+ # ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
+ # ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+@@ -79,6 +81,14 @@ add_executable(http_server_tests tests/http_server_tests.cpp)
+ target_link_libraries(http_server_tests PRIVATE orange_http)
+ add_test(NAME http_server_tests COMMAND http_server_tests)
+ 
++# ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
++add_executable(http_server_scheduling_tests tests/http_server_scheduling_tests.cpp)
++target_link_libraries(http_server_scheduling_tests PRIVATE orange_http)
++add_test(NAME http_server_scheduling_tests COMMAND http_server_scheduling_tests)
++add_executable(http_server_input_tests tests/http_server_input_tests.cpp)
++target_link_libraries(http_server_input_tests PRIVATE orange_http)
++add_test(NAME http_server_input_tests COMMAND http_server_input_tests)
++
+ # Route dispatch is the first serving rung of ADR-0003 T-2.
+ add_executable(http_routes_tests tests/http_routes_tests.cpp)
+ target_link_libraries(http_routes_tests PRIVATE orange_http)
+@@ -91,6 +101,17 @@ if(ORANGE_BUILD_BENCHMARKS)
+         message(FATAL_ERROR "Parser benchmarks require CMAKE_BUILD_TYPE=Release")
+     endif()
+     add_executable(http_parser_bench bench/http_parser_bench.cpp)
++    # ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
++    add_executable(http_server_bench bench/http_server_bench.cpp)
++    target_link_libraries(http_server_bench PRIVATE orange_http)
++    set_property(TARGET http_server_bench PROPERTY INTERPROCEDURAL_OPTIMIZATION FALSE)
++    target_compile_definitions(http_server_bench PRIVATE
++        ORANGE_BENCH_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
++        ORANGE_BENCH_FLAGS="${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}"
++        ORANGE_BENCH_ARCH="${CMAKE_SYSTEM_PROCESSOR}")
++    add_test(NAME http_server_bench_cli
++        COMMAND ${CMAKE_COMMAND} -DBENCHMARK=$<TARGET_FILE:http_server_bench>
++                -P ${CMAKE_CURRENT_SOURCE_DIR}/bench/verify_server.cmake)
+     add_executable(http_parser_allocations bench/http_parser_allocations.cpp)
+     target_link_libraries(http_parser_allocations PRIVATE orange_http)
+     add_executable(http_parser_equivalence bench/http_parser_equivalence.cpp)
+diff --git a/service/bench/README.md b/service/bench/README.md
+index d73f974..3b0e722 100644
+--- a/service/bench/README.md
++++ b/service/bench/README.md
+@@ -1,9 +1,45 @@
+ <!-- ADR: docs/adr/ADR-0008-http-parser-benchmarks.md -->
++<!-- ADR: docs/adr/ADR-0010-http-server-performance-measurement.md -->
+ <!-- ADR: service/docs/adr/ADR-0004-owned-request-storage.md -->
+ <!-- Authorization: docs/reviews/2026-10-16-http-performance.md. -->
+ <!-- Owned storage: docs/reviews/2026-10-16-owned-request-storage.md. -->
+ # HTTP Parser Benchmarks
+ 
++## Real-Socket Server Measurement
++
++The same opt-in Release configuration also builds `http_server_bench`. Run
++`http_server_bench --duration-ms 500` for all eight scenarios, or select one
++with `--case health_c1`. `--quick` uses 20 ms and is a CLI/correctness check.
++The normal default is 200 ms; explicit durations must be integers 1..10000.
++Unknown options/cases and invalid durations exit 2; socket, wire or deadline
++failure exits 1. CTest's `http_server_bench_cli` exercises all eight cases,
++the metric schema and invalid invocations.
++
++The client uses nonblocking sockets multiplexed by poll; the production
++kqueue server runs on another thread in the same process. Both endpoints use
++TCP_NODELAY. Cases cover 1/8/64 active health connections, 64 idle plus one
++active, a depth-16 pipeline, 1 KiB echo at 1/8 connections, and 1 MiB fixed-body
++echo. Every response is compared byte for byte against independently built
++wire bytes. Setup, a 20 ms warmup and shutdown are outside timing. All issued
++requests are drained after the timed issuing interval.
++
++Throughput is completions divided by actual elapsed time. Nearest-rank
++p50/p95/p99 measure each response completion from its window's first-send
++start, including client scheduling and pipeline queue position; pipeline
++latencies are not divided by its depth. Process CPU includes client and server;
++peak RSS is a process-lifetime high-water value, not per-scenario live memory.
++This is closed-loop load and cannot establish an open-loop saturation point,
++server-only CPU limit, browser latency or an SLO.
++
++Use byte-identical drivers, -O2 -DNDEBUG without LTO and at least five
++alternating groups. Retain individual samples and all tails. The 2026-10-22
++report additionally compares a disposable poll control with the same parser,
++serializer and TCP_NODELAY; the control is not a production backend. Exact
++reconstruction patches, raw runs, source fingerprints and commands are in
++[`2026-10-22-http-performance.md`](../../docs/reviews/2026-10-22-http-performance.md).
++
++## Parser Measurement
++
+ From the repository root, allocate and remove your own disposable directory:
+ 
+ ```sh
+diff --git a/service/src/http_server.cpp b/service/src/http_server.cpp
+index f1d2706..d6ae5af 100644
+--- a/service/src/http_server.cpp
++++ b/service/src/http_server.cpp
+@@ -1,4 +1,5 @@
+ // ADR: docs/adr/ADR-0003-local-runtime-path.md
++// ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
+ // The single-threaded kqueue() event loop: readiness-driven read/write
+ // state machines per connection over one loopback listener, with the
+ // declared idle timeout, close-after-rejection lifecycle, and a bounded
+@@ -38,7 +39,7 @@ constexpr int wake_slice_ms = 250;
+ // lost — the remainder just arrives one round later.
+ constexpr int event_capacity = 64;
+ // Reading pauses while a connection holds this much undelivered output
+-// plus unparsed input, so a stalling peer cannot grow memory unboundedly.
++// while receive windows are synchronously consumed by the bounded decoder.
+ constexpr std::size_t read_pause_cap = 1024 * 1024;
+ // Listen backlog; loopback single-user traffic (ADR-0003 connection model).
+ constexpr int listen_backlog = 16;
+@@ -105,15 +106,14 @@ int set_no_delay(int fd) {
+ // termination phases mute a filter instead of deleting its knote).
+ enum class Interest { absent, enabled, disabled };
+ 
+-// One served connection: its descriptor, decoding progress, buffered
+-// input, queued output, and the lifecycle flags the loop transitions.
++// One served connection: its descriptor, decoding progress, queued output,
++// and the lifecycle flags the loop transitions.
+ // The decoder is held by pointer because its type is deliberately neither
+ // copyable nor movable (service ADR-0004 contract), while connections
+ // relocate when the vector grows or compacts.
+ struct Connection {
+     OwnedFd fd;
+     std::unique_ptr<RequestDecoder> decoder;
+-    std::string incoming;
+     std::string outgoing;
+     std::size_t outgoing_offset = 0;
+     bool closing_after_flush = false;
+@@ -185,13 +185,12 @@ void append_response(Connection &connection, const ParsedMessage &message,
+     queue_response(connection, response);
+ }
+ 
+-// Drives the decoder over buffered input: each complete message becomes
+-// a queued response and the decoder resets for the next; a terminal
+-// ParseError queues the closing rejection; monostate waits for bytes.
+-void drive_messages(Connection &connection, const RequestHandler &handler) {
+-    while (!connection.closing_after_flush) {
+-        const DecodeResult result = connection.decoder->feed(connection.incoming);
+-        connection.incoming.erase(0, result.consumed);
++// KS-2: the decoder owns incomplete fragments. Process every pipeline suffix
++// in this receive window synchronously, before the borrowed stack bytes expire.
++void drive_messages(Connection &connection, std::string_view input, const RequestHandler &handler) {
++    while (!input.empty() && !connection.closing_after_flush) {
++        const DecodeResult result = connection.decoder->feed(input);
++        input.remove_prefix(result.consumed);
+         if (auto *message = std::get_if<ParsedMessage>(&result.outcome)) {
+             append_response(connection, *message, handler);
+             connection.decoder->reset();
+@@ -205,15 +204,14 @@ void drive_messages(Connection &connection, const RequestHandler &handler) {
+     }
+ }
+ 
+-// Reads available bytes and drives the decoder over everything buffered.
++// Feeds received bytes directly; no connection input staging or prefix erase.
+ void read_connection(Connection &connection, const RequestHandler &handler) {
+     char buffer[16384];
+     for (;;) {
+         const auto received = ::recv(connection.fd.get(), buffer, sizeof(buffer), 0);
+         if (received > 0) {
+-            connection.incoming.append(buffer, static_cast<std::size_t>(received));
+             connection.last_activity = std::chrono::steady_clock::now();
+-            drive_messages(connection, handler);
++            drive_messages(connection, {buffer, static_cast<std::size_t>(received)}, handler);
+             if (connection.closing_after_flush ||
+                 static_cast<std::size_t>(received) < sizeof(buffer))
+                 return;
+@@ -254,6 +252,23 @@ void write_connection(Connection &connection) {
+         connection.fd.reset();
+ }
+ 
++// Runs one readiness action with connection-local allocation failure handling.
++// KS-1: try a nonblocking write immediately after a read queues its response;
++// the kernel write filter is needed only for bytes that remain afterward.
++void service_connection(Connection &connection, const RequestHandler &handler, bool readable) {
++    try {
++        if (readable)
++            read_connection(connection, handler);
++        if (connection.fd.valid() && connection.outgoing_offset < connection.outgoing.size())
++            write_connection(connection);
++        if (connection.fd.valid() && connection.peer_eof &&
++            connection.outgoing_offset == connection.outgoing.size())
++            connection.fd.reset();
++    } catch (const std::bad_alloc &) {
++        connection.fd.reset();
++    }
++}
++
+ // Maps a returned event's descriptor to its connection. The kernel
+ // identifies knotes by descriptor while connections relocate inside their
+ // vector, so lookup is by descriptor value; loopback's small connection
+@@ -313,8 +328,7 @@ void build_interest_changes(std::vector<struct kevent> &changes,
+             continue;
+         const bool want_read =
+             !connection.closing_after_flush && !connection.peer_eof &&
+-            connection.incoming.size() + connection.outgoing.size() - connection.outgoing_offset <
+-                read_pause_cap;
++            connection.outgoing.size() - connection.outgoing_offset < read_pause_cap;
+         set_interest(changes, connection.fd.get(), EVFILT_READ, connection.read_interest,
+                      want_read);
+         const bool want_write = connection.outgoing_offset < connection.outgoing.size();
+@@ -433,14 +447,7 @@ int LoopbackServer::serve(RequestHandler handler, std::chrono::milliseconds idle
+             Connection *connection = find_connection(connections, fd);
+             if (connection == nullptr)
+                 continue;
+-            try {
+-                read_connection(*connection, handler);
+-                if (connection->fd.valid() && connection->peer_eof &&
+-                    connection->outgoing_offset == connection->outgoing.size())
+-                    connection->fd.reset();
+-            } catch (const std::bad_alloc &) {
+-                connection->fd.reset();
+-            }
++            service_connection(*connection, handler, true);
+         }
+         // Write pass after the read pass, mirroring the predecessor's
+         // per-connection ordering: a read above may queue the very bytes
+@@ -453,14 +460,7 @@ int LoopbackServer::serve(RequestHandler handler, std::chrono::milliseconds idle
+             Connection *connection = find_connection(connections, static_cast<int>(event.ident));
+             if (connection == nullptr)
+                 continue;
+-            try {
+-                write_connection(*connection);
+-                if (connection->fd.valid() && connection->peer_eof &&
+-                    connection->outgoing_offset == connection->outgoing.size())
+-                    connection->fd.reset();
+-            } catch (const std::bad_alloc &) {
+-                connection->fd.reset();
+-            }
++            service_connection(*connection, handler, false);
+         }
+         for (Connection &connection : connections)
+             if (connection.fd.valid() && progressed - connection.last_activity >= idle_timeout)
+diff --git a/service/src/http_server.hpp b/service/src/http_server.hpp
+index eb7f716..b02906c 100644
+--- a/service/src/http_server.hpp
++++ b/service/src/http_server.hpp
+@@ -1,4 +1,5 @@
+ // ADR: docs/adr/ADR-0003-local-runtime-path.md
++// ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
+ // The loopback event loop (ADR-0003, subtask T-1): one thread multiplexes
+ // a 127.0.0.1 listener and every accepted connection through kqueue(),
+ // driving readiness-based read/write state machines per connection. This
+@@ -49,8 +50,8 @@ class LoopbackServer {
+     // Connection: close is honored the same way (RFC 9110 7.6.1). A
+     // connection with no read or write progress for idle_timeout is
+     // closed. Reading pauses while a connection holds read_pause_cap
+-    // (1 MiB) of undelivered output plus unparsed input, bounding
+-    // per-connection memory without dropping bytes.
++    // (1 MiB) of undelivered output. Receive windows are consumed directly
++    // by the bounded decoder before their stack storage expires.
+     [[nodiscard]] int serve(RequestHandler handler, std::chrono::milliseconds idle_timeout,
+                             const std::atomic_bool &stop);
+ 
+diff --git a/service/tests/http_server_tests.cpp b/service/tests/http_server_tests.cpp
+index 5aa2144..7a33b05 100644
+--- a/service/tests/http_server_tests.cpp
++++ b/service/tests/http_server_tests.cpp
+@@ -1,4 +1,5 @@
+ // ADR: docs/adr/ADR-0003-local-runtime-path.md
++// ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
+ // Drives the loopback event loop with real sockets: three keep-alive
+ // cycles and a pipelined pair on one connection, honoring a request
+ // Connection: close, the idle timeout, the 431/413/400 rejection
+@@ -160,6 +161,25 @@ void check_keepalive(const TestServer &server) {
+     ::close(fd);
+ }
+ 
++// Pipeline suffixes must survive multiple recv windows without reordering.
++void check_large_pipeline(const TestServer &server) {
++    const int fd = connect_client(server.port());
++    check(fd >= 0, "large-pipeline client connects");
++    if (fd < 0)
++        return;
++    std::string requests;
++    std::string expected;
++    for (int i = 0; i < 512; ++i) {
++        requests += "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
++        expected += fixed_wire;
++    }
++    std::string received;
++    check(send_all(fd, requests) && recv_exact(fd, expected.size(), &received) &&
++              received == expected,
++          "512 pipelined requests crossing recv windows preserve every response");
++    ::close(fd);
++}
++
+ // A request Connection: close gets its response and then EOF.
+ void check_request_close(const TestServer &server) {
+     const int fd = connect_client(server.port());
+@@ -339,6 +359,40 @@ void check_port_conflict(std::uint16_t port) {
+     LoopbackServer second;
+     check(second.bind(port) != 0, "binding a busy port returns a coded error");
+ }
++
++// A blocked output must resume through EVFILT_WRITE without blocking a peer.
++void check_slow_reader() {
++    const std::string body(1048576, 'x');
++    TestServer server(std::chrono::seconds(5), [&body](const ParsedMessage &) {
++        return Response{200, BodyFraming::content_length, body, {}, false};
++    });
++    const int slow = connect_client(server.port());
++    const int active = connect_client(server.port());
++    const int window = 65536;
++    check(slow >= 0 && active >= 0, "slow-reader and active clients connect");
++    if (slow < 0 || active < 0) {
++        ::close(slow);
++        ::close(active);
++        return;
++    }
++    check(::setsockopt(slow, SOL_SOCKET, SO_RCVBUF, &window, sizeof(window)) == 0,
++          "slow-reader receive window is bounded");
++    const std::string request = "GET / HTTP/1.1\r\n\r\n";
++    check(send_all(slow, request + request + request), "slow reader queues three large responses");
++    std::this_thread::sleep_for(std::chrono::milliseconds(30));
++    const std::string expected = "HTTP/1.1 200 OK\r\nContent-Length: 1048576\r\n\r\n" + body;
++    std::string received;
++    check(send_all(active, request) && recv_exact(active, expected.size(), &received) &&
++              received == expected,
++          "an active peer progresses while another peer has blocked output");
++    check(recv_exact(slow, expected.size() * 3, &received) &&
++              received == expected + expected + expected,
++          "blocked output resumes with all three response wires intact");
++    ::close(slow);
++    ::close(active);
++    server.stop_and_join();
++    check(server.serve_exit() == 0, "the slow-reader loop stops cleanly");
++}
+ } // namespace
+ 
+ // Executes the real-socket checks against one hosted event loop.
+@@ -352,6 +406,7 @@ int main() {
+     {
+         TestServer server(std::chrono::milliseconds(1000), handler);
+         check_keepalive(server);
++        check_large_pipeline(server);
+         check_request_close(server);
+         check_idle_timeout(server);
+         check_rejections(server);
+@@ -362,6 +417,7 @@ int main() {
+         server.stop_and_join();
+         check(server.serve_exit() == 0, "the loop exits cleanly through its stop flag");
+     }
++    check_slow_reader();
+     std::printf("%zu checks, %d failures\n", checks, failures);
+     return failures ? 1 : 0;
+ }
+diff --git a/service/bench/http_server_bench.cpp b/service/bench/http_server_bench.cpp
+new file mode 100644
+index 0000000..388415c
+--- /dev/null
++++ b/service/bench/http_server_bench.cpp
+@@ -0,0 +1,325 @@
++// ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
++// Measures real loopback request completion with independent wire validation.
++// The single client loop multiplexes nonblocking sockets; the production loop
++// runs on a second thread. CPU and RSS therefore include both participants.
++#include "http_server.hpp"
++#include "routes.hpp"
++#include <algorithm>
++#include <atomic>
++#include <cerrno>
++#include <charconv>
++#include <chrono>
++#include <cstdio>
++#include <cstring>
++#include <fcntl.h>
++#include <iostream>
++#include <netinet/in.h>
++#include <netinet/tcp.h>
++#include <poll.h>
++#include <stdexcept>
++#include <string>
++#include <string_view>
++#include <sys/resource.h>
++#include <sys/socket.h>
++#include <thread>
++#include <unistd.h>
++#include <utility>
++#include <vector>
++
++namespace {
++using Clock = std::chrono::steady_clock;
++using namespace std::chrono_literals;
++
++// Owns one client descriptor, including early validation-failure paths.
++struct Client {
++    int fd = -1;
++    std::size_t sent = 0;
++    std::size_t received = 0;
++    Clock::time_point started{};
++    bool done = false;
++    explicit Client(int socket) : fd(socket) {}
++    ~Client() {
++        if (fd >= 0)
++            ::close(fd);
++    }
++    Client(Client &&other) noexcept : fd(std::exchange(other.fd, -1)) {}
++    Client(const Client &) = delete;
++};
++
++// Stops and joins the real server even if a client operation throws.
++class Server {
++  public:
++    Server() {
++        if (const int error = loop_.bind(0, &port); error != 0)
++            throw std::runtime_error("server bind errno=" + std::to_string(error));
++        worker_ = std::thread(
++            [this] { result_ = loop_.serve(orange::http::handle_request, 30s, stop_); });
++    }
++    ~Server() { finish(); }
++    // Joins before examining the event loop's errno-style result.
++    int finish() {
++        stop_.store(true);
++        if (worker_.joinable())
++            worker_.join();
++        return result_;
++    }
++    std::uint16_t port = 0;
++
++  private:
++    orange::http::LoopbackServer loop_;
++    std::atomic_bool stop_{false};
++    std::thread worker_;
++    int result_ = -1;
++};
++
++// Scenario dimensions keep connection count, pipeline depth and body distinct.
++struct Scenario {
++    const char *name;
++    int active;
++    int idle;
++    int pipeline;
++    std::size_t body;
++};
++constexpr Scenario scenarios[] = {
++    {"health_c1", 1, 0, 1, 0},          {"health_c8", 8, 0, 1, 0},
++    {"health_c64", 64, 0, 1, 0},        {"health_idle64", 1, 64, 1, 0},
++    {"health_pipeline16", 1, 0, 16, 0}, {"echo_1k_c1", 1, 0, 1, 1024},
++    {"echo_1k_c8", 8, 0, 1, 1024},      {"echo_1m_c1", 1, 0, 1, 1048576}};
++
++// Constructs expected protocol bytes without calling the production serializer.
++std::pair<std::string, std::string> wires(const Scenario &scenario) {
++    if (scenario.body == 0)
++        return {"GET /api/health HTTP/1.1\r\nHost: localhost\r\n\r\n",
++                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
++                "Content-Length: 15\r\n\r\n{\"status\":\"ok\"}"};
++    const std::string body(scenario.body, 'x');
++    const std::string hex = scenario.body == 1024 ? "400" : "100000";
++    return {"POST /api/echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: " +
++                std::to_string(scenario.body) + "\r\n\r\n" + body,
++            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n" + hex + "\r\n" + body +
++                "\r\n0\r\n\r\n"};
++}
++
++// Connects with a bounded timeout and identical TCP options for every revision.
++Client connect_to(std::uint16_t port) {
++    Client client(::socket(AF_INET, SOCK_STREAM, 0));
++    if (client.fd < 0)
++        throw std::runtime_error("client socket failed");
++    const timeval timeout{2, 0};
++    const int on = 1;
++    sockaddr_in address{};
++    address.sin_family = AF_INET;
++    address.sin_port = htons(port);
++    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
++    if (::setsockopt(client.fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0 ||
++        ::setsockopt(client.fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) < 0 ||
++        ::setsockopt(client.fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0 ||
++        ::connect(client.fd, reinterpret_cast<sockaddr *>(&address), sizeof(address)) < 0 ||
++        ::fcntl(client.fd, F_SETFL, O_NONBLOCK) < 0)
++        throw std::runtime_error("client setup errno=" + std::to_string(errno));
++    return client;
++}
++
++// Sends a window without blocking; all socket failures remain explicit.
++void send_window(Client &client, const std::string &request) {
++    while (client.sent < request.size()) {
++        if (client.sent == 0)
++            client.started = Clock::now();
++        const auto count =
++            ::send(client.fd, request.data() + client.sent, request.size() - client.sent, 0);
++        if (count > 0)
++            client.sent += static_cast<std::size_t>(count);
++        else if (count < 0 && errno == EINTR)
++            continue;
++        else if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
++            return;
++        else
++            throw std::runtime_error("client send failed");
++    }
++}
++
++// Validates each byte and records completion of each response in a window.
++void receive_window(Client &client, const std::string &response, int pipeline,
++                    std::vector<double> &latencies) {
++    const auto total = response.size() * static_cast<std::size_t>(pipeline);
++    while (client.received < total) {
++        char buffer[16384];
++        const auto count =
++            ::recv(client.fd, buffer, std::min(sizeof(buffer), total - client.received), 0);
++        if (count < 0 && errno == EINTR)
++            continue;
++        if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
++            return;
++        if (count <= 0)
++            throw std::runtime_error("client receive failed or unexpected EOF");
++        std::size_t offset = 0;
++        while (offset < static_cast<std::size_t>(count)) {
++            const auto at = client.received % response.size();
++            const auto length =
++                std::min(response.size() - at, static_cast<std::size_t>(count) - offset);
++            if (std::memcmp(buffer + offset, response.data() + at, length) != 0)
++                throw std::runtime_error("response wire mismatch");
++            offset += length;
++            client.received += length;
++            if (client.received % response.size() == 0)
++                latencies.push_back(
++                    std::chrono::duration<double, std::micro>(Clock::now() - client.started)
++                        .count());
++        }
++    }
++}
++
++// Measures a closed-loop load, then drains every issued request before returning.
++double exercise(std::vector<Client> &clients, const std::string &request,
++                const std::string &response, int pipeline, int duration_ms,
++                std::vector<double> &latencies) {
++    std::vector<pollfd> fds(clients.size());
++    const auto begin = Clock::now();
++    const auto end = begin + std::chrono::milliseconds(duration_ms);
++    std::size_t done = 0;
++    while (done < clients.size()) {
++        if (Clock::now() > end + 3s)
++            throw std::runtime_error("client deadline exceeded");
++        for (std::size_t i = 0; i < clients.size(); ++i) {
++            const auto &client = clients[i];
++            fds[i] = {client.fd,
++                      static_cast<short>(client.done                    ? 0
++                                         : client.sent < request.size() ? POLLOUT
++                                                                        : POLLIN),
++                      0};
++        }
++        if (::poll(fds.data(), fds.size(), 100) < 0) {
++            if (errno == EINTR)
++                continue;
++            throw std::runtime_error("client poll failed");
++        }
++        for (std::size_t i = 0; i < clients.size(); ++i) {
++            auto &client = clients[i];
++            if (client.done)
++                continue;
++            if (fds[i].revents & (POLLERR | POLLNVAL | POLLHUP))
++                throw std::runtime_error("client readiness error");
++            if (fds[i].revents & POLLOUT)
++                send_window(client, request);
++            if (fds[i].revents & POLLIN)
++                receive_window(client, response, pipeline, latencies);
++            if (client.received != response.size() * static_cast<std::size_t>(pipeline))
++                continue;
++            if (Clock::now() >= end) {
++                client.done = true;
++                ++done;
++            } else {
++                client.sent = 0;
++                client.received = 0;
++            }
++        }
++    }
++    return std::chrono::duration<double>(Clock::now() - begin).count();
++}
++
++// Converts process user+system CPU to seconds (client and server combined).
++double cpu_seconds(const rusage &usage) {
++    return usage.ru_utime.tv_sec + usage.ru_stime.tv_sec +
++           (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1000000.0;
++}
++
++// Reports nearest-rank percentiles over validated individual response completions.
++double percentile(const std::vector<double> &samples, std::size_t percent) {
++    return samples[(samples.size() * percent + 99) / 100 - 1];
++}
++
++// Excludes connection setup, warmup and shutdown from timing and CPU deltas.
++void measure(const Scenario &scenario, int duration_ms) {
++    Server server;
++    std::vector<Client> idle;
++    for (int i = 0; i < scenario.idle; ++i)
++        idle.push_back(connect_to(server.port));
++    std::vector<Client> clients;
++    for (int i = 0; i < scenario.active; ++i)
++        clients.push_back(connect_to(server.port));
++    const auto [single_request, response] = wires(scenario);
++    std::string request;
++    for (int i = 0; i < scenario.pipeline; ++i)
++        request += single_request;
++    std::vector<double> latencies;
++    latencies.reserve(262144);
++    exercise(clients, request, response, scenario.pipeline, 20, latencies);
++    for (auto &client : clients) {
++        client.done = false;
++        client.sent = 0;
++        client.received = 0;
++    }
++    latencies.clear();
++    rusage before{}, after{};
++    if (::getrusage(RUSAGE_SELF, &before) != 0)
++        throw std::runtime_error("getrusage failed");
++    const double elapsed =
++        exercise(clients, request, response, scenario.pipeline, duration_ms, latencies);
++    if (::getrusage(RUSAGE_SELF, &after) != 0)
++        throw std::runtime_error("getrusage failed");
++    if (latencies.empty())
++        throw std::runtime_error("no completed requests");
++    std::sort(latencies.begin(), latencies.end());
++    std::cout << "{\"name\":\"" << scenario.name << "\",\"active_connections\":" << scenario.active
++              << ",\"idle_connections\":" << scenario.idle << ",\"pipeline\":" << scenario.pipeline
++              << ",\"body_bytes\":" << scenario.body << ",\"requests\":" << latencies.size()
++              << ",\"elapsed_seconds\":" << elapsed
++              << ",\"requests_per_second\":" << latencies.size() / elapsed
++              << ",\"p50_us\":" << percentile(latencies, 50)
++              << ",\"p95_us\":" << percentile(latencies, 95)
++              << ",\"p99_us\":" << percentile(latencies, 99)
++              << ",\"process_cpu_seconds\":" << cpu_seconds(after) - cpu_seconds(before)
++              << ",\"process_peak_rss_bytes\":" << after.ru_maxrss << ",\"errors\":0}";
++    if (server.finish() != 0)
++        throw std::runtime_error("server loop returned an error");
++}
++
++// Parses a bounded duration so malformed or unbounded invocations fail fast.
++bool duration(std::string_view value, int &result) {
++    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), result);
++    return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size() && result > 0 &&
++           result <= 10000;
++}
++} // namespace
++
++// The CLI exits 2 for invalid options and 1 for socket/wire/deadline failures.
++int main(int argc, char **argv) {
++    int duration_ms = 200;
++    std::string_view selected;
++    for (int i = 1; i < argc; ++i) {
++        const std::string_view argument = argv[i];
++        if (argument == "--quick")
++            duration_ms = 20;
++        else if (argument == "--duration-ms" && i + 1 < argc && duration(argv[i + 1], duration_ms))
++            ++i;
++        else if (argument == "--case" && i + 1 < argc)
++            selected = argv[++i];
++        else {
++            std::fprintf(stderr, "invalid server benchmark invocation\n");
++            return 2;
++        }
++    }
++    if (!selected.empty() &&
++        std::none_of(std::begin(scenarios), std::end(scenarios),
++                     [&](const auto &scenario) { return selected == scenario.name; }))
++        return 2;
++    try {
++        std::cout << "{\"compiler\":\"" << ORANGE_BENCH_COMPILER << "\",\"flags\":\""
++                  << ORANGE_BENCH_FLAGS << "\",\"architecture\":\"" << ORANGE_BENCH_ARCH
++                  << "\",\"cases\":[";
++        bool first = true;
++        for (const auto &scenario : scenarios) {
++            if (!selected.empty() && selected != scenario.name)
++                continue;
++            if (!first)
++                std::cout << ',';
++            first = false;
++            measure(scenario, duration_ms);
++        }
++        std::cout << "]}\n";
++    } catch (const std::exception &error) {
++        std::fprintf(stderr, "server benchmark failed: %s\n", error.what());
++        return 1;
++    }
++    return 0;
++}
+diff --git a/service/bench/verify_server.cmake b/service/bench/verify_server.cmake
+new file mode 100644
+index 0000000..bfaf9c9
+--- /dev/null
++++ b/service/bench/verify_server.cmake
+@@ -0,0 +1,58 @@
++# ADR: docs/adr/ADR-0010-http-server-performance-measurement.md
++# Exercises the real-socket benchmark CLI and its independently checked wires.
++execute_process(COMMAND "${BENCHMARK}" --quick RESULT_VARIABLE status
++                OUTPUT_VARIABLE report ERROR_VARIABLE diagnostic TIMEOUT 45)
++if(NOT status STREQUAL "0")
++    message(FATAL_ERROR "server benchmark failed: ${status}: ${diagnostic}")
++endif()
++string(JSON count LENGTH "${report}" cases)
++if(NOT count EQUAL 8)
++    message(FATAL_ERROR "server benchmark must report all eight scenarios")
++endif()
++foreach(index RANGE 7)
++    foreach(field IN ITEMS requests requests_per_second p50_us p95_us p99_us elapsed_seconds
++                           process_cpu_seconds process_peak_rss_bytes)
++        string(JSON value GET "${report}" cases ${index} ${field})
++        if(NOT value GREATER 0)
++            message(FATAL_ERROR "${field} must be positive")
++        endif()
++    endforeach()
++    string(JSON errors GET "${report}" cases ${index} errors)
++    if(NOT errors EQUAL 0)
++        message(FATAL_ERROR "socket or response validation failed")
++    endif()
++    string(JSON p50 GET "${report}" cases ${index} p50_us)
++    string(JSON p95 GET "${report}" cases ${index} p95_us)
++    string(JSON p99 GET "${report}" cases ${index} p99_us)
++    if(p50 GREATER p95 OR p95 GREATER p99)
++        message(FATAL_ERROR "completion percentiles must be ordered")
++    endif()
++endforeach()
++set(expected_cases health_c1 health_c8 health_c64 health_idle64 health_pipeline16
++                   echo_1k_c1 echo_1k_c8 echo_1m_c1)
++foreach(index RANGE 7)
++    list(GET expected_cases ${index} expected_name)
++    string(JSON actual_name GET "${report}" cases ${index} name)
++    if(NOT actual_name STREQUAL expected_name)
++        message(FATAL_ERROR "scenario identity disagrees with SB-2")
++    endif()
++endforeach()
++foreach(argument IN ITEMS --unknown --duration-ms --case)
++    execute_process(COMMAND "${BENCHMARK}" "${argument}" RESULT_VARIABLE status
++                    OUTPUT_QUIET ERROR_QUIET)
++    if(NOT status STREQUAL "2")
++        message(FATAL_ERROR "invalid invocation must exit 2")
++    endif()
++endforeach()
++foreach(value IN ITEMS 0 -1 10001 nan 0.5)
++    execute_process(COMMAND "${BENCHMARK}" --duration-ms "${value}" RESULT_VARIABLE status
++                    OUTPUT_QUIET ERROR_QUIET)
++    if(NOT status STREQUAL "2")
++        message(FATAL_ERROR "invalid duration must exit 2")
++    endif()
++endforeach()
++execute_process(COMMAND "${BENCHMARK}" --case unknown RESULT_VARIABLE status
++                OUTPUT_QUIET ERROR_QUIET)
++if(NOT status STREQUAL "2")
++    message(FATAL_ERROR "unknown scenario must exit 2")
++endif()
+diff --git a/service/tests/http_server_input_tests.cpp b/service/tests/http_server_input_tests.cpp
+new file mode 100644
+index 0000000..f9e059c
+--- /dev/null
++++ b/service/tests/http_server_input_tests.cpp
+@@ -0,0 +1,98 @@
++// ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
++// KS-2: a fixed 1 MiB body must reach the handler without a separate
++// 8–64 KiB input-staging allocation. Counting is local to the server thread;
++// body storage and the small owned head remain part of normal decoding.
++#include "http_server.hpp"
++#include <algorithm>
++#include <atomic>
++#include <chrono>
++#include <cstdio>
++#include <cstdlib>
++#include <netinet/in.h>
++#include <new>
++#include <string>
++#include <sys/socket.h>
++#include <thread>
++#include <unistd.h>
++
++namespace {
++thread_local bool counting = false;
++thread_local unsigned staging_allocations = 0;
++} // namespace
++
++// Counts the declared staging-size band without changing allocation semantics.
++void *operator new(std::size_t size) {
++    if (counting && size >= 8193 && size <= 65536)
++        ++staging_allocations;
++    if (void *memory = std::malloc(size == 0 ? 1 : size))
++        return memory;
++    throw std::bad_alloc{};
++}
++// Matches ordinary allocations used by standard-library request buffers.
++void operator delete(void *memory) noexcept { std::free(memory); }
++
++// Drives a fragmented body over real sockets and validates owned body bytes.
++int main() {
++    orange::http::LoopbackServer server;
++    std::uint16_t port = 0;
++    if (server.bind(0, &port) != 0)
++        return 1;
++    std::atomic_bool stop{false};
++    std::atomic_bool body_valid{false};
++    unsigned allocations = 0;
++    int result = -1;
++    std::thread worker([&] {
++        counting = true;
++        result = server.serve(
++            [&](const orange::http::ParsedMessage &message) {
++                body_valid.store(message.body.size() == 1048576 &&
++                                 std::all_of(message.body.begin(), message.body.end(),
++                                             [](char c) { return c == 'x'; }));
++                return orange::http::Response{
++                    200, orange::http::BodyFraming::content_length, "ok", {}, false};
++            },
++            std::chrono::seconds(5), stop);
++        counting = false;
++        allocations = staging_allocations;
++    });
++    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
++    sockaddr_in address{};
++    address.sin_family = AF_INET;
++    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
++    address.sin_port = htons(port);
++    const timeval timeout{2, 0};
++    const int on = 1;
++    bool pass = fd >= 0 &&
++                ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == 0 &&
++                ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) == 0 &&
++                ::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) == 0 &&
++                ::connect(fd, reinterpret_cast<sockaddr *>(&address), sizeof(address)) == 0;
++    const std::string request =
++        "POST / HTTP/1.1\r\nContent-Length: 1048576\r\n\r\n" + std::string(1048576, 'x');
++    std::size_t sent = 0;
++    while (pass && sent < request.size()) {
++        const auto count = ::send(fd, request.data() + sent,
++                                  std::min<std::size_t>(16384, request.size() - sent), 0);
++        if (count <= 0)
++            pass = false;
++        else
++            sent += static_cast<std::size_t>(count);
++    }
++    const std::string expected = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
++    std::string received;
++    while (pass && received.size() < expected.size()) {
++        char bytes[128];
++        const auto count = ::recv(fd, bytes, sizeof(bytes), 0);
++        if (count <= 0)
++            pass = false;
++        else
++            received.append(bytes, static_cast<std::size_t>(count));
++    }
++    ::close(fd);
++    stop.store(true);
++    worker.join();
++    std::printf("KS-2: staging_band_allocations=%u body=%s\n", allocations,
++                body_valid.load() ? "Pass" : "Fail");
++    return pass && received == expected && body_valid.load() && result == 0 && allocations == 0 ? 0
++                                                                                                : 1;
++}
+diff --git a/service/tests/http_server_scheduling_tests.cpp b/service/tests/http_server_scheduling_tests.cpp
+new file mode 100644
+index 0000000..b04deb9
+--- /dev/null
++++ b/service/tests/http_server_scheduling_tests.cpp
+@@ -0,0 +1,101 @@
++// ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
++// Interposes only to observe real kevent/send calls: sockets, readiness and
++// production dispatch still execute. KS-1 requires a newly queued response
++// to attempt delivery before another readiness wait on that connection.
++#include "http_server.hpp"
++#include <atomic>
++#include <chrono>
++#include <cstdio>
++#include <cstdlib>
++#include <dlfcn.h>
++#include <netinet/in.h>
++#include <string>
++#include <sys/event.h>
++#include <sys/socket.h>
++#include <thread>
++#include <unistd.h>
++
++namespace {
++thread_local unsigned waits = 0;
++thread_local unsigned queued_at = 0;
++thread_local bool pending = false;
++std::atomic_bool observed{false};
++std::atomic_bool immediate{false};
++
++// Resolves the system implementation, preserving every actual I/O side effect.
++template <class T> T system_call(const char *name) {
++    const auto symbol = ::dlsym(RTLD_NEXT, name);
++    if (!symbol)
++        std::abort();
++    return reinterpret_cast<T>(symbol);
++}
++} // namespace
++
++// Observes readiness boundaries without altering their arguments or results.
++extern "C" int kevent(int queue, const struct kevent *changes, int change_count,
++                      struct kevent *events, int capacity, const timespec *timeout) {
++    static const auto real = system_call<decltype(&::kevent)>("kevent");
++    ++waits;
++    return real(queue, changes, change_count, events, capacity, timeout);
++}
++
++// Observes the first actual send following the handler on the server thread.
++extern "C" ssize_t send(int fd, const void *buffer, size_t size, int flags) {
++    static const auto real = system_call<decltype(&::send)>("send");
++    if (pending) {
++        immediate.store(waits == queued_at);
++        observed.store(true);
++        pending = false;
++    }
++    return real(fd, buffer, size, flags);
++}
++
++// Uses a real client so a scheduling regression is tied to delivered wire bytes.
++int main() {
++    orange::http::LoopbackServer server;
++    std::uint16_t port = 0;
++    if (server.bind(0, &port) != 0)
++        return 1;
++    std::atomic_bool stop{false};
++    int result = -1;
++    std::thread worker([&] {
++        result = server.serve(
++            [](const orange::http::ParsedMessage &) {
++                queued_at = waits;
++                pending = true;
++                return orange::http::Response{
++                    200, orange::http::BodyFraming::content_length, "ok", {}, false};
++            },
++            std::chrono::seconds(5), stop);
++    });
++    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
++    sockaddr_in address{};
++    address.sin_family = AF_INET;
++    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
++    address.sin_port = htons(port);
++    const timeval timeout{2, 0};
++    bool pass = fd >= 0 &&
++                ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == 0 &&
++                ::connect(fd, reinterpret_cast<sockaddr *>(&address), sizeof(address)) == 0;
++    const std::string request = "GET / HTTP/1.1\r\n\r\n";
++    if (pass)
++        pass =
++            ::send(fd, request.data(), request.size(), 0) == static_cast<ssize_t>(request.size());
++    const std::string expected = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
++    std::string received;
++    while (pass && received.size() < expected.size()) {
++        char bytes[128];
++        const auto count = ::recv(fd, bytes, sizeof(bytes), 0);
++        if (count <= 0)
++            pass = false;
++        else
++            received.append(bytes, static_cast<std::size_t>(count));
++    }
++    ::close(fd);
++    stop.store(true);
++    worker.join();
++    pass = pass && received == expected && result == 0 && observed.load() && immediate.load();
++    std::printf("KS-1: wire=%s first_send_before_next_wait=%s\n",
++                received == expected ? "Pass" : "Fail", immediate.load() ? "Pass" : "Fail");
++    return pass ? 0 : 1;
++}

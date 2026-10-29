@@ -1,0 +1,214 @@
+--- a/service/src/http_server.cpp
++++ b/service/src/http_server.cpp
+@@ -10,7 +10,6 @@
+ #include "http_server.hpp"
+ #include "http_syntax.hpp"
+ #include <algorithm>
+-#include <array>
+ #include <cerrno>
+ #include <chrono>
+ #include <cstddef>
+@@ -22,7 +21,7 @@
+ #include <netinet/tcp.h>
+ #include <string>
+ #include <string_view>
+-#include <sys/event.h>
++#include <poll.h>
+ #include <sys/socket.h>
+ #include <unistd.h>
+ #include <utility>
+@@ -34,10 +33,6 @@
+ 
+ // Stop-flag latency and idle-sweep granularity: kevent never waits longer.
+ constexpr int wake_slice_ms = 250;
+-// Upper bound on events harvested per wakeup. Level-triggered filters
+-// keep anything beyond this pending for the next kevent, so nothing is
+-// lost — the remainder just arrives one round later.
+-constexpr int event_capacity = 64;
+ // Reading pauses while a connection holds this much undelivered output
+ // while receive windows are synchronously consumed by the bounded decoder.
+ constexpr std::size_t read_pause_cap = 1024 * 1024;
+@@ -272,16 +267,6 @@
+     }
+ }
+ 
+-// KS-5/KS-6: dispatch in constant time using the kernel's unchanged udata.
+-// A prior event may have closed this connection, but its object remains alive
+-// until the whole batch ends. A reused descriptor therefore cannot revive it.
+-Connection *event_connection(const struct kevent &event) {
+-    auto *connection = static_cast<Connection *>(event.udata);
+-    return connection != nullptr && connection->fd.get() == static_cast<int>(event.ident)
+-               ? connection
+-               : nullptr;
+-}
+-
+ // Wake budget: the soonest idle deadline, capped so stop stays responsive.
+ int next_wake_ms(std::chrono::steady_clock::time_point now, const Connections &connections,
+                  std::chrono::milliseconds idle_timeout) {
+@@ -292,47 +277,19 @@
+     return static_cast<int>(std::clamp(wait.count(), 0LL, static_cast<long long>(wake_slice_ms)));
+ }
+ 
+-// Emits the change that moves one filter toward want_enabled, updating
+-// the tracked state. EV_SET writes through its pointer argument field by
+-// field, so it must never receive a fresh temporary such as the address
+-// of an emplace_back() call — push first, then fill the back element.
+-void set_interest(std::vector<struct kevent> &changes, Connection &connection, short filter,
+-                  Interest &state, bool want_enabled) {
+-    if (state == Interest::absent) {
+-        if (!want_enabled)
+-            return; // never registered: nothing to arm or silence
+-        changes.push_back({});
+-        EV_SET(&changes.back(), connection.fd.get(), filter, EV_ADD, 0, 0, &connection);
+-        state = Interest::enabled;
+-        return;
+-    }
+-    if (want_enabled == (state == Interest::enabled))
+-        return;
+-    changes.push_back({});
+-    EV_SET(&changes.back(), connection.fd.get(), filter, want_enabled ? EV_ENABLE : EV_DISABLE, 0,
+-           0, &connection);
+-    state = want_enabled ? Interest::enabled : Interest::disabled;
+-}
+-
+-// Rebuilds this round's changelist from connection state. The listener is
+-// registered once before the loop, so only per-connection transitions
+-// appear here. Reading is disabled while closing, after peer EOF, or under
+-// backpressure; the write filter exists only while output is pending —
+-// under level-triggered semantics a permanently ready write filter would
+-// spin the loop, exactly the trap the poll predecessor's interest mask
+-// avoided by never registering POLLOUT unconditionally.
+-void build_interest_changes(std::vector<struct kevent> &changes, Connections &connections) {
+-    changes.clear();
++// Rebuilds the disposable poll control's descriptor set from live owners.
++void build_pollfds(std::vector<pollfd> &fds, int listener, const Connections &connections) {
++    fds.clear();
++    fds.push_back({listener, POLLIN, 0});
+     for (const auto &owner : connections) {
+-        Connection &connection = *owner;
+-        if (!connection.fd.valid())
+-            continue;
+-        const bool want_read =
+-            !connection.closing_after_flush && !connection.peer_eof &&
+-            connection.outgoing.size() - connection.outgoing_offset < read_pause_cap;
+-        set_interest(changes, connection, EVFILT_READ, connection.read_interest, want_read);
+-        const bool want_write = connection.outgoing_offset < connection.outgoing.size();
+-        set_interest(changes, connection, EVFILT_WRITE, connection.write_interest, want_write);
++        const auto &connection = *owner;
++        short interest = 0;
++        if (!connection.closing_after_flush && !connection.peer_eof &&
++            connection.outgoing.size() - connection.outgoing_offset < read_pause_cap)
++            interest |= POLLIN;
++        if (connection.outgoing_offset < connection.outgoing.size())
++            interest |= POLLOUT;
++        fds.push_back({connection.fd.get(), interest, 0});
+     }
+ }
+ 
+@@ -399,76 +356,39 @@
+                           const std::atomic_bool &stop) {
+     if (listen_fd_ < 0 || !handler)
+         return EINVAL;
+-    OwnedFd kq{::kqueue()};
+-    if (!kq.valid())
+-        return errno;
+-    // The listener's read filter reports pending handshakes; it is
+-    // registered once before the loop and stays enabled for its lifetime.
+-    struct kevent listener_change{};
+-    EV_SET(&listener_change, listen_fd_, EVFILT_READ, EV_ADD, 0, 0, nullptr);
+-    if (::kevent(kq.get(), &listener_change, 1, nullptr, 0, nullptr) < 0)
+-        return errno;
+     Connections connections;
+-    std::vector<struct kevent> changes;
+-    std::array<struct kevent, event_capacity> events{};
++    std::vector<pollfd> fds;
+     while (!stop.load(std::memory_order_relaxed)) {
+         const auto now = std::chrono::steady_clock::now();
+-        build_interest_changes(changes, connections);
+-        const int slice = next_wake_ms(now, connections, idle_timeout);
+-        const timespec wake{slice / 1000, (slice % 1000) * 1000000};
+-        const int ready = ::kevent(kq.get(), changes.data(), static_cast<int>(changes.size()),
+-                                   events.data(), static_cast<int>(events.size()), &wake);
++        build_pollfds(fds, listen_fd_, connections);
++        const auto polled = connections.size();
++        const int ready = ::poll(fds.data(), fds.size(),
++                                 next_wake_ms(now, connections, idle_timeout));
+         if (ready < 0) {
+             if (errno == EINTR)
+                 continue;
+             return errno;
+         }
+         const auto progressed = std::chrono::steady_clock::now();
+-        // Readiness pass. A rejected changelist entry returns as an event
+-        // with EV_ERROR and the errno in data: a failing listener ends the
+-        // loop, a failing connection loses only itself. Connections
+-        // accepted below have no registered filters yet, so their first
+-        // event arrives from the next round — the polled-set invariant the
+-        // poll predecessor enforced by freezing the vector size.
+-        for (int i = 0; i < ready; ++i) {
+-            const struct kevent &event = events[static_cast<std::size_t>(i)];
+-            const int fd = static_cast<int>(event.ident);
+-            if (event.flags & EV_ERROR) {
+-                if (fd == listen_fd_)
+-                    return EINVAL;
+-                if (Connection *connection = event_connection(event))
+-                    connection->fd.reset();
+-                continue;
+-            }
+-            if (fd == listen_fd_) {
+-                accept_incoming(listen_fd_, connections, progressed);
+-                continue;
+-            }
+-            if (event.filter != EVFILT_READ)
+-                continue;
+-            Connection *connection = event_connection(event);
+-            if (connection == nullptr)
+-                continue;
+-            service_connection(*connection, handler, true);
+-        }
+-        // Write pass after the read pass, mirroring the predecessor's
+-        // per-connection ordering: a read above may queue the very bytes
+-        // this pass flushes, and a connection closed above is skipped by
+-        // the identity guard because its descriptor is already invalid.
+-        for (int i = 0; i < ready; ++i) {
+-            const struct kevent &event = events[static_cast<std::size_t>(i)];
+-            if (event.filter != EVFILT_WRITE)
+-                continue;
+-            Connection *connection = event_connection(event);
+-            if (connection == nullptr)
+-                continue;
+-            service_connection(*connection, handler, false);
++        if (fds[0].revents & (POLLERR | POLLNVAL))
++            return EINVAL;
++        if (fds[0].revents & POLLIN)
++            accept_incoming(listen_fd_, connections, progressed);
++        for (std::size_t i = 0; i < polled; ++i) {
++            Connection &connection = *connections[i];
++            if (fds[i + 1].revents & (POLLERR | POLLNVAL))
++                connection.fd.reset();
++            if (connection.fd.valid() && (fds[i + 1].revents & (POLLIN | POLLHUP)))
++                service_connection(connection, handler, true);
++        }
++        for (std::size_t i = 0; i < polled; ++i) {
++            Connection &connection = *connections[i];
++            if (connection.fd.valid() && (fds[i + 1].revents & POLLOUT))
++                service_connection(connection, handler, false);
+         }
+         for (const auto &connection : connections)
+             if (connection->fd.valid() && progressed - connection->last_activity >= idle_timeout)
+                 connection->fd.reset();
+-        // No returned udata is used after this point. close() has removed the
+-        // kernel filters; only now may closed objects and their addresses die.
+         connections.erase(
+             std::remove_if(connections.begin(), connections.end(),
+                            [](const auto &connection) { return !connection->fd.valid(); }),
+--- a/service/CMakeLists.txt
++++ b/service/CMakeLists.txt
+@@ -91,7 +91,6 @@
+ add_test(NAME http_server_input_tests COMMAND http_server_input_tests)
+ add_executable(http_server_dispatch_tests tests/http_server_dispatch_tests.cpp)
+ target_link_libraries(http_server_dispatch_tests PRIVATE orange_http)
+-add_test(NAME http_server_dispatch_tests COMMAND http_server_dispatch_tests)
+ 
+ # Route dispatch is the first serving rung of ADR-0003 T-2.
+ add_executable(http_routes_tests tests/http_routes_tests.cpp)

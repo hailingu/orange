@@ -1,0 +1,182 @@
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -1,3 +1,4 @@
++<!-- ADR: docs/adr/ADR-0009-http-parser-verification-ci.md -->
+ <!-- Issue Tracking proposal: docs/adr/ADR-0001-orange-issue-governance.md -->
+ <!-- Performance CI routing authorization: docs/reviews/2026-10-16-http-performance.md. -->
+ # orange Agent Guide
+--- a/service/CMakeLists.txt
++++ b/service/CMakeLists.txt
+@@ -1,3 +1,7 @@
++# ADR: docs/adr/ADR-0008-http-parser-benchmarks.md
++# ADR: service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md
++# ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
++# ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ # Governed by docs/adr/ADR-0003-local-runtime-path.md.
+ # Performance authorization: docs/reviews/2026-10-16-http-performance.md.
+ # Owned storage authorization: docs/reviews/2026-10-16-owned-request-storage.md.
+--- a/.github/workflows/http-performance.yml
++++ b/.github/workflows/http-performance.yml
+@@ -1,3 +1,4 @@
++# ADR: docs/adr/ADR-0009-http-parser-verification-ci.md
+ # Authorization: docs/reviews/2026-10-16-http-performance.md.
+ # Disposable parser verification; timings are magnitude guards, not server SLOs.
+ name: HTTP parser correctness and performance
+--- a/service/bench/README.md
++++ b/service/bench/README.md
+@@ -1,3 +1,5 @@
++<!-- ADR: docs/adr/ADR-0008-http-parser-benchmarks.md -->
++<!-- ADR: service/docs/adr/ADR-0004-owned-request-storage.md -->
+ <!-- Authorization: docs/reviews/2026-10-16-http-performance.md. -->
+ <!-- Owned storage: docs/reviews/2026-10-16-owned-request-storage.md. -->
+ # HTTP Parser Benchmarks
+--- a/service/bench/http_parser_bench.cpp
++++ b/service/bench/http_parser_bench.cpp
+@@ -1,3 +1,5 @@
++// ADR: docs/adr/ADR-0008-http-parser-benchmarks.md
++// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ // Authorization: docs/reviews/2026-10-16-http-performance.md.
+ // Allocation optimization: docs/reviews/2026-10-16-owned-request-storage.md.
+ // Reproducible parser-only hot-cache timings; fixtures are built outside timing.
+--- a/service/bench/http_parser_allocations.cpp
++++ b/service/bench/http_parser_allocations.cpp
+@@ -1,3 +1,5 @@
++// ADR: docs/adr/ADR-0008-http-parser-benchmarks.md
++// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ // Authorization: docs/reviews/2026-10-16-owned-request-storage.md.
+ // Counts ordinary allocation calls/bytes separately from latency measurements.
+ #include "http_parser_workloads.hpp"
+--- a/service/bench/http_parser_equivalence.cpp
++++ b/service/bench/http_parser_equivalence.cpp
+@@ -1,3 +1,5 @@
++// ADR: docs/adr/ADR-0008-http-parser-benchmarks.md
++// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ // Authorization: docs/reviews/2026-10-16-owned-request-storage.md.
+ // Emits deterministic semantic results to compare two parser revisions bytewise.
+ #include "http_parser_workloads.hpp"
+--- a/service/bench/http_parser_workloads.hpp
++++ b/service/bench/http_parser_workloads.hpp
+@@ -1,3 +1,5 @@
++// ADR: docs/adr/ADR-0008-http-parser-benchmarks.md
++// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ // Authorization: docs/reviews/2026-10-16-owned-request-storage.md.
+ // Shared deterministic workloads for separate timing and allocation executables.
+ #ifndef ORANGE_HTTP_PARSER_WORKLOADS_HPP
+--- a/service/bench/verify.cmake
++++ b/service/bench/verify.cmake
+@@ -1,3 +1,5 @@
++# ADR: docs/adr/ADR-0008-http-parser-benchmarks.md
++# ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ # Authorization: docs/reviews/2026-10-16-http-performance.md.
+ # Executes the benchmark's public CLI and validates its machine-readable report.
+ execute_process(COMMAND "${BENCHMARK}" --quick RESULT_VARIABLE status
+--- a/service/src/http_chunk_line.cpp
++++ b/service/src/http_chunk_line.cpp
+@@ -1,3 +1,4 @@
++// ADR: service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+ // Performance authorization: docs/reviews/2026-10-16-http-performance.md.
+ #include "http_chunk_line.hpp"
+--- a/service/src/http_chunk_line.hpp
++++ b/service/src/http_chunk_line.hpp
+@@ -1,3 +1,4 @@
++// ADR: service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+ // Performance authorization: docs/reviews/2026-10-16-http-performance.md.
+ // Internal constant-storage validation of streaming chunk-size metadata.
+--- a/service/src/http_request_decoder.cpp
++++ b/service/src/http_request_decoder.cpp
+@@ -1,3 +1,5 @@
++// ADR: service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md
++// ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+ // Performance authorization: docs/reviews/2026-10-16-http-performance.md.
+ // Repair authorization: docs/reviews/2026-10-16-peer-assessment-repairs.md.
+--- a/service/src/http_messages.cpp
++++ b/service/src/http_messages.cpp
+@@ -1,3 +1,5 @@
++// ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
++// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+ // Performance authorization: docs/reviews/2026-10-16-http-performance.md.
+ // Storage authorization: docs/reviews/2026-10-16-owned-request-storage.md.
+--- a/service/src/http_messages.hpp
++++ b/service/src/http_messages.hpp
+@@ -1,12 +1,13 @@
++// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+ // Repair authorization: docs/reviews/2026-10-16-peer-assessment-repairs.md.
+ // Storage authorization: docs/reviews/2026-10-16-owned-request-storage.md.
+ //
+ // Wire-format layer of the orange loopback service: types and functions for
+-// HTTP/1.1 messages (ADR-0003, subtask T-1). Failures are reported as
+-// values, never exceptions, across this module boundary
+-// (docs/development/cpp-development-standard.md, Error Handling And
+-// Contracts).
++// HTTP/1.1 messages (ADR-0003, subtask T-1). Parser entry points report coded
++// errors. Ordinary Request value copies can throw bad_alloc; a proposed narrow
++// value-copy exception is recorded in
++// service/docs/adr/ADR-0004-owned-request-storage.md (Engineering Exceptions).
+ 
+ #ifndef ORANGE_HTTP_MESSAGES_HPP
+ #define ORANGE_HTTP_MESSAGES_HPP
+--- a/service/src/http_head_fields.hpp
++++ b/service/src/http_head_fields.hpp
+@@ -1,3 +1,5 @@
++// ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
++// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ // Authorization: docs/reviews/2026-10-16-http-performance.md.
+ // Storage authorization: docs/reviews/2026-10-16-owned-request-storage.md.
+ // Internal validated offsets shared by complete and fragmented head construction.
+--- a/service/src/http_syntax.hpp
++++ b/service/src/http_syntax.hpp
+@@ -1,3 +1,4 @@
++// ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+ // Performance authorization: docs/reviews/2026-10-16-http-performance.md.
+ // Internal shared octet grammar for request heads, framing and trailers.
+--- a/service/src/http_body_framing.cpp
++++ b/service/src/http_body_framing.cpp
+@@ -1,3 +1,4 @@
++// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+ // Repair authorization: docs/reviews/2026-10-16-peer-assessment-repairs.md.
+ #include "http_body_framing.hpp"
+--- a/service/tests/http_chunk_line_tests.cpp
++++ b/service/tests/http_chunk_line_tests.cpp
+@@ -1,3 +1,4 @@
++// ADR: service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md
+ // Authorization: docs/reviews/2026-10-16-http-performance.md.
+ // Compares span advancement with the established octet grammar and exact boundary.
+ #include "http_chunk_line.hpp"
+--- a/service/tests/http_head_fields_tests.cpp
++++ b/service/tests/http_head_fields_tests.cpp
+@@ -1,3 +1,5 @@
++// ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
++// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ // Authorization: docs/reviews/2026-10-16-http-performance.md.
+ // Pins owned construction from validated offsets despite buffer relocation.
+ #include "http_head_fields.hpp"
+--- a/service/tests/http_message_tests.cpp
++++ b/service/tests/http_message_tests.cpp
+@@ -1,3 +1,4 @@
++// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ // Governed by service/docs/adr/ADR-0001-http-message-test-decomposition.md
+ // and docs/adr/ADR-0003-local-runtime-path.md.
+ //
+--- a/service/tests/http_request_decoder_tests.cpp
++++ b/service/tests/http_request_decoder_tests.cpp
+@@ -1,3 +1,6 @@
++// ADR: service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md
++// ADR: service/docs/adr/ADR-0003-fragmented-head-offsets.md
++// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ // Governed by docs/adr/ADR-0003-local-runtime-path.md.
+ // Repair authorization: docs/reviews/2026-10-16-peer-assessment-repairs.md.
+ // Behavior tests for complete request bodies, distinct from head-only parsing.
+--- a/service/tests/http_request_storage_tests.cpp
++++ b/service/tests/http_request_storage_tests.cpp
+@@ -1,3 +1,4 @@
++// ADR: service/docs/adr/ADR-0004-owned-request-storage.md
+ // Authorization: docs/reviews/2026-10-16-owned-request-storage.md.
+ // Verifies allocation bounds and independently owned request lifetimes.
+ #include "http_request_decoder.hpp"

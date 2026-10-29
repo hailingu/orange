@@ -1,0 +1,705 @@
+{
+  "base_head": "1f876464862c69c5a54424d91fbfd6937983e23c",
+  "source_context": "ADR backfill over preexisting owner-waived dirty workspace; this is not the HEAD source tree. Changes to existing source/configuration/guide files are confined to leading comments; the Request error-policy comment is clarified to match its existing value-copy behavior.",
+  "source_comment_changes": [
+    {
+      "path": "AGENTS.md",
+      "before_sha256": "f8e6975c9872b20de3156c9a4b811b715df39a478656b787b20c7ce052c6c542",
+      "after_sha256": "7dc8760c28709be53e805dbff4c9fd013ae9c7899acc3c0e22d902bc0d071ac8",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/CMakeLists.txt",
+      "before_sha256": "bc2d50349457f76903420b780a8987a82fb345d075fa4f35ff17bcaabd996fd7",
+      "after_sha256": "85b24511582619bba789a937dd8a2f6e59fba710ca187dbe46433aa46dc069c8",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": ".github/workflows/http-performance.yml",
+      "before_sha256": "d3f56eeef5440695ba2973e75afe232ffa588a60463bf775b02af4f760371e8a",
+      "after_sha256": "c467aacc9cb7c578712f6633000cf24c29f95987277e59df3128e6e6033a4d13",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/bench/README.md",
+      "before_sha256": "0efa26b7aa6e6506b08663768a7c1800d1812ea4f1af0902a8d6727976f8d620",
+      "after_sha256": "5b0549714e4b05e62282ac74e79b624515d54f59d433913879b5b4cb3608e849",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/bench/http_parser_bench.cpp",
+      "before_sha256": "b50950045e730ba784a4a8a3f04ae0beebae75481c089cfa0571aa4c63ac13af",
+      "after_sha256": "fe4e97b85859b0cc0be4ed433ee7fd7487eb8a58341099eed29efa603f81a84e",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/bench/http_parser_allocations.cpp",
+      "before_sha256": "af959e33073653f6c4d6d1afcddf346230a81d741cb37c09b8c3d8c051a4d45f",
+      "after_sha256": "800b0e32ef46c7c2bd690ce839079fed82af830ea35fdc4e6726f68b76aacc8a",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/bench/http_parser_equivalence.cpp",
+      "before_sha256": "0215b9eaa5f62c1b088189e7dad62f0509f1006b8979962db06722a173c61d4f",
+      "after_sha256": "80ca8deb964ccca1dfdf42948441912b0c6b07f924b16f0bb793c5dbfa7aeaf4",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/bench/http_parser_workloads.hpp",
+      "before_sha256": "3eb5fbb5605ea31f1c25f93bac1e59223302190cbc712452ab44705fd8210ec1",
+      "after_sha256": "2c38088095b9c85cc13cbf419bf07bdf856b5adecf4260581d51730b73b6fc6c",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/bench/verify.cmake",
+      "before_sha256": "87fbe03112c9575bab72c81b2000363e792bfe6c1c4107914a1b9f676b07991d",
+      "after_sha256": "55fce5b18bb3324ad8ef4f2b4603e747ce20a33f2bd3f8754a9aed0ed904e452",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/src/http_chunk_line.cpp",
+      "before_sha256": "373653ce1656249eb12b75ae87ce5e753eff9061e1ba40105df68882f3d550e6",
+      "after_sha256": "2b5725db86eb11a202d70be365afcd1b8ec3aff7541add8bbbcc7c27b3a5bfa5",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/src/http_chunk_line.hpp",
+      "before_sha256": "b3f9e24a35444d99d2251644625350421344e0c54e23f608ad98cd311f10146f",
+      "after_sha256": "eec30db3862f56fa71bd87e84f42fee174993382a2b2964ceb215272f3b1e56d",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/src/http_request_decoder.cpp",
+      "before_sha256": "0419f04ffdb983fbe229f569807bc3d37413912dedaf75efa3f86cee116f8bf3",
+      "after_sha256": "cc29d7f391a7bbb756ec60b65b33bd74640a1ab06d0c0666d66d611152fdca0e",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/src/http_messages.cpp",
+      "before_sha256": "b09599c21b63db81e1c5dd8bd730f71370d1a697b173b91f0be4467b704213ce",
+      "after_sha256": "b4c6f7de39ef75cd9ac816792f3c2532529ca4e56299b3ebe643273f7692526a",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/src/http_messages.hpp",
+      "before_sha256": "f9e4fa4f76c646e665f439d493bdadbe0282f830f20f4f24c84f4fc5f1511455",
+      "after_sha256": "c647c40bea9eaf4253bd3eb7460bf7bd2e0af994767cf02938cf0c2d069c1a2a",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/src/http_head_fields.hpp",
+      "before_sha256": "6f54a36ff11292d546c03bb38c225f262a5c829116e9afb8c231eba5def0227d",
+      "after_sha256": "6d34dc86d0e737cc159e506a24cae0985df428165bc89d860de8dd6ac6d4bac6",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/src/http_syntax.hpp",
+      "before_sha256": "49a020ef2bd6922d338eecee992c6ac1eea93b149a981e5c62222937fd14293a",
+      "after_sha256": "fd9133654950c49b4f22d55e0f63fc37d82b177d941e6b91c8579da7d3740995",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/src/http_body_framing.cpp",
+      "before_sha256": "c2d7164c777069a499a56323e3dc5f7779e9254ec3adb3ed3cd262e4fa809a77",
+      "after_sha256": "ff3878f7a74a14af36df63f0368b202aa2fe84c4172789f642be126a8a486d69",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/tests/http_chunk_line_tests.cpp",
+      "before_sha256": "d99c7a24fb7f658f8b71af7682616bb1b7696a8313a0ee1ecb9f6e3ab9b1c26a",
+      "after_sha256": "4cfbe2d0f6e1d8f8fcbc6910be9da37a1f2174ec585da94a30546577c8335336",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/tests/http_head_fields_tests.cpp",
+      "before_sha256": "a54a3eeb784e2fde14f69c2f79b1914964bd8cf0014cdc5ed88079aa4acffb36",
+      "after_sha256": "452e0dd4374de7d900e7f36884fef6b757fabdf9906d5e611d375d393bab0725",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/tests/http_message_tests.cpp",
+      "before_sha256": "1d3762985b8cd3160b594f81d5c0445cf9d911e3fc62446b4ef4d4ad7caef216",
+      "after_sha256": "d1891a6480df524862897d2e9144638ef08382750ec1722310597ce8ef5ab994",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/tests/http_request_decoder_tests.cpp",
+      "before_sha256": "80b0d1e99ac4ee2f4b56e2a84daffdeef49ea3fcd77561803233e895eb242f37",
+      "after_sha256": "d54b136fdec125e8dec77c14f6f78393bafd48963bc0fc2327e103d000be8c0d",
+      "outside_leading_comments_unchanged": true
+    },
+    {
+      "path": "service/tests/http_request_storage_tests.cpp",
+      "before_sha256": "d0fc63f65018d7443fc5d77a7a605db7c32003bb289342635d9cfbb375e68988",
+      "after_sha256": "16f2ce9c852e7abda94060c096158afee744c2201ac321416c55c0dbdfdc6949",
+      "outside_leading_comments_unchanged": true
+    }
+  ],
+  "provenance_reverse_patch": "docs/reviews/2026-10-16-adr-provenance.patch",
+  "reconstruction": {
+    "provenance_reversal": "22/22 pre-backfill files byte-identical",
+    "storage_baseline": "10/10 measured parser SHA-256 fingerprints match after provenance and storage reversals",
+    "pre_performance_baseline": "9/9 measured Git blob IDs match after all three reversals"
+  },
+  "historical_evidence": "Existing raw performance/storage JSON and source patches are unchanged; new fingerprints identify only the comment backfill.",
+  "checks": {
+    "governance_tests": "npm test --prefix tools/governance-validator: 303/303 pass; exit 0",
+    "governance_validation": "npm run validate --prefix tools/governance-validator: pass; exit 0",
+    "release": "Apple clang 21.0.0; -O2 -DNDEBUG; ORANGE_BUILD_BENCHMARKS=ON; CMake build and CTest 6/6 pass; no warnings",
+    "sanitizers": "Debug -fsanitize=address,undefined -fno-omit-frame-pointer; ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1; CTest 5/5 pass",
+    "yaml": "ruby YAML.load_file: pass",
+    "clang_format": "clang-format --dry-run --Werror on all 17 affected C++ files: pass",
+    "git_diff_check": "git diff --check: pass",
+    "structured_review": "docs/reviews/2026-10-16-adr-backfill.md; requirement levels, five separate boundaries, authority/lifecycle, stable touchpoints, clause mapping, five risks, exception and reproducible evidence reviewed",
+    "fresh_cli_and_semantics": {
+      "default": {
+        "exit_code": 0,
+        "expected_success": true
+      },
+      "rejected-debug": {
+        "exit_code": 1,
+        "expected_success": false
+      },
+      "--unknown": {
+        "exit_code": 2
+      },
+      "--smoke-scale": {
+        "exit_code": 2
+      },
+      "--smoke-scale 0": {
+        "exit_code": 2
+      },
+      "--smoke-scale -1": {
+        "exit_code": 2
+      },
+      "--smoke-scale nan": {
+        "exit_code": 2
+      },
+      "--smoke-scale inf": {
+        "exit_code": 2
+      },
+      "smoke": {
+        "exit_code": 0,
+        "cases": 16,
+        "repetitions": 11,
+        "scale": 1
+      },
+      "equivalence_current": {
+        "bytes": 66143697,
+        "sha256": "88e1a83e8a654a57f0b3657cc9097f60c82a694965ca28a5c2a1551e8d855f63",
+        "metadata": "semantic cases: 95479; seed: 0x53544F52"
+      }
+    },
+    "smoke_report": {
+      "compiler": "AppleClang 21.0.0.21000334",
+      "flags": " -O2 -DNDEBUG",
+      "architecture": "arm64",
+      "cases": [
+        {
+          "name": "head_long_values_16",
+          "wire_bytes": 2178,
+          "content_bytes": 0,
+          "iterations": 16384,
+          "repetitions": 11,
+          "median_ns": 318.639,
+          "min_ns": 306.516,
+          "max_ns": 333.743,
+          "smoke_limit_ns": 10000.0,
+          "pass": true
+        },
+        {
+          "name": "head_short_fields_1000",
+          "wire_bytes": 8018,
+          "content_bytes": 0,
+          "iterations": 1024,
+          "repetitions": 11,
+          "median_ns": 7917.155,
+          "min_ns": 7785.196,
+          "max_ns": 8081.543,
+          "smoke_limit_ns": 200000.0,
+          "pass": true
+        },
+        {
+          "name": "head_ows_7800",
+          "wire_bytes": 7824,
+          "content_bytes": 0,
+          "iterations": 16384,
+          "repetitions": 11,
+          "median_ns": 411.435,
+          "min_ns": 398.499,
+          "max_ns": 427.096,
+          "smoke_limit_ns": 10000.0,
+          "pass": true
+        },
+        {
+          "name": "head_ows_8_fields",
+          "wire_bytes": 6466,
+          "content_bytes": 0,
+          "iterations": 16384,
+          "repetitions": 11,
+          "median_ns": 455.381,
+          "min_ns": 433.459,
+          "max_ns": 459.272,
+          "smoke_limit_ns": 10000.0,
+          "pass": true
+        },
+        {
+          "name": "head_one_short_field",
+          "wire_bytes": 26,
+          "content_bytes": 0,
+          "iterations": 131072,
+          "repetitions": 11,
+          "median_ns": 53.218,
+          "min_ns": 49.679,
+          "max_ns": 54.634,
+          "smoke_limit_ns": 1000.0,
+          "pass": true
+        },
+        {
+          "name": "head_minimal",
+          "wire_bytes": 18,
+          "content_bytes": 0,
+          "iterations": 262144,
+          "repetitions": 11,
+          "median_ns": 19.209,
+          "min_ns": 18.539,
+          "max_ns": 20.171,
+          "smoke_limit_ns": 500.0,
+          "pass": true
+        },
+        {
+          "name": "head_realistic_434",
+          "wire_bytes": 434,
+          "content_bytes": 0,
+          "iterations": 32768,
+          "repetitions": 11,
+          "median_ns": 192.341,
+          "min_ns": 181.918,
+          "max_ns": 298.063,
+          "smoke_limit_ns": 5000.0,
+          "pass": true
+        },
+        {
+          "name": "head_full_8192",
+          "wire_bytes": 8192,
+          "content_bytes": 0,
+          "iterations": 1024,
+          "repetitions": 11,
+          "median_ns": 5283.609,
+          "min_ns": 4964.314,
+          "max_ns": 5453.735,
+          "smoke_limit_ns": 100000.0,
+          "pass": true
+        },
+        {
+          "name": "head_decoder_whole",
+          "wire_bytes": 434,
+          "content_bytes": 0,
+          "iterations": 32768,
+          "repetitions": 11,
+          "median_ns": 227.008,
+          "min_ns": 218.988,
+          "max_ns": 244.652,
+          "smoke_limit_ns": 10000.0,
+          "pass": true
+        },
+        {
+          "name": "head_decoder_feed17",
+          "wire_bytes": 434,
+          "content_bytes": 0,
+          "iterations": 8192,
+          "repetitions": 11,
+          "median_ns": 827.077,
+          "min_ns": 791.636,
+          "max_ns": 1853.378,
+          "smoke_limit_ns": 20000.0,
+          "pass": true
+        },
+        {
+          "name": "echo_chunked_1024",
+          "wire_bytes": 1083,
+          "content_bytes": 1024,
+          "iterations": 32768,
+          "repetitions": 11,
+          "median_ns": 180.25,
+          "min_ns": 173.061,
+          "max_ns": 219.83,
+          "smoke_limit_ns": 10000.0,
+          "pass": true
+        },
+        {
+          "name": "body_1m_chunk1024",
+          "wire_bytes": 1055796,
+          "content_bytes": 1048576,
+          "iterations": 128,
+          "repetitions": 11,
+          "median_ns": 44271.805,
+          "min_ns": 42021.156,
+          "max_ns": 45059.891,
+          "smoke_limit_ns": 500000.0,
+          "pass": true
+        },
+        {
+          "name": "body_1m_chunk16384",
+          "wire_bytes": 1049140,
+          "content_bytes": 1048576,
+          "iterations": 256,
+          "repetitions": 11,
+          "median_ns": 30119.629,
+          "min_ns": 29097.004,
+          "max_ns": 32014.648,
+          "smoke_limit_ns": 500000.0,
+          "pass": true
+        },
+        {
+          "name": "extension_7000",
+          "wire_bytes": 7055,
+          "content_bytes": 0,
+          "iterations": 4096,
+          "repetitions": 11,
+          "median_ns": 1981.049,
+          "min_ns": 1913.422,
+          "max_ns": 2003.56,
+          "smoke_limit_ns": 200000.0,
+          "pass": true
+        },
+        {
+          "name": "trailer_7000",
+          "wire_bytes": 7057,
+          "content_bytes": 0,
+          "iterations": 4096,
+          "repetitions": 11,
+          "median_ns": 1993.652,
+          "min_ns": 1954.183,
+          "max_ns": 2099.609,
+          "smoke_limit_ns": 200000.0,
+          "pass": true
+        },
+        {
+          "name": "head_cr_dense",
+          "wire_bytes": 8192,
+          "content_bytes": 0,
+          "iterations": 32768,
+          "repetitions": 11,
+          "median_ns": 159.299,
+          "min_ns": 153.253,
+          "max_ns": 166.59,
+          "smoke_limit_ns": 20000.0,
+          "pass": true
+        }
+      ],
+      "checksum": 16511369801
+    },
+    "allocation_report": {
+      "metric": "ordinary operator new calls and requested bytes",
+      "request_size": 64,
+      "cases": [
+        {
+          "name": "head_long_values_16",
+          "calls": 2,
+          "requested_bytes": 2312,
+          "checksum": 2194
+        },
+        {
+          "name": "head_short_fields_1000",
+          "calls": 2,
+          "requested_bytes": 16024,
+          "checksum": 9018
+        },
+        {
+          "name": "head_ows_7800",
+          "calls": 1,
+          "requested_bytes": 8,
+          "checksum": 7825
+        },
+        {
+          "name": "head_ows_8_fields",
+          "calls": 2,
+          "requested_bytes": 96,
+          "checksum": 6474
+        },
+        {
+          "name": "head_one_short_field",
+          "calls": 1,
+          "requested_bytes": 8,
+          "checksum": 27
+        },
+        {
+          "name": "head_minimal",
+          "calls": 0,
+          "requested_bytes": 0,
+          "checksum": 18
+        },
+        {
+          "name": "head_realistic_434",
+          "calls": 2,
+          "requested_bytes": 512,
+          "checksum": 443
+        },
+        {
+          "name": "head_full_8192",
+          "calls": 2,
+          "requested_bytes": 11472,
+          "checksum": 8601
+        },
+        {
+          "name": "head_decoder_whole",
+          "calls": 3,
+          "requested_bytes": 744,
+          "checksum": 443
+        },
+        {
+          "name": "head_decoder_feed17",
+          "calls": 9,
+          "requested_bytes": 2360,
+          "checksum": 443
+        },
+        {
+          "name": "echo_chunked_1024",
+          "calls": 4,
+          "requested_bytes": 1320,
+          "checksum": 2348
+        },
+        {
+          "name": "body_1m_chunk1024",
+          "calls": 14,
+          "requested_bytes": 2112792,
+          "checksum": 2104613
+        },
+        {
+          "name": "body_1m_chunk16384",
+          "calls": 10,
+          "requested_bytes": 2082072,
+          "checksum": 2097957
+        },
+        {
+          "name": "extension_7000",
+          "calls": 3,
+          "requested_bytes": 288,
+          "checksum": 7056
+        },
+        {
+          "name": "trailer_7000",
+          "calls": 3,
+          "requested_bytes": 288,
+          "checksum": 7058
+        },
+        {
+          "name": "head_cr_dense",
+          "calls": 0,
+          "requested_bytes": 0,
+          "checksum": 1
+        }
+      ]
+    }
+  },
+  "remote_ci": "Not run; no remote execution claimed",
+  "cleanup": "Deleted the exact task-owned /private/tmp/orange-adr-backfill-mp0_5klr root, including all Release/Debug/default/config-rejection compiler files, source reconstruction copies and binary semantic streams. Only repository Markdown, JSON and source/provenance patches are retained; preexisting service/build was not used or removed.",
+  "records": [
+    {
+      "path": "docs/adr/ADR-0008-http-parser-benchmarks.md",
+      "sha256": "768e159b4ea345e7532f2d67c6e29f84982e041ad60d6786728f4e40d4e7f048",
+      "decision_status": "Proposed",
+      "implementation_status": "Not Started"
+    },
+    {
+      "path": "service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md",
+      "sha256": "3f29d67e088a32af5b3ecd48e31237d4c57d433cfe81c2dcb2ee30741b38e587",
+      "decision_status": "Proposed",
+      "implementation_status": "Not Started"
+    },
+    {
+      "path": "service/docs/adr/ADR-0003-fragmented-head-offsets.md",
+      "sha256": "a735ae4cadbffd192fb6ff72362a220c78015ba26b1129e9d54f6d46cc6c827f",
+      "decision_status": "Proposed",
+      "implementation_status": "Not Started"
+    },
+    {
+      "path": "docs/adr/ADR-0009-http-parser-verification-ci.md",
+      "sha256": "1bc7c00ca9218c8a9637011e67d58f41c9804a38ebcb64f7f98724c8302c07cb",
+      "decision_status": "Proposed",
+      "implementation_status": "Not Started"
+    },
+    {
+      "path": "service/docs/adr/ADR-0004-owned-request-storage.md",
+      "sha256": "841be08844215063329336174bbdee3e5a7dc511198b26d374e6960ab5abff7a",
+      "decision_status": "Proposed",
+      "implementation_status": "Not Started"
+    }
+  ],
+  "historical_files_unchanged": {
+    "docs/reviews/2026-10-16-http-performance-evidence.json": "7188bbb156a693224724902c8fa4c4984e749cfa53a935d8f5522040b5d87b83",
+    "docs/reviews/2026-10-16-http-performance-source.patch": "293922319ad4f5e8280a06249d1c460cfae2b67e5a9ecbd592476abb03edd09e",
+    "docs/reviews/2026-10-16-owned-request-storage-evidence.json": "62ef4dd5018aded9918e437694d9b3ba22651ccc77fc61f2722bcd768518490b",
+    "docs/reviews/2026-10-16-owned-request-storage-source.patch": "86371eece8b25f8bb2afc4746b5771bcaa372ecad93e59c33a1830288df50a61"
+  },
+  "lifecycle_updates": [
+    {
+      "path": "docs/adr/ADR-0008-http-parser-benchmarks.md",
+      "previous_decision_status": "Proposed",
+      "decision_status": "Accepted",
+      "previous_implementation_status": "Not Started",
+      "implementation_status": "In Progress",
+      "approver": "@hailingu",
+      "approval_time": "2026-10-16T09:10:58Z",
+      "approval_evidence": "Approve",
+      "context": "Immediately preceding assistant response identifies docs/adr/ADR-0008-http-parser-benchmarks.md alone; user responds with exact Approve. The earlier uppercase batch message is not counted.",
+      "before_record_sha256": "768e159b4ea345e7532f2d67c6e29f84982e041ad60d6786728f4e40d4e7f048",
+      "after_record_sha256": "c98eca0eb66ecae6214b81ac7593fba2f25708421b71472880ed153828f61269",
+      "source_fingerprints_rechecked": 22,
+      "source_changes": [],
+      "remaining_completion_condition": "Immutable commit anchor required by existing Stable Implementation Touchpoints; no commit created by this metadata-registration task.",
+      "other_backfilled_records": "Unchanged Proposed / Not Started",
+      "governance_checks": {
+        "tests_command": "npm test --prefix tools/governance-validator",
+        "tests_passed": 303,
+        "tests_failed": 0,
+        "tests_exit_code": 0,
+        "validation_command": "npm run validate --prefix tools/governance-validator",
+        "validation_exit_code": 0,
+        "diff_check_command": "git diff --check",
+        "diff_check_exit_code": 0,
+        "cpp_tests": "Not rerun for approval metadata only; 22 source/configuration fingerprints unchanged from the passing backfill checks.",
+        "cleanup": "Approval-task governance TAP output removed after retaining test count, result and command evidence."
+      },
+      "accepted_stage_template_repair": "Initial accepted-stage validation rejected an Archival body beginning N/A. Retained the same inactive archival procedure as substantive future-lifecycle guidance; no task/decision/check changes."
+    },
+    {
+      "path": "service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md",
+      "previous_decision_status": "Proposed",
+      "decision_status": "Accepted",
+      "previous_implementation_status": "Not Started",
+      "implementation_status": "In Progress",
+      "approver": "@hailingu",
+      "approval_time": "2026-10-16T09:20:11Z",
+      "approval_evidence": "Approve",
+      "context": "Immediately preceding assistant response identifies service/docs/adr/ADR-0002-chunk-metadata-span-advancement.md alone; user responds with exact Approve. The preceding uppercase APPROVE is not counted.",
+      "before_record_sha256": "3f29d67e088a32af5b3ecd48e31237d4c57d433cfe81c2dcb2ee30741b38e587",
+      "after_record_sha256": "6a573551f619d1134726315f3e947d6c8a3e3f5d56c492a07d316212266496dc",
+      "source_fingerprints_rechecked": 22,
+      "historical_evidence_hashes_rechecked": 4,
+      "source_changes": [],
+      "remaining_completion_condition": "Immutable commit anchor required by existing Stable Implementation Touchpoints; no commit created by this metadata-registration task.",
+      "other_backfilled_records": "ADR-0008 unchanged Accepted / In Progress; the other three unchanged Proposed / Not Started",
+      "structured_review": "docs/reviews/2026-10-16-adr-backfill.md; one-record approval, eligible actor, exact evidence, timestamp, requirement levels and status/index consistency; no scope, contract, risk or acceptance-check changes",
+      "accepted_stage_template_maintenance": "Retain archival procedure as inactive future-lifecycle guidance for an Accepted record; no decision scope or check change.",
+      "governance_checks": {
+        "tests_command": "npm test --prefix tools/governance-validator",
+        "tests_passed": 303,
+        "tests_failed": 0,
+        "tests_exit_code": 0,
+        "validation_command": "npm run validate --prefix tools/governance-validator",
+        "validation_exit_code": 0,
+        "diff_check_command": "git diff --check",
+        "diff_check_exit_code": 0,
+        "cpp_tests": "Not rerun for documentation-only approval registration; all 22 source/configuration fingerprints and acceptance conditions unchanged from the passing backfill checks.",
+        "performance": "A/B not rerun; source/configuration and acceptance conditions unchanged; existing raw measurements retained.",
+        "cleanup": "Task-owned document snapshots and governance TAP output removed after retaining test count, result and command evidence."
+      }
+    },
+    {
+      "path": "service/docs/adr/ADR-0003-fragmented-head-offsets.md",
+      "previous_decision_status": "Proposed",
+      "decision_status": "Accepted",
+      "previous_implementation_status": "Not Started",
+      "implementation_status": "In Progress",
+      "approver": "@hailingu",
+      "approval_time": "2026-10-16T09:30:41Z",
+      "approval_evidence": "Approve",
+      "context": "Immediately preceding assistant response identifies service/docs/adr/ADR-0003-fragmented-head-offsets.md alone; user responds with exact Approve.",
+      "before_record_sha256": "a735ae4cadbffd192fb6ff72362a220c78015ba26b1129e9d54f6d46cc6c827f",
+      "after_record_sha256": "32418f4a69c89a32fbf66341bb905e8d1da0440296aed488809db228669fc7f4",
+      "source_fingerprints_rechecked": 22,
+      "historical_evidence_hashes_rechecked": 4,
+      "source_changes": [],
+      "remaining_completion_condition": "Immutable commit anchor required by existing Stable Implementation Touchpoints; no commit created by this metadata-registration task.",
+      "other_backfilled_records": "ADR-0008 and Service ADR-0002 unchanged Accepted / In Progress; the other two unchanged Proposed / Not Started",
+      "structured_review": "docs/reviews/2026-10-16-adr-backfill.md; one-record approval, eligible actor, exact evidence, timestamp, requirement levels and status/index consistency; no scope, contract, risk or acceptance-check changes",
+      "accepted_stage_template_maintenance": "Retain archival procedure as inactive future-lifecycle guidance for an Accepted record; no decision scope or check change.",
+      "governance_checks": {
+        "tests_command": "npm test --prefix tools/governance-validator",
+        "tests_passed": 303,
+        "tests_failed": 0,
+        "tests_exit_code": 0,
+        "validation_command": "npm run validate --prefix tools/governance-validator",
+        "validation_exit_code": 0,
+        "diff_check_command": "git diff --check",
+        "diff_check_exit_code": 0,
+        "cpp_tests": "Not rerun for documentation-only approval registration; all 22 source/configuration fingerprints and acceptance conditions unchanged from the passing backfill checks.",
+        "performance": "A/B not rerun; source/configuration and acceptance conditions unchanged; existing raw measurements retained.",
+        "cleanup": "Task-owned document snapshots and governance TAP output removed after retaining test count, result and command evidence."
+      }
+    },
+    {
+      "path": "docs/adr/ADR-0009-http-parser-verification-ci.md",
+      "previous_decision_status": "Proposed",
+      "decision_status": "Accepted",
+      "previous_implementation_status": "Not Started",
+      "implementation_status": "In Progress",
+      "approver": "@hailingu",
+      "approval_time": "2026-10-16T09:36:20Z",
+      "approval_evidence": "Approve",
+      "context": "Immediately preceding assistant response identifies docs/adr/ADR-0009-http-parser-verification-ci.md alone; user responds with exact Approve.",
+      "before_record_sha256": "1bc7c00ca9218c8a9637011e67d58f41c9804a38ebcb64f7f98724c8302c07cb",
+      "after_record_sha256": "988e44aaf48853fef5f6200af9c3a898de3180f331f7dfea53b8addd51c012c9",
+      "source_fingerprints_rechecked": 22,
+      "historical_evidence_hashes_rechecked": 4,
+      "source_changes": [],
+      "remaining_completion_conditions": [
+        "Hosted AC-3 and all five applicable hosted Risk Coverage Matrix observations remain Not Started; actual run URLs and outcomes required.",
+        "Immutable commit anchor required by existing Stable Implementation Touchpoints; no commit created by this metadata-registration task."
+      ],
+      "remote_ci": "Not run; no push, dispatch or hosted behavior claimed; remote actions remain outside the approved scope of this documentation task.",
+      "other_backfilled_records": "ADR-0008 and Service ADR-0002/ADR-0003 unchanged Accepted / In Progress; Service ADR-0004 unchanged Proposed / Not Started",
+      "structured_review": "docs/reviews/2026-10-16-adr-backfill.md; one-record approval, eligible actor, exact evidence, timestamp, requirement levels, status/index consistency and local/hosted evidence distinction; no scope, contract, risk or acceptance-check changes",
+      "accepted_stage_template_maintenance": "Retain archival procedure as inactive future-lifecycle guidance for an Accepted record; no decision scope or check change.",
+      "governance_checks": {
+        "tests_command": "npm test --prefix tools/governance-validator",
+        "tests_passed": 303,
+        "tests_failed": 0,
+        "tests_exit_code": 0,
+        "validation_command": "npm run validate --prefix tools/governance-validator",
+        "validation_exit_code": 0,
+        "diff_check_command": "git diff --check",
+        "diff_check_exit_code": 0,
+        "yaml_cpp_sanitizers": "Not rerun for documentation-only approval registration; workflow, all 22 source/configuration fingerprints and acceptance conditions unchanged from the passing backfill checks.",
+        "performance": "A/B not rerun; source/configuration and acceptance conditions unchanged; existing raw measurements retained.",
+        "cleanup": "Task-owned document snapshots and governance TAP output removed after retaining test count, result and command evidence."
+      }
+    },
+    {
+      "path": "service/docs/adr/ADR-0004-owned-request-storage.md",
+      "previous_decision_status": "Proposed",
+      "decision_status": "Accepted",
+      "previous_implementation_status": "Not Started",
+      "implementation_status": "In Progress",
+      "approver": "@hailingu",
+      "approval_time": "2026-10-16T09:39:23Z",
+      "approval_evidence": "Approve",
+      "context": "Immediately preceding assistant response identifies service/docs/adr/ADR-0004-owned-request-storage.md alone; user responds with exact Approve.",
+      "before_record_sha256": "841be08844215063329336174bbdee3e5a7dc511198b26d374e6960ab5abff7a",
+      "after_record_sha256": "6860836046d93f69bf7194bf8ff797990dec38fc36ae8a5f44dbf879f5df5f0c",
+      "source_fingerprints_rechecked": 22,
+      "historical_evidence_hashes_rechecked": 4,
+      "source_changes": [],
+      "engineering_exception": "The existing narrow ordinary Request value-copy bad_alloc exception is accepted with this record; scope, owner, controls and review condition are unchanged. Parser entry points retain coded resource_exhausted errors.",
+      "remaining_completion_condition": "Immutable commit anchor required by existing Stable Implementation Touchpoints; no commit created by this metadata-registration task.",
+      "other_backfilled_records": "The four prior individual approvals remain unchanged Accepted / In Progress; all five backfilled records are now individually Accepted. ADR-0009 hosted checks remain outstanding.",
+      "structured_review": "docs/reviews/2026-10-16-adr-backfill.md; one-record approval, eligible actor, exact evidence, timestamp, requirement levels, existing exception acceptance and status/index consistency; no scope, contract, risk or acceptance-check changes",
+      "accepted_stage_template_maintenance": "Retain archival procedure as inactive future-lifecycle guidance; update the existing exception lifecycle wording from proposed to accepted without changing its terms.",
+      "governance_checks": {
+        "tests_command": "npm test --prefix tools/governance-validator",
+        "tests_passed": 303,
+        "tests_failed": 0,
+        "tests_exit_code": 0,
+        "validation_command": "npm run validate --prefix tools/governance-validator",
+        "validation_exit_code": 0,
+        "diff_check_command": "git diff --check",
+        "diff_check_exit_code": 0,
+        "cpp_sanitizers_allocations_equivalence": "Not rerun for documentation-only approval registration; implementation, all 22 source/configuration fingerprints and acceptance conditions unchanged from the passing backfill checks.",
+        "performance": "A/B not rerun; source/configuration and acceptance conditions unchanged; existing raw measurements retained.",
+        "cleanup": "Task-owned document snapshots and governance TAP output removed after retaining test count, result and command evidence."
+      }
+    }
+  ]
+}

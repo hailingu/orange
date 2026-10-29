@@ -1,0 +1,81 @@
+# ADR: docs/adr/ADR-0009-http-parser-verification-ci.md
+# Authorization: docs/reviews/2026-10-16-http-performance.md.
+# Disposable parser verification; timings are magnitude guards, not server SLOs.
+name: HTTP parser correctness and performance
+
+'on':
+  pull_request:
+    branches: [dev]
+    paths: ['service/**', '.github/workflows/http-performance.yml']
+  push:
+    paths: ['service/**', '.github/workflows/http-performance.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: http-parser-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The runner context is unavailable in job-level env (the first hosted
+      # run failed on exactly that), so derive the disposable root from the
+      # RUNNER_TEMP shell variable and persist it for every later step.
+      - name: Locate disposable verification root
+        run: echo "ORANGE_VERIFY_ROOT=$RUNNER_TEMP/orange-http-verification" >> "$GITHUB_ENV"
+      - name: Record toolchain and machine
+        run: |
+          clang++ --version
+          cmake --version
+          uname -m
+          sysctl -n machdep.cpu.brand_string
+      - name: Configure optimized correctness and benchmarks
+        run: >-
+          cmake -S service -B "$ORANGE_VERIFY_ROOT/release"
+          -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_FLAGS_RELEASE='-O2 -DNDEBUG'
+          -DORANGE_BUILD_BENCHMARKS=ON
+      - name: Compile and test
+        run: |
+          cmake --build "$ORANGE_VERIFY_ROOT/release" --parallel 3
+          ctest --test-dir "$ORANGE_VERIFY_ROOT/release" --output-on-failure
+      - name: Performance magnitude guard and report
+        run: |
+          "$ORANGE_VERIFY_ROOT/release/http_parser_bench" --smoke-scale 1 | tee "$ORANGE_VERIFY_ROOT/benchmark.json"
+      - name: Retain measurement in job summary
+        if: always()
+        run: |
+          if test -f "$ORANGE_VERIFY_ROOT/benchmark.json"; then
+            echo 'Parser-only hot-cache benchmark, Apple clang -O2 (not server throughput).' >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat "$ORANGE_VERIFY_ROOT/benchmark.json" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Configure sanitizers
+        run: >-
+          cmake -S service -B "$ORANGE_VERIFY_ROOT/sanitizers"
+          -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'
+          -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'
+      - name: Compile and test sanitizers
+        env:
+          # Apple ASan supports address checks, not LeakSanitizer on this platform.
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1
+        run: |
+          cmake --build "$ORANGE_VERIFY_ROOT/sanitizers" --parallel 3
+          ctest --test-dir "$ORANGE_VERIFY_ROOT/sanitizers" --output-on-failure
+      - name: Delete disposable compiler output
+        if: always()
+        run: cmake -E rm -rf "$ORANGE_VERIFY_ROOT"

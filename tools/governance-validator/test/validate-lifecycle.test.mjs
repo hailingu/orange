@@ -1,12 +1,12 @@
-// ADR: docs/adr/ADR-0002-governance-validator-adoption.md
+// ADR: docs/adr/ADR-0002-governance-validator-adoption.md, docs/adr/ADR-0007-governance-fixture-lifecycle.md
 
 import assert from "node:assert/strict";
 import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { ACCEPTED_RISK_MATRIX_TABLE, RISK_MATRIX_TABLE, acceptedAdr, acceptedOcr, completeOcr, replaceSection, run, validRepository, write } from "./fixtures.mjs";
-test("rejects Pending as a Retirement Reason", () => {
-  const root = validRepository();
+test("rejects Pending as a Retirement Reason", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -31,8 +31,8 @@ test("rejects Pending as a Retirement Reason", () => {
   assert.match(result.stderr, /retired decision requires complete Retired By.*Retirement Reason/i);
 });
 
-test("rejects a Superseded record without a replacement", () => {
-  const root = validRepository();
+test("rejects a Superseded record without a replacement", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -57,8 +57,8 @@ test("rejects a Superseded record without a replacement", () => {
   assert.match(result.stderr, /Superseded requires a Superseded By replacement record path/i);
 });
 
-test("rejects an Author approving their own ADR", () => {
-  const root = validRepository();
+test("rejects an Author approving their own ADR", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -78,8 +78,8 @@ test("rejects an Author approving their own ADR", () => {
   assert.match(result.stderr, /Approver must differ from Author/i);
 });
 
-test("rejects an Author approving their own ADD", () => {
-  const root = validRepository();
+test("rejects an Author approving their own ADD", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -99,8 +99,8 @@ test("rejects an Author approving their own ADD", () => {
   assert.match(result.stderr, /Approver must differ from Author/i);
 });
 
-test("rejects a Current ADD whose Control Flow lacks a Mermaid diagram", () => {
-  const root = validRepository();
+test("rejects a Current ADD whose Control Flow lacks a Mermaid diagram", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   let content = readFileSync(addPath, "utf8")
     .replace("Design Status**: Draft", "Design Status**: Current")
@@ -125,14 +125,14 @@ test("rejects a Current ADD whose Control Flow lacks a Mermaid diagram", () => {
   assert.match(result.stderr, /Control Flow Design requires a Mermaid diagram for a Current ADD/i);
 });
 
-test("requires every conditional design section in a Current ADD", () => {
+test("requires every conditional design section in a Current ADD", (t) => {
   for (const section of [
     "Data Model Design",
     "Control Flow Design",
     "Interaction Flow Design",
     "Assumptions And Open Questions",
   ]) {
-    const root = validRepository();
+    const root = validRepository(t);
     const addPath = join(root, "docs/architecture/ADD-0001-example.md");
     let content = readFileSync(addPath, "utf8")
       .replace("Design Status**: Draft", "Design Status**: Current")
@@ -151,8 +151,8 @@ test("requires every conditional design section in a Current ADD", () => {
   }
 });
 
-test("does not read risk dimensions from inside a code block", () => {
-  const root = validRepository();
+test("does not read risk dimensions from inside a code block", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -167,8 +167,8 @@ test("does not read risk dimensions from inside a code block", () => {
   assert.match(result.stderr, /Risk Coverage Matrix must contain a five-dimension table or N\/A/i);
 });
 
-test("rejects an Accepted ADR missing the Author field", () => {
-  const root = validRepository();
+test("rejects an Accepted ADR missing the Author field", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -188,8 +188,8 @@ test("rejects an Accepted ADR missing the Author field", () => {
   assert.match(result.stderr, /metadata field Author must be a concrete/i);
 });
 
-test("rejects a Complete ADR whose subtask is not Complete", () => {
-  const root = validRepository();
+test("rejects a Complete ADR whose subtask is not Complete", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -218,8 +218,8 @@ test("rejects a Complete ADR whose subtask is not Complete", () => {
   assert.match(result.stderr, /subtask T-1 must be Complete or N\/A/i);
 });
 
-test("rejects a Superseded By target that is not an indexed record", () => {
-  const root = validRepository();
+test("rejects a Superseded By target that is not an indexed record", (t) => {
+  const root = validRepository(t);
   // A translations helper that declares Accepted + a reciprocal Supersedes must
   // not satisfy the replacement requirement.
   write(
@@ -255,8 +255,8 @@ test("rejects a Superseded By target that is not an indexed record", () => {
   assert.match(result.stderr, /Superseded By must name an ADR, ADD, or OCR record/i);
 });
 
-test("rejects supersession checklist and risk contracts with trailing path content", () => {
-  const checklistRoot = validRepository();
+test("rejects supersession checklist and risk contracts with trailing path content", (t) => {
+  const checklistRoot = validRepository(t);
   acceptedOcr(checklistRoot, "0002");
   const checklistPath = join(checklistRoot, "docs/adr/ocr/OCR-0002-example.md");
   writeFileSync(
@@ -270,7 +270,7 @@ test("rejects supersession checklist and risk contracts with trailing path conte
   assert.equal(checklistResult.status, 1);
   assert.match(checklistResult.stderr, /Eligibility item .* must be present and confirmed/i);
 
-  const riskRoot = validRepository();
+  const riskRoot = validRepository(t);
   const riskPath = join(riskRoot, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     riskPath,
@@ -295,7 +295,7 @@ test("rejects supersession checklist and risk contracts with trailing path conte
   assert.equal(riskResult.status, 1);
   assert.match(riskResult.stderr, /Risk Coverage Matrix dimension concurrency - and ordering must be Pass or N\/A/i);
 
-  const root = validRepository();
+  const root = validRepository(t);
   acceptedAdr(root, "0002");
   const activePath = join(root, "docs/adr/ADR-0001-example.md");
   const archivedPath = "docs/adr/archive/ADR-0001-example.md";
@@ -333,8 +333,8 @@ test("rejects supersession checklist and risk contracts with trailing path conte
   assert.match(result.stderr, /Superseded By.*replacement record path/i);
 });
 
-test("rejects a Complete ADR whose Implementation Plan has no table", () => {
-  const root = validRepository();
+test("rejects a Complete ADR whose Implementation Plan has no table", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -359,8 +359,8 @@ test("rejects a Complete ADR whose Implementation Plan has no table", () => {
   assert.match(result.stderr, /Implementation Plan requires a structured table for a terminal record/i);
 });
 
-test("rejects a Complete subtask whose evidence is Pending", () => {
-  const root = validRepository();
+test("rejects a Complete subtask whose evidence is Pending", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -389,8 +389,8 @@ test("rejects a Complete subtask whose evidence is Pending", () => {
   assert.match(result.stderr, /subtask T-1 must record actual completion evidence/i);
 });
 
-test("rejects a Complete OCR whose Task Definition subtask is not Complete", () => {
-  const root = validRepository();
+test("rejects a Complete OCR whose Task Definition subtask is not Complete", (t) => {
+  const root = validRepository(t);
   write(
     root,
     "docs/adr/ocr/OCR-0003-example.md",
@@ -451,8 +451,8 @@ Initial.
   assert.match(result.stderr, /subtask T-2 must be Complete or N\/A/i);
 });
 
-test("rejects an ADD missing the Scope Level metadata", () => {
-  const root = validRepository();
+test("rejects an ADD missing the Scope Level metadata", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -464,8 +464,8 @@ test("rejects an ADD missing the Scope Level metadata", () => {
   assert.match(result.stderr, /missing required metadata field Scope Level/i);
 });
 
-test("rejects a terminal table missing the actual evidence column", () => {
-  const root = validRepository();
+test("rejects a terminal table missing the actual evidence column", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -494,8 +494,8 @@ test("rejects a terminal table missing the actual evidence column", () => {
   assert.match(result.stderr, /Implementation Plan table is missing a required actual evidence column/i);
 });
 
-test("rejects an illegal subtask ID in a terminal Implementation Plan", () => {
-  const root = validRepository();
+test("rejects an illegal subtask ID in a terminal Implementation Plan", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -524,8 +524,8 @@ test("rejects an illegal subtask ID in a terminal Implementation Plan", () => {
   assert.match(result.stderr, /Implementation Plan table has a row with a missing or illegal ID \(T-X\)/i);
 });
 
-test("rejects a terminal Implementation Plan with more than three subtasks", () => {
-  const root = validRepository();
+test("rejects a terminal Implementation Plan with more than three subtasks", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -554,8 +554,8 @@ test("rejects a terminal Implementation Plan with more than three subtasks", () 
   assert.match(result.stderr, /Implementation Plan must have at most 3 subtask rows/i);
 });
 
-test("rejects a Complete OCR whose runbook lacks required stages", () => {
-  const root = validRepository();
+test("rejects a Complete OCR whose runbook lacks required stages", (t) => {
+  const root = validRepository(t);
   write(
     root,
     "docs/adr/ocr/OCR-0004-example.md",
@@ -619,8 +619,8 @@ Initial.
   );
 });
 
-test("rejects a terminal ADR whose risk row is not Pass", () => {
-  const root = validRepository();
+test("rejects a terminal ADR whose risk row is not Pass", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -649,8 +649,8 @@ test("rejects a terminal ADR whose risk row is not Pass", () => {
   assert.match(result.stderr, /Risk Coverage Matrix dimension concurrency and ordering must be Pass or N\/A/i);
 });
 
-test("rejects a terminal risk row whose Pass evidence is a placeholder", () => {
-  const root = validRepository();
+test("rejects a terminal risk row whose Pass evidence is a placeholder", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -679,8 +679,8 @@ test("rejects a terminal risk row whose Pass evidence is a placeholder", () => {
   assert.match(result.stderr, /Risk Coverage Matrix dimension concurrency and ordering Pass row must record stable evidence/i);
 });
 
-test("rejects a Completion Checklist with too few items", () => {
-  const root = validRepository();
+test("rejects a Completion Checklist with too few items", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -709,8 +709,8 @@ test("rejects a Completion Checklist with too few items", () => {
   assert.match(result.stderr, /Completion Checklist item A-2 is missing for a terminal record/i);
 });
 
-test("rejects a Completion Checklist whose A-1 is N/A", () => {
-  const root = validRepository();
+test("rejects a Completion Checklist whose A-1 is N/A", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -739,8 +739,8 @@ test("rejects a Completion Checklist whose A-1 is N/A", () => {
   assert.match(result.stderr, /Completion Checklist item A-1 must be Complete/i);
 });
 
-test("rejects an OCR runbook whose Execute stage is missing", () => {
-  const root = validRepository();
+test("rejects an OCR runbook whose Execute stage is missing", (t) => {
+  const root = validRepository(t);
   completeOcr(root, "0005");
   const ocrPath = join(root, "docs/adr/ocr/OCR-0005-example.md");
   writeFileSync(
@@ -753,8 +753,8 @@ test("rejects an OCR runbook whose Execute stage is missing", () => {
   assert.match(result.stderr, /Core Runbook And Evidence is missing required stage Execute/i);
 });
 
-test("rejects a terminal OCR whose Closure fields are Pending", () => {
-  const root = validRepository();
+test("rejects a terminal OCR whose Closure fields are Pending", (t) => {
+  const root = validRepository(t);
   completeOcr(root, "0006");
   const ocrPath = join(root, "docs/adr/ocr/OCR-0006-example.md");
   writeFileSync(
@@ -769,8 +769,8 @@ test("rejects a terminal OCR whose Closure fields are Pending", () => {
   assert.match(result.stderr, /Closure field Final result must record a complete terminal result/i);
 });
 
-test("rejects an Accepted ADR whose Decision body is Pending", () => {
-  const root = validRepository();
+test("rejects an Accepted ADR whose Decision body is Pending", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -790,8 +790,8 @@ test("rejects an Accepted ADR whose Decision body is Pending", () => {
   assert.match(result.stderr, /Decision body must contain substantive content, not Pending/i);
 });
 
-test("rejects a terminal ADR missing checklist item A-6 through A-8", () => {
-  const root = validRepository();
+test("rejects a terminal ADR missing checklist item A-6 through A-8", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -820,8 +820,8 @@ test("rejects a terminal ADR missing checklist item A-6 through A-8", () => {
   assert.match(result.stderr, /Completion Checklist item A-6 is missing/i);
 });
 
-test("rejects an OCR Closure with Fail in a review field", () => {
-  const root = validRepository();
+test("rejects an OCR Closure with Fail in a review field", (t) => {
+  const root = validRepository(t);
   completeOcr(root, "0007");
   const ocrPath = join(root, "docs/adr/ocr/OCR-0007-example.md");
   writeFileSync(
@@ -837,8 +837,8 @@ test("rejects an OCR Closure with Fail in a review field", () => {
   assert.match(result.stderr, /Closure field Authorization review must be Pass/i);
 });
 
-test("rejects an Accepted OCR with Pending expected evidence", () => {
-  const root = validRepository();
+test("rejects an Accepted OCR with Pending expected evidence", (t) => {
+  const root = validRepository(t);
   acceptedOcr(root, "0008");
   const ocrPath = join(root, "docs/adr/ocr/OCR-0008-example.md");
   writeFileSync(
@@ -854,8 +854,8 @@ test("rejects an Accepted OCR with Pending expected evidence", () => {
   assert.match(result.stderr, /Task Definition has an incomplete cell in a planned column for T-1/i);
 });
 
-test("rejects an Accepted OCR with an unchecked eligibility item", () => {
-  const root = validRepository();
+test("rejects an Accepted OCR with an unchecked eligibility item", (t) => {
+  const root = validRepository(t);
   acceptedOcr(root, "0009");
   const ocrPath = join(root, "docs/adr/ocr/OCR-0009-example.md");
   writeFileSync(
@@ -868,8 +868,8 @@ test("rejects an Accepted OCR with an unchecked eligibility item", () => {
   assert.match(result.stderr, /Eligibility item .*reversible.*must be present and confirmed/i);
 });
 
-test("requires Conditional Extensions in an Accepted OCR", () => {
-  const root = validRepository();
+test("requires Conditional Extensions in an Accepted OCR", (t) => {
+  const root = validRepository(t);
   acceptedOcr(root, "0019");
   const path = join(root, "docs/adr/ocr/OCR-0019-example.md");
   writeFileSync(
@@ -885,8 +885,8 @@ test("requires Conditional Extensions in an Accepted OCR", () => {
   assert.match(result.stderr, /missing conditionally required section Conditional Extensions/i);
 });
 
-test("rejects Pending required content in a retired Complete OCR", () => {
-  const root = validRepository();
+test("rejects Pending required content in a retired Complete OCR", (t) => {
+  const root = validRepository(t);
   completeOcr(root, "0020");
   const activePath = join(root, "docs/adr/ocr/OCR-0020-example.md");
   const archivedRelative = "docs/adr/ocr/archive/OCR-0020-example.md";
@@ -912,8 +912,8 @@ test("rejects Pending required content in a retired Complete OCR", () => {
   assert.match(result.stderr, /Eligibility body must contain substantive content/i);
 });
 
-test("rejects an Accepted ADR with incomplete Acceptance Checks columns", () => {
-  const root = validRepository();
+test("rejects an Accepted ADR with incomplete Acceptance Checks columns", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0010");
   const adrPath = join(root, "docs/adr/ADR-0010-example.md");
   writeFileSync(
@@ -929,8 +929,8 @@ test("rejects an Accepted ADR with incomplete Acceptance Checks columns", () => 
   assert.match(result.stderr, /Acceptance Checks table is missing required template columns/i);
 });
 
-test("rejects an Accepted ADR acceptance check that references an undeclared subtask", () => {
-  const root = validRepository();
+test("rejects an Accepted ADR acceptance check that references an undeclared subtask", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0011");
   const adrPath = join(root, "docs/adr/ADR-0011-example.md");
   writeFileSync(
@@ -943,8 +943,8 @@ test("rejects an Accepted ADR acceptance check that references an undeclared sub
   assert.match(result.stderr, /acceptance check AC-1 Subtask must reference a declared T-N ID/i);
 });
 
-test("rejects Contract-To-Check Traceability referencing an undeclared check", () => {
-  const root = validRepository();
+test("rejects Contract-To-Check Traceability referencing an undeclared check", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0012");
   const adrPath = join(root, "docs/adr/ADR-0012-example.md");
   writeFileSync(
@@ -957,8 +957,8 @@ test("rejects Contract-To-Check Traceability referencing an undeclared check", (
   assert.match(result.stderr, /clause TC-1 must reference declared acceptance check AC-999/i);
 });
 
-test("rejects an Accepted ADR acceptance check with a Pending status", () => {
-  const root = validRepository();
+test("rejects an Accepted ADR acceptance check with a Pending status", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0013");
   const adrPath = join(root, "docs/adr/ADR-0013-example.md");
   const content = replaceSection(
@@ -973,8 +973,8 @@ test("rejects an Accepted ADR acceptance check with a Pending status", () => {
   assert.match(result.stderr, /acceptance check AC-1 has an illegal Status \(Pending\)/i);
 });
 
-test("rejects an Accepted ADR traceability table missing template columns", () => {
-  const root = validRepository();
+test("rejects an Accepted ADR traceability table missing template columns", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0014");
   const adrPath = join(root, "docs/adr/ADR-0014-example.md");
   writeFileSync(
@@ -991,8 +991,8 @@ test("rejects an Accepted ADR traceability table missing template columns", () =
   assert.match(result.stderr, /Contract-To-Check Traceability table is missing required template columns/i);
 });
 
-test("rejects an Accepted ADR risk matrix missing approval-gate columns", () => {
-  const root = validRepository();
+test("rejects an Accepted ADR risk matrix missing approval-gate columns", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0015");
   const adrPath = join(root, "docs/adr/ADR-0015-example.md");
   writeFileSync(
@@ -1009,8 +1009,8 @@ test("rejects an Accepted ADR risk matrix missing approval-gate columns", () => 
   assert.match(result.stderr, /Risk Coverage Matrix table is missing required template columns/i);
 });
 
-test("rejects an Accepted OCR with terse eligibility keywords", () => {
-  const root = validRepository();
+test("rejects an Accepted OCR with terse eligibility keywords", (t) => {
+  const root = validRepository(t);
   acceptedOcr(root, "0016");
   const ocrPath = join(root, "docs/adr/ocr/OCR-0016-example.md");
   writeFileSync(
@@ -1027,8 +1027,8 @@ test("rejects an Accepted OCR with terse eligibility keywords", () => {
   assert.match(result.stderr, /Eligibility item .*boundary.*must be present and confirmed/i);
 });
 
-test("rejects invalid Mermaid in a non-authoritative translation", () => {
-  const root = validRepository();
+test("rejects invalid Mermaid in a non-authoritative translation", (t) => {
+  const root = validRepository(t);
   write(
     root,
     "docs/architecture/translations/zh-CN/ADD-0001-example.md",
@@ -1040,8 +1040,8 @@ test("rejects invalid Mermaid in a non-authoritative translation", () => {
   assert.match(result.stderr, /translations.*invalid Mermaid/i);
 });
 
-test("requires a terminal ADR using legacy traceability to retain risk-matrix fields", () => {
-  const root = validRepository();
+test("requires a terminal ADR using legacy traceability to retain risk-matrix fields", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0017");
   const path = join(root, "docs/adr/ADR-0017-example.md");
   let content = readFileSync(path, "utf8")
@@ -1076,8 +1076,8 @@ test("requires a terminal ADR using legacy traceability to retain risk-matrix fi
   assert.match(result.stderr, /Risk Coverage Matrix table is missing required template columns/i);
 });
 
-test("rejects an OCR eligibility item that negates the required boundary", () => {
-  const root = validRepository();
+test("rejects an OCR eligibility item that negates the required boundary", (t) => {
+  const root = validRepository(t);
   acceptedOcr(root, "0018");
   const path = join(root, "docs/adr/ocr/OCR-0018-example.md");
   writeFileSync(path, readFileSync(path, "utf8").replace(
@@ -1090,8 +1090,8 @@ test("rejects an OCR eligibility item that negates the required boundary", () =>
   assert.match(result.stderr, /Eligibility item .*boundary.*must be present and confirmed/i);
 });
 
-test("requires Stable Implementation Touchpoints for an Accepted Lightweight ADR", () => {
-  const root = validRepository();
+test("requires Stable Implementation Touchpoints for an Accepted Lightweight ADR", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0019");
   const path = join(root, "docs/adr/ADR-0019-example.md");
   let content = readFileSync(path, "utf8")
@@ -1113,8 +1113,8 @@ test("requires Stable Implementation Touchpoints for an Accepted Lightweight ADR
   assert.match(result.stderr, /Stable Implementation Touchpoints requires a structured table/i);
 });
 
-test("requires Stable Implementation Touchpoints for an Accepted Full source ADR", () => {
-  const root = validRepository();
+test("requires Stable Implementation Touchpoints for an Accepted Full source ADR", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0020");
   const path = join(root, "docs/adr/ADR-0020-example.md");
   writeFileSync(path, readFileSync(path, "utf8").replace(
@@ -1127,8 +1127,8 @@ test("requires Stable Implementation Touchpoints for an Accepted Full source ADR
   assert.match(result.stderr, /Stable Implementation Touchpoints requires a structured table/i);
 });
 
-test("rejects a whole-section N/A for Stable Implementation Touchpoints in an active Accepted Full ADR", () => {
-  const root = validRepository();
+test("rejects a whole-section N/A for Stable Implementation Touchpoints in an active Accepted Full ADR", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0022");
   const path = join(root, "docs/adr/ADR-0022-example.md");
   writeFileSync(path, readFileSync(path, "utf8").replace(
@@ -1141,8 +1141,8 @@ test("rejects a whole-section N/A for Stable Implementation Touchpoints in an ac
   assert.match(result.stderr, /Stable Implementation Touchpoints requires a structured table/i);
 });
 
-test("accepts a reasoned N\/A excerpt when a stable touchpoint symbol is present", () => {
-  const root = validRepository();
+test("accepts a reasoned N\/A excerpt when a stable touchpoint symbol is present", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0021");
   const path = join(root, "docs/adr/ADR-0021-example.md");
   let content = readFileSync(path, "utf8")

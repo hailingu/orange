@@ -1,0 +1,265 @@
+--- a/service/src/http_server.cpp
++++ b/service/src/http_server.cpp
+@@ -9,7 +9,6 @@
+ #include "http_server.hpp"
+ #include "http_syntax.hpp"
+ #include <algorithm>
+-#include <array>
+ #include <cerrno>
+ #include <chrono>
+ #include <cstddef>
+@@ -21,7 +20,7 @@
+ #include <netinet/tcp.h>
+ #include <string>
+ #include <string_view>
+-#include <sys/event.h>
++#include <poll.h>
+ #include <sys/socket.h>
+ #include <unistd.h>
+ #include <utility>
+@@ -31,12 +30,8 @@
+ namespace orange::http {
+ namespace {
+ 
+-// Stop-flag latency and idle-sweep granularity: kevent never waits longer.
+-constexpr int wake_slice_ms = 250;
+-// Upper bound on events harvested per wakeup. Level-triggered filters
+-// keep anything beyond this pending for the next kevent, so nothing is
+-// lost — the remainder just arrives one round later.
+-constexpr int event_capacity = 64;
++// Stop-flag latency and idle-sweep granularity.
++constexpr int poll_slice_ms = 250;
+ // Reading pauses while a connection holds this much undelivered output
+ // plus unparsed input, so a stalling peer cannot grow memory unboundedly.
+ constexpr std::size_t read_pause_cap = 1024 * 1024;
+@@ -98,12 +93,6 @@
+     const int on = 1;
+     return ::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0 ? errno : 0;
+ }
+-
+-// Per-filter kernel-interest state, tracked so the changelist emits only
+-// transitions: absent (never registered), enabled (kernel reports
+-// readiness), or disabled (registered but silent — backpressure and
+-// termination phases mute a filter instead of deleting its knote).
+-enum class Interest { absent, enabled, disabled };
+ 
+ // One served connection: its descriptor, decoding progress, buffered
+ // input, queued output, and the lifecycle flags the loop transitions.
+@@ -118,8 +107,6 @@
+     std::size_t outgoing_offset = 0;
+     bool closing_after_flush = false;
+     bool peer_eof = false;
+-    Interest read_interest = Interest::absent;
+-    Interest write_interest = Interest::absent;
+     std::chrono::steady_clock::time_point last_activity{};
+ };
+ 
+@@ -254,72 +241,52 @@
+         connection.fd.reset();
+ }
+ 
+-// Maps a returned event's descriptor to its connection. The kernel
+-// identifies knotes by descriptor while connections relocate inside their
+-// vector, so lookup is by descriptor value; loopback's small connection
+-// count keeps the scan negligible. A miss means the connection died
+-// earlier in this batch (its descriptor is already invalid).
+-Connection *find_connection(std::vector<Connection> &connections, int fd) {
+-    for (Connection &connection : connections)
+-        if (connection.fd.valid() && connection.fd.get() == fd)
+-            return &connection;
+-    return nullptr;
++// One readiness event's worth of connection work; a bad_alloc drops only
++// this connection instead of the whole loop.
++void service_connection(short events, Connection &connection, const RequestHandler &handler) {
++    try {
++        if (events & (POLLNVAL | POLLERR)) {
++            connection.fd.reset();
++            return;
++        }
++        if (events & POLLIN)
++            read_connection(connection, handler);
++        if (connection.fd.valid() && (events & POLLOUT))
++            write_connection(connection);
++        if (connection.fd.valid() && connection.peer_eof &&
++            connection.outgoing_offset == connection.outgoing.size())
++            connection.fd.reset();
++    } catch (const std::bad_alloc &) {
++        connection.fd.reset();
++    }
+ }
+ 
+ // Wake budget: the soonest idle deadline, capped so stop stays responsive.
+ int next_wake_ms(std::chrono::steady_clock::time_point now,
+                  const std::vector<Connection> &connections,
+                  std::chrono::milliseconds idle_timeout) {
+-    auto deadline = now + std::chrono::milliseconds(wake_slice_ms);
++    auto deadline = now + std::chrono::milliseconds(poll_slice_ms);
+     for (const Connection &connection : connections)
+         deadline = std::min(deadline, connection.last_activity + idle_timeout);
+     const auto wait = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+-    return static_cast<int>(std::clamp(wait.count(), 0LL, static_cast<long long>(wake_slice_ms)));
+-}
+-
+-// Emits the change that moves one filter toward want_enabled, updating
+-// the tracked state. EV_SET writes through its pointer argument field by
+-// field, so it must never receive a fresh temporary such as the address
+-// of an emplace_back() call — push first, then fill the back element.
+-void set_interest(std::vector<struct kevent> &changes, int fd, short filter, Interest &state,
+-                  bool want_enabled) {
+-    if (state == Interest::absent) {
+-        if (!want_enabled)
+-            return; // never registered: nothing to arm or silence
+-        changes.push_back({});
+-        EV_SET(&changes.back(), fd, filter, EV_ADD, 0, 0, nullptr);
+-        state = Interest::enabled;
+-        return;
+-    }
+-    if (want_enabled == (state == Interest::enabled))
+-        return;
+-    changes.push_back({});
+-    EV_SET(&changes.back(), fd, filter, want_enabled ? EV_ENABLE : EV_DISABLE, 0, 0, nullptr);
+-    state = want_enabled ? Interest::enabled : Interest::disabled;
+-}
+-
+-// Rebuilds this round's changelist from connection state. The listener is
+-// registered once before the loop, so only per-connection transitions
+-// appear here. Reading is disabled while closing, after peer EOF, or under
+-// backpressure; the write filter exists only while output is pending —
+-// under level-triggered semantics a permanently ready write filter would
+-// spin the loop, exactly the trap the poll predecessor's interest mask
+-// avoided by never registering POLLOUT unconditionally.
+-void build_interest_changes(std::vector<struct kevent> &changes,
+-                            std::vector<Connection> &connections) {
+-    changes.clear();
+-    for (Connection &connection : connections) {
+-        if (!connection.fd.valid())
+-            continue;
+-        const bool want_read =
+-            !connection.closing_after_flush && !connection.peer_eof &&
++    return static_cast<int>(std::clamp(wait.count(), 0LL, static_cast<long long>(poll_slice_ms)));
++}
++
++// Rebuilds the poll set: the listener, then one entry per connection.
++// Reading is off while closing, after peer EOF, or under backpressure.
++void build_poll_fds(std::vector<pollfd> &poll_fds, int listen_fd,
++                    const std::vector<Connection> &connections) {
++    poll_fds.clear();
++    poll_fds.push_back(pollfd{listen_fd, POLLIN, 0});
++    for (const Connection &connection : connections) {
++        short events = 0;
++        if (!connection.closing_after_flush && !connection.peer_eof &&
+             connection.incoming.size() + connection.outgoing.size() - connection.outgoing_offset <
+-                read_pause_cap;
+-        set_interest(changes, connection.fd.get(), EVFILT_READ, connection.read_interest,
+-                     want_read);
+-        const bool want_write = connection.outgoing_offset < connection.outgoing.size();
+-        set_interest(changes, connection.fd.get(), EVFILT_WRITE, connection.write_interest,
+-                     want_write);
++                read_pause_cap)
++            events |= POLLIN;
++        if (connection.outgoing_offset < connection.outgoing.size())
++            events |= POLLOUT;
++        poll_fds.push_back(pollfd{connection.fd.get(), events, 0});
+     }
+ }
+ 
+@@ -383,85 +350,29 @@
+                           const std::atomic_bool &stop) {
+     if (listen_fd_ < 0 || !handler)
+         return EINVAL;
+-    OwnedFd kq{::kqueue()};
+-    if (!kq.valid())
+-        return errno;
+-    // The listener's read filter reports pending handshakes; it is
+-    // registered once before the loop and stays enabled for its lifetime.
+-    struct kevent listener_change{};
+-    EV_SET(&listener_change, listen_fd_, EVFILT_READ, EV_ADD, 0, 0, nullptr);
+-    if (::kevent(kq.get(), &listener_change, 1, nullptr, 0, nullptr) < 0)
+-        return errno;
+     std::vector<Connection> connections;
+-    std::vector<struct kevent> changes;
+-    std::array<struct kevent, event_capacity> events{};
++    std::vector<pollfd> poll_fds;
+     while (!stop.load(std::memory_order_relaxed)) {
+         const auto now = std::chrono::steady_clock::now();
+-        build_interest_changes(changes, connections);
+-        const int slice = next_wake_ms(now, connections, idle_timeout);
+-        const timespec wake{slice / 1000, (slice % 1000) * 1000000};
+-        const int ready = ::kevent(kq.get(), changes.data(), static_cast<int>(changes.size()),
+-                                   events.data(), static_cast<int>(events.size()), &wake);
++        build_poll_fds(poll_fds, listen_fd_, connections);
++        const int ready = ::poll(poll_fds.data(), static_cast<nfds_t>(poll_fds.size()),
++                                 next_wake_ms(now, connections, idle_timeout));
+         if (ready < 0) {
+             if (errno == EINTR)
+                 continue;
+             return errno;
+         }
+         const auto progressed = std::chrono::steady_clock::now();
+-        // Readiness pass. A rejected changelist entry returns as an event
+-        // with EV_ERROR and the errno in data: a failing listener ends the
+-        // loop, a failing connection loses only itself. Connections
+-        // accepted below have no registered filters yet, so their first
+-        // event arrives from the next round — the polled-set invariant the
+-        // poll predecessor enforced by freezing the vector size.
+-        for (int i = 0; i < ready; ++i) {
+-            const struct kevent &event = events[static_cast<std::size_t>(i)];
+-            const int fd = static_cast<int>(event.ident);
+-            if (event.flags & EV_ERROR) {
+-                if (fd == listen_fd_)
+-                    return EINVAL;
+-                if (Connection *connection = find_connection(connections, fd))
+-                    connection->fd.reset();
+-                continue;
+-            }
+-            if (fd == listen_fd_) {
+-                accept_incoming(listen_fd_, connections, progressed);
+-                continue;
+-            }
+-            if (event.filter != EVFILT_READ)
+-                continue;
+-            Connection *connection = find_connection(connections, fd);
+-            if (connection == nullptr)
+-                continue;
+-            try {
+-                read_connection(*connection, handler);
+-                if (connection->fd.valid() && connection->peer_eof &&
+-                    connection->outgoing_offset == connection->outgoing.size())
+-                    connection->fd.reset();
+-            } catch (const std::bad_alloc &) {
+-                connection->fd.reset();
+-            }
+-        }
+-        // Write pass after the read pass, mirroring the predecessor's
+-        // per-connection ordering: a read above may queue the very bytes
+-        // this pass flushes, and a connection closed above is skipped by
+-        // the lookup because its descriptor is already invalid.
+-        for (int i = 0; i < ready; ++i) {
+-            const struct kevent &event = events[static_cast<std::size_t>(i)];
+-            if (event.filter != EVFILT_WRITE)
+-                continue;
+-            Connection *connection = find_connection(connections, static_cast<int>(event.ident));
+-            if (connection == nullptr)
+-                continue;
+-            try {
+-                write_connection(*connection);
+-                if (connection->fd.valid() && connection->peer_eof &&
+-                    connection->outgoing_offset == connection->outgoing.size())
+-                    connection->fd.reset();
+-            } catch (const std::bad_alloc &) {
+-                connection->fd.reset();
+-            }
+-        }
++        const std::size_t polled = connections.size();
++        if (const short listener_events = poll_fds.front().revents;
++            listener_events & (POLLERR | POLLNVAL))
++            return EINVAL;
++        else if (listener_events & POLLIN)
++            accept_incoming(listen_fd_, connections, progressed);
++        // Connections accepted above have no pollfd entry yet; they get
++        // their first readiness event from the next iteration.
++        for (std::size_t i = 0; i < polled; ++i)
++            service_connection(poll_fds[i + 1].revents, connections[i], handler);
+         for (Connection &connection : connections)
+             if (connection.fd.valid() && progressed - connection.last_activity >= idle_timeout)
+                 connection.fd.reset();

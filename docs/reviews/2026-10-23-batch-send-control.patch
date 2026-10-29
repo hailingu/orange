@@ -1,0 +1,27 @@
+--- a/service/src/http_server.cpp
++++ b/service/src/http_server.cpp
+@@ -213,7 +213,8 @@
+     try {
+         if (readable)
+             read_connection(connection, handler);
+-        if (connection.fd.valid() && connection.outgoing_offset < connection.outgoing.size())
++        if (!readable && connection.fd.valid() &&
++            connection.outgoing_offset < connection.outgoing.size())
+             write_connection(connection);
+         if (connection.fd.valid() && connection.peer_eof &&
+             connection.outgoing_offset == connection.outgoing.size())
+@@ -404,6 +405,14 @@
+                 continue;
+             service_connection(connections, *connection, handler, true);
+         }
++        // Disposable experiment: send only after the returned read batch is complete.
++        for (int i = 0; i < ready; ++i) {
++            const auto &event = events[static_cast<std::size_t>(i)];
++            if (event.filter != EVFILT_READ || (event.flags & EV_ERROR))
++                continue;
++            if (Connection *connection = event_connection(event))
++                service_connection(connections, *connection, handler, false);
++        }
+         // Write pass after the read pass, mirroring the predecessor's
+         // per-connection ordering: a read above may queue the very bytes
+         // this pass flushes, and a connection closed above is skipped by

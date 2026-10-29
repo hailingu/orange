@@ -1,0 +1,2442 @@
+{
+  "pairs": 5,
+  "runs": {
+    "before": [
+      {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "head_long_values_16",
+            "wire_bytes": 2178,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 811.829,
+            "min_ns": 696.676,
+            "max_ns": 1123.932,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_short_fields_1000",
+            "wire_bytes": 8018,
+            "content_bytes": 0,
+            "iterations": 512,
+            "repetitions": 11,
+            "median_ns": 11275.961,
+            "min_ns": 11024.414,
+            "max_ns": 12583.008,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_7800",
+            "wire_bytes": 7824,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 379.984,
+            "min_ns": 367.182,
+            "max_ns": 383.031,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_8_fields",
+            "wire_bytes": 6466,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 393.242,
+            "min_ns": 390.752,
+            "max_ns": 414.513,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_one_short_field",
+            "wire_bytes": 26,
+            "content_bytes": 0,
+            "iterations": 131072,
+            "repetitions": 11,
+            "median_ns": 48.886,
+            "min_ns": 46.007,
+            "max_ns": 111.626,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_minimal",
+            "wire_bytes": 18,
+            "content_bytes": 0,
+            "iterations": 262144,
+            "repetitions": 11,
+            "median_ns": 22.818,
+            "min_ns": 22.694,
+            "max_ns": 22.886,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_realistic_434",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 229.594,
+            "min_ns": 223.967,
+            "max_ns": 235.846,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_full_8192",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 1024,
+            "repetitions": 11,
+            "median_ns": 6826.497,
+            "min_ns": 6487.102,
+            "max_ns": 6981.771,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_whole",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 272.219,
+            "min_ns": 269.54,
+            "max_ns": 276.885,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_feed17",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 8192,
+            "repetitions": 11,
+            "median_ns": 800.679,
+            "min_ns": 731.171,
+            "max_ns": 830.795,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "echo_chunked_1024",
+            "wire_bytes": 1083,
+            "content_bytes": 1024,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 165.666,
+            "min_ns": 159.966,
+            "max_ns": 176.003,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk1024",
+            "wire_bytes": 1055796,
+            "content_bytes": 1048576,
+            "iterations": 128,
+            "repetitions": 11,
+            "median_ns": 41284.828,
+            "min_ns": 39434.242,
+            "max_ns": 41555.664,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk16384",
+            "wire_bytes": 1049140,
+            "content_bytes": 1048576,
+            "iterations": 256,
+            "repetitions": 11,
+            "median_ns": 27754.719,
+            "min_ns": 26165.363,
+            "max_ns": 31134.926,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "extension_7000",
+            "wire_bytes": 7055,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1784.841,
+            "min_ns": 1742.645,
+            "max_ns": 1829.783,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "trailer_7000",
+            "wire_bytes": 7057,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1751.709,
+            "min_ns": 1695.526,
+            "max_ns": 1826.904,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_cr_dense",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 65536,
+            "repetitions": 11,
+            "median_ns": 144.339,
+            "min_ns": 139.678,
+            "max_ns": 293.943,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          }
+        ],
+        "checksum": 16101293641
+      },
+      {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "head_long_values_16",
+            "wire_bytes": 2178,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 555.532,
+            "min_ns": 536.814,
+            "max_ns": 589.411,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_short_fields_1000",
+            "wire_bytes": 8018,
+            "content_bytes": 0,
+            "iterations": 512,
+            "repetitions": 11,
+            "median_ns": 11114.99,
+            "min_ns": 10506.998,
+            "max_ns": 11870.523,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_7800",
+            "wire_bytes": 7824,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 375.486,
+            "min_ns": 362.569,
+            "max_ns": 393.153,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_8_fields",
+            "wire_bytes": 6466,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 391.472,
+            "min_ns": 363.146,
+            "max_ns": 400.047,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_one_short_field",
+            "wire_bytes": 26,
+            "content_bytes": 0,
+            "iterations": 131072,
+            "repetitions": 11,
+            "median_ns": 47.705,
+            "min_ns": 44.917,
+            "max_ns": 49.848,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_minimal",
+            "wire_bytes": 18,
+            "content_bytes": 0,
+            "iterations": 262144,
+            "repetitions": 11,
+            "median_ns": 22.994,
+            "min_ns": 21.926,
+            "max_ns": 24.724,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_realistic_434",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 229.964,
+            "min_ns": 226.65,
+            "max_ns": 248.306,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_full_8192",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 1024,
+            "repetitions": 11,
+            "median_ns": 6680.542,
+            "min_ns": 6301.065,
+            "max_ns": 6779.135,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_whole",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 263.481,
+            "min_ns": 258.094,
+            "max_ns": 267.438,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_feed17",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 8192,
+            "repetitions": 11,
+            "median_ns": 767.125,
+            "min_ns": 735.774,
+            "max_ns": 783.488,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "echo_chunked_1024",
+            "wire_bytes": 1083,
+            "content_bytes": 1024,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 160.873,
+            "min_ns": 156.231,
+            "max_ns": 1144.541,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk1024",
+            "wire_bytes": 1055796,
+            "content_bytes": 1048576,
+            "iterations": 128,
+            "repetitions": 11,
+            "median_ns": 40950.195,
+            "min_ns": 38626.305,
+            "max_ns": 44292.641,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk16384",
+            "wire_bytes": 1049140,
+            "content_bytes": 1048576,
+            "iterations": 256,
+            "repetitions": 11,
+            "median_ns": 26502.281,
+            "min_ns": 25885.742,
+            "max_ns": 28335.613,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "extension_7000",
+            "wire_bytes": 7055,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1775.686,
+            "min_ns": 1730.906,
+            "max_ns": 1872.67,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "trailer_7000",
+            "wire_bytes": 7057,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1729.431,
+            "min_ns": 1699.076,
+            "max_ns": 1983.073,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_cr_dense",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 65536,
+            "repetitions": 11,
+            "median_ns": 143.255,
+            "min_ns": 138.111,
+            "max_ns": 145.141,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          }
+        ],
+        "checksum": 16451771977
+      },
+      {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "head_long_values_16",
+            "wire_bytes": 2178,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 548.892,
+            "min_ns": 544.108,
+            "max_ns": 596.723,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_short_fields_1000",
+            "wire_bytes": 8018,
+            "content_bytes": 0,
+            "iterations": 512,
+            "repetitions": 11,
+            "median_ns": 11567.057,
+            "min_ns": 11497.967,
+            "max_ns": 11788.736,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_7800",
+            "wire_bytes": 7824,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 395.208,
+            "min_ns": 371.297,
+            "max_ns": 455.683,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_8_fields",
+            "wire_bytes": 6466,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 401.344,
+            "min_ns": 379.71,
+            "max_ns": 418.574,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_one_short_field",
+            "wire_bytes": 26,
+            "content_bytes": 0,
+            "iterations": 131072,
+            "repetitions": 11,
+            "median_ns": 49.204,
+            "min_ns": 48.205,
+            "max_ns": 50.587,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_minimal",
+            "wire_bytes": 18,
+            "content_bytes": 0,
+            "iterations": 131072,
+            "repetitions": 11,
+            "median_ns": 23.689,
+            "min_ns": 22.274,
+            "max_ns": 108.334,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_realistic_434",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 229.654,
+            "min_ns": 223.737,
+            "max_ns": 235.549,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_full_8192",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 1024,
+            "repetitions": 11,
+            "median_ns": 6768.718,
+            "min_ns": 6735.515,
+            "max_ns": 7313.477,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_whole",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 276.643,
+            "min_ns": 269.267,
+            "max_ns": 286.516,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_feed17",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 8192,
+            "repetitions": 11,
+            "median_ns": 784.348,
+            "min_ns": 765.452,
+            "max_ns": 798.086,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "echo_chunked_1024",
+            "wire_bytes": 1083,
+            "content_bytes": 1024,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 158.19,
+            "min_ns": 153.173,
+            "max_ns": 164.584,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk1024",
+            "wire_bytes": 1055796,
+            "content_bytes": 1048576,
+            "iterations": 128,
+            "repetitions": 11,
+            "median_ns": 42425.453,
+            "min_ns": 40252.93,
+            "max_ns": 44688.805,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk16384",
+            "wire_bytes": 1049140,
+            "content_bytes": 1048576,
+            "iterations": 256,
+            "repetitions": 11,
+            "median_ns": 25818.52,
+            "min_ns": 25603.516,
+            "max_ns": 26900.715,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "extension_7000",
+            "wire_bytes": 7055,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1758.128,
+            "min_ns": 1726.084,
+            "max_ns": 1790.823,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "trailer_7000",
+            "wire_bytes": 7057,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1745.687,
+            "min_ns": 1733.409,
+            "max_ns": 1764.496,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_cr_dense",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 65536,
+            "repetitions": 11,
+            "median_ns": 144.735,
+            "min_ns": 139.118,
+            "max_ns": 148.341,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          }
+        ],
+        "checksum": 16421101129
+      },
+      {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "head_long_values_16",
+            "wire_bytes": 2178,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 550.601,
+            "min_ns": 539.065,
+            "max_ns": 555.957,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_short_fields_1000",
+            "wire_bytes": 8018,
+            "content_bytes": 0,
+            "iterations": 512,
+            "repetitions": 11,
+            "median_ns": 11551.432,
+            "min_ns": 11402.832,
+            "max_ns": 14013.102,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_7800",
+            "wire_bytes": 7824,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 375.142,
+            "min_ns": 363.764,
+            "max_ns": 390.317,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_8_fields",
+            "wire_bytes": 6466,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 394.503,
+            "min_ns": 377.63,
+            "max_ns": 399.679,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_one_short_field",
+            "wire_bytes": 26,
+            "content_bytes": 0,
+            "iterations": 131072,
+            "repetitions": 11,
+            "median_ns": 48.243,
+            "min_ns": 45.863,
+            "max_ns": 48.731,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_minimal",
+            "wire_bytes": 18,
+            "content_bytes": 0,
+            "iterations": 262144,
+            "repetitions": 11,
+            "median_ns": 22.971,
+            "min_ns": 22.234,
+            "max_ns": 25.186,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_realistic_434",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 304.045,
+            "min_ns": 231.571,
+            "max_ns": 2035.54,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_full_8192",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 1024,
+            "repetitions": 11,
+            "median_ns": 6806.07,
+            "min_ns": 6548.868,
+            "max_ns": 7220.947,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_whole",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 274.176,
+            "min_ns": 267.005,
+            "max_ns": 537.565,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_feed17",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 8192,
+            "repetitions": 11,
+            "median_ns": 801.702,
+            "min_ns": 768.01,
+            "max_ns": 805.211,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "echo_chunked_1024",
+            "wire_bytes": 1083,
+            "content_bytes": 1024,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 161.315,
+            "min_ns": 153.4,
+            "max_ns": 163.713,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk1024",
+            "wire_bytes": 1055796,
+            "content_bytes": 1048576,
+            "iterations": 128,
+            "repetitions": 11,
+            "median_ns": 41288.086,
+            "min_ns": 40897.789,
+            "max_ns": 42278.969,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk16384",
+            "wire_bytes": 1049140,
+            "content_bytes": 1048576,
+            "iterations": 256,
+            "repetitions": 11,
+            "median_ns": 26757.648,
+            "min_ns": 26276.043,
+            "max_ns": 27938.312,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "extension_7000",
+            "wire_bytes": 7055,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1772.268,
+            "min_ns": 1719.025,
+            "max_ns": 1799.398,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "trailer_7000",
+            "wire_bytes": 7057,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1753.5,
+            "min_ns": 1715.037,
+            "max_ns": 1872.457,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_cr_dense",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 65536,
+            "repetitions": 11,
+            "median_ns": 143.27,
+            "min_ns": 135.177,
+            "max_ns": 146.715,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          }
+        ],
+        "checksum": 16451771977
+      },
+      {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "head_long_values_16",
+            "wire_bytes": 2178,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 544.243,
+            "min_ns": 521.98,
+            "max_ns": 551.084,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_short_fields_1000",
+            "wire_bytes": 8018,
+            "content_bytes": 0,
+            "iterations": 512,
+            "repetitions": 11,
+            "median_ns": 11411.215,
+            "min_ns": 10726.236,
+            "max_ns": 12473.877,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_7800",
+            "wire_bytes": 7824,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 381.17,
+            "min_ns": 358.144,
+            "max_ns": 382.955,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_8_fields",
+            "wire_bytes": 6466,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 383.72,
+            "min_ns": 365.435,
+            "max_ns": 1592.496,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_one_short_field",
+            "wire_bytes": 26,
+            "content_bytes": 0,
+            "iterations": 131072,
+            "repetitions": 11,
+            "median_ns": 47.262,
+            "min_ns": 45.811,
+            "max_ns": 48.884,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_minimal",
+            "wire_bytes": 18,
+            "content_bytes": 0,
+            "iterations": 262144,
+            "repetitions": 11,
+            "median_ns": 22.899,
+            "min_ns": 22.346,
+            "max_ns": 23.654,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_realistic_434",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 225.114,
+            "min_ns": 216.002,
+            "max_ns": 228.278,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_full_8192",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 1024,
+            "repetitions": 11,
+            "median_ns": 6763.021,
+            "min_ns": 6691.895,
+            "max_ns": 7095.785,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_whole",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 268.557,
+            "min_ns": 267.213,
+            "max_ns": 276.126,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_feed17",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 8192,
+            "repetitions": 11,
+            "median_ns": 765.833,
+            "min_ns": 740.651,
+            "max_ns": 828.705,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "echo_chunked_1024",
+            "wire_bytes": 1083,
+            "content_bytes": 1024,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 164.062,
+            "min_ns": 159.864,
+            "max_ns": 171.86,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk1024",
+            "wire_bytes": 1055796,
+            "content_bytes": 1048576,
+            "iterations": 128,
+            "repetitions": 11,
+            "median_ns": 41603.188,
+            "min_ns": 39106.773,
+            "max_ns": 42522.461,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk16384",
+            "wire_bytes": 1049140,
+            "content_bytes": 1048576,
+            "iterations": 256,
+            "repetitions": 11,
+            "median_ns": 27525.715,
+            "min_ns": 25894.855,
+            "max_ns": 27738.281,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "extension_7000",
+            "wire_bytes": 7055,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1758.423,
+            "min_ns": 1708.486,
+            "max_ns": 1927.633,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "trailer_7000",
+            "wire_bytes": 7057,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1752.594,
+            "min_ns": 1735.301,
+            "max_ns": 6936.646,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_cr_dense",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 65536,
+            "repetitions": 11,
+            "median_ns": 144.305,
+            "min_ns": 137.578,
+            "max_ns": 149.163,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          }
+        ],
+        "checksum": 16451771977
+      }
+    ],
+    "after": [
+      {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "head_long_values_16",
+            "wire_bytes": 2178,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 291.601,
+            "min_ns": 281.855,
+            "max_ns": 301.565,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_short_fields_1000",
+            "wire_bytes": 8018,
+            "content_bytes": 0,
+            "iterations": 1024,
+            "repetitions": 11,
+            "median_ns": 7635.295,
+            "min_ns": 7350.545,
+            "max_ns": 7693.034,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_7800",
+            "wire_bytes": 7824,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 384.42,
+            "min_ns": 366.801,
+            "max_ns": 389.15,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_8_fields",
+            "wire_bytes": 6466,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 415.604,
+            "min_ns": 397.642,
+            "max_ns": 420.853,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_one_short_field",
+            "wire_bytes": 26,
+            "content_bytes": 0,
+            "iterations": 131072,
+            "repetitions": 11,
+            "median_ns": 50.273,
+            "min_ns": 48.934,
+            "max_ns": 51.15,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_minimal",
+            "wire_bytes": 18,
+            "content_bytes": 0,
+            "iterations": 524288,
+            "repetitions": 11,
+            "median_ns": 18.212,
+            "min_ns": 17.938,
+            "max_ns": 18.358,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_realistic_434",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 180.63,
+            "min_ns": 179.488,
+            "max_ns": 183.771,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_full_8192",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 1024,
+            "repetitions": 11,
+            "median_ns": 4867.473,
+            "min_ns": 4623.657,
+            "max_ns": 5271.811,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_whole",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 212.383,
+            "min_ns": 203.293,
+            "max_ns": 217.691,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_feed17",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 8192,
+            "repetitions": 11,
+            "median_ns": 717.524,
+            "min_ns": 696.747,
+            "max_ns": 735.265,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "echo_chunked_1024",
+            "wire_bytes": 1083,
+            "content_bytes": 1024,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 167.561,
+            "min_ns": 160.165,
+            "max_ns": 417.795,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk1024",
+            "wire_bytes": 1055796,
+            "content_bytes": 1048576,
+            "iterations": 128,
+            "repetitions": 11,
+            "median_ns": 39838.867,
+            "min_ns": 37613.93,
+            "max_ns": 43567.711,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk16384",
+            "wire_bytes": 1049140,
+            "content_bytes": 1048576,
+            "iterations": 256,
+            "repetitions": 11,
+            "median_ns": 27464.52,
+            "min_ns": 26536.621,
+            "max_ns": 28277.996,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "extension_7000",
+            "wire_bytes": 7055,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1783.183,
+            "min_ns": 1740.906,
+            "max_ns": 1811.961,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "trailer_7000",
+            "wire_bytes": 7057,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1770.396,
+            "min_ns": 1701.67,
+            "max_ns": 1804.647,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_cr_dense",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 65536,
+            "repetitions": 11,
+            "median_ns": 142.786,
+            "min_ns": 135.891,
+            "max_ns": 145.66,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          }
+        ],
+        "checksum": 17040441929
+      },
+      {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "head_long_values_16",
+            "wire_bytes": 2178,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 298.286,
+            "min_ns": 278.286,
+            "max_ns": 307.348,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_short_fields_1000",
+            "wire_bytes": 8018,
+            "content_bytes": 0,
+            "iterations": 1024,
+            "repetitions": 11,
+            "median_ns": 7654.988,
+            "min_ns": 7327.434,
+            "max_ns": 7721.151,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_7800",
+            "wire_bytes": 7824,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 387.26,
+            "min_ns": 384.153,
+            "max_ns": 391.482,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_8_fields",
+            "wire_bytes": 6466,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 427.681,
+            "min_ns": 402.423,
+            "max_ns": 460.627,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_one_short_field",
+            "wire_bytes": 26,
+            "content_bytes": 0,
+            "iterations": 131072,
+            "repetitions": 11,
+            "median_ns": 52.217,
+            "min_ns": 50.484,
+            "max_ns": 132.264,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_minimal",
+            "wire_bytes": 18,
+            "content_bytes": 0,
+            "iterations": 524288,
+            "repetitions": 11,
+            "median_ns": 18.318,
+            "min_ns": 18.267,
+            "max_ns": 18.685,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_realistic_434",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 176.781,
+            "min_ns": 168.655,
+            "max_ns": 189.246,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_full_8192",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 2048,
+            "repetitions": 11,
+            "median_ns": 4924.622,
+            "min_ns": 4874.837,
+            "max_ns": 5238.851,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_whole",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 213.641,
+            "min_ns": 211.779,
+            "max_ns": 218.515,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_feed17",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 8192,
+            "repetitions": 11,
+            "median_ns": 698.568,
+            "min_ns": 666.01,
+            "max_ns": 724.874,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "echo_chunked_1024",
+            "wire_bytes": 1083,
+            "content_bytes": 1024,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 164.692,
+            "min_ns": 156.64,
+            "max_ns": 169.718,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk1024",
+            "wire_bytes": 1055796,
+            "content_bytes": 1048576,
+            "iterations": 128,
+            "repetitions": 11,
+            "median_ns": 41180.336,
+            "min_ns": 39917.969,
+            "max_ns": 41346.359,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk16384",
+            "wire_bytes": 1049140,
+            "content_bytes": 1048576,
+            "iterations": 256,
+            "repetitions": 11,
+            "median_ns": 26286.621,
+            "min_ns": 25661.949,
+            "max_ns": 26499.512,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "extension_7000",
+            "wire_bytes": 7055,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1754.639,
+            "min_ns": 1720.886,
+            "max_ns": 1973.745,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "trailer_7000",
+            "wire_bytes": 7057,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1743.602,
+            "min_ns": 1698.11,
+            "max_ns": 1828.023,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_cr_dense",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 65536,
+            "repetitions": 11,
+            "median_ns": 142.904,
+            "min_ns": 137.963,
+            "max_ns": 325.412,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          }
+        ],
+        "checksum": 17154938441
+      },
+      {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "head_long_values_16",
+            "wire_bytes": 2178,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 289.589,
+            "min_ns": 282.907,
+            "max_ns": 1127.434,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_short_fields_1000",
+            "wire_bytes": 8018,
+            "content_bytes": 0,
+            "iterations": 1024,
+            "repetitions": 11,
+            "median_ns": 7643.229,
+            "min_ns": 7314.046,
+            "max_ns": 7702.962,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_7800",
+            "wire_bytes": 7824,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 386.106,
+            "min_ns": 359.876,
+            "max_ns": 388.054,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_8_fields",
+            "wire_bytes": 6466,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 423.157,
+            "min_ns": 388.644,
+            "max_ns": 426.303,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_one_short_field",
+            "wire_bytes": 26,
+            "content_bytes": 0,
+            "iterations": 131072,
+            "repetitions": 11,
+            "median_ns": 49.06,
+            "min_ns": 48.664,
+            "max_ns": 51.347,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_minimal",
+            "wire_bytes": 18,
+            "content_bytes": 0,
+            "iterations": 524288,
+            "repetitions": 11,
+            "median_ns": 18.251,
+            "min_ns": 17.791,
+            "max_ns": 18.42,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_realistic_434",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 180.693,
+            "min_ns": 179.568,
+            "max_ns": 183.0,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_full_8192",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 2048,
+            "repetitions": 11,
+            "median_ns": 4900.391,
+            "min_ns": 4756.897,
+            "max_ns": 4999.552,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_whole",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 207.93,
+            "min_ns": 205.807,
+            "max_ns": 210.719,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_feed17",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 8192,
+            "repetitions": 11,
+            "median_ns": 735.992,
+            "min_ns": 724.528,
+            "max_ns": 739.212,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "echo_chunked_1024",
+            "wire_bytes": 1083,
+            "content_bytes": 1024,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 166.899,
+            "min_ns": 158.958,
+            "max_ns": 692.534,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk1024",
+            "wire_bytes": 1055796,
+            "content_bytes": 1048576,
+            "iterations": 128,
+            "repetitions": 11,
+            "median_ns": 41375.328,
+            "min_ns": 39060.867,
+            "max_ns": 47239.586,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk16384",
+            "wire_bytes": 1049140,
+            "content_bytes": 1048576,
+            "iterations": 256,
+            "repetitions": 11,
+            "median_ns": 27237.305,
+            "min_ns": 25827.477,
+            "max_ns": 28610.516,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "extension_7000",
+            "wire_bytes": 7055,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1795.441,
+            "min_ns": 1756.337,
+            "max_ns": 1886.068,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "trailer_7000",
+            "wire_bytes": 7057,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1774.536,
+            "min_ns": 1742.798,
+            "max_ns": 1796.987,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_cr_dense",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 65536,
+            "repetitions": 11,
+            "median_ns": 146.627,
+            "min_ns": 138.103,
+            "max_ns": 148.694,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          }
+        ],
+        "checksum": 17154938441
+      },
+      {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "head_long_values_16",
+            "wire_bytes": 2178,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 289.797,
+            "min_ns": 274.887,
+            "max_ns": 298.05,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_short_fields_1000",
+            "wire_bytes": 8018,
+            "content_bytes": 0,
+            "iterations": 1024,
+            "repetitions": 11,
+            "median_ns": 7794.719,
+            "min_ns": 7513.55,
+            "max_ns": 7927.49,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_7800",
+            "wire_bytes": 7824,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 382.82,
+            "min_ns": 375.921,
+            "max_ns": 421.455,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_8_fields",
+            "wire_bytes": 6466,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 422.462,
+            "min_ns": 404.836,
+            "max_ns": 443.746,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_one_short_field",
+            "wire_bytes": 26,
+            "content_bytes": 0,
+            "iterations": 131072,
+            "repetitions": 11,
+            "median_ns": 49.685,
+            "min_ns": 45.742,
+            "max_ns": 51.027,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_minimal",
+            "wire_bytes": 18,
+            "content_bytes": 0,
+            "iterations": 524288,
+            "repetitions": 11,
+            "median_ns": 18.642,
+            "min_ns": 17.773,
+            "max_ns": 74.883,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_realistic_434",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 177.751,
+            "min_ns": 172.241,
+            "max_ns": 191.739,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_full_8192",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 2048,
+            "repetitions": 11,
+            "median_ns": 4836.792,
+            "min_ns": 4675.089,
+            "max_ns": 5054.911,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_whole",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 207.792,
+            "min_ns": 202.314,
+            "max_ns": 214.162,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_feed17",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 8192,
+            "repetitions": 11,
+            "median_ns": 744.756,
+            "min_ns": 695.572,
+            "max_ns": 760.722,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "echo_chunked_1024",
+            "wire_bytes": 1083,
+            "content_bytes": 1024,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 167.16,
+            "min_ns": 157.293,
+            "max_ns": 176.186,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk1024",
+            "wire_bytes": 1055796,
+            "content_bytes": 1048576,
+            "iterations": 128,
+            "repetitions": 11,
+            "median_ns": 42379.883,
+            "min_ns": 39498.703,
+            "max_ns": 44815.43,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk16384",
+            "wire_bytes": 1049140,
+            "content_bytes": 1048576,
+            "iterations": 256,
+            "repetitions": 11,
+            "median_ns": 27247.07,
+            "min_ns": 26060.059,
+            "max_ns": 27512.859,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "extension_7000",
+            "wire_bytes": 7055,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1826.243,
+            "min_ns": 1744.781,
+            "max_ns": 1869.812,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "trailer_7000",
+            "wire_bytes": 7057,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1795.552,
+            "min_ns": 1727.173,
+            "max_ns": 1897.959,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_cr_dense",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 65536,
+            "repetitions": 11,
+            "median_ns": 144.649,
+            "min_ns": 136.648,
+            "max_ns": 339.802,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          }
+        ],
+        "checksum": 16687633993
+      },
+      {
+        "compiler": "AppleClang 21.0.0.21000334",
+        "flags": " -O2 -DNDEBUG",
+        "architecture": "arm64",
+        "cases": [
+          {
+            "name": "head_long_values_16",
+            "wire_bytes": 2178,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 296.408,
+            "min_ns": 293.285,
+            "max_ns": 305.972,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_short_fields_1000",
+            "wire_bytes": 8018,
+            "content_bytes": 0,
+            "iterations": 1024,
+            "repetitions": 11,
+            "median_ns": 7650.35,
+            "min_ns": 7376.424,
+            "max_ns": 7731.893,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_7800",
+            "wire_bytes": 7824,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 387.558,
+            "min_ns": 383.148,
+            "max_ns": 401.581,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_ows_8_fields",
+            "wire_bytes": 6466,
+            "content_bytes": 0,
+            "iterations": 16384,
+            "repetitions": 11,
+            "median_ns": 415.197,
+            "min_ns": 404.584,
+            "max_ns": 445.386,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_one_short_field",
+            "wire_bytes": 26,
+            "content_bytes": 0,
+            "iterations": 131072,
+            "repetitions": 11,
+            "median_ns": 52.073,
+            "min_ns": 47.917,
+            "max_ns": 52.974,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_minimal",
+            "wire_bytes": 18,
+            "content_bytes": 0,
+            "iterations": 524288,
+            "repetitions": 11,
+            "median_ns": 18.349,
+            "min_ns": 17.873,
+            "max_ns": 19.039,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_realistic_434",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 178.071,
+            "min_ns": 168.139,
+            "max_ns": 185.187,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_full_8192",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 1024,
+            "repetitions": 11,
+            "median_ns": 5009.074,
+            "min_ns": 4931.804,
+            "max_ns": 5199.422,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_whole",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 213.553,
+            "min_ns": 203.691,
+            "max_ns": 1056.112,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_decoder_feed17",
+            "wire_bytes": 434,
+            "content_bytes": 0,
+            "iterations": 8192,
+            "repetitions": 11,
+            "median_ns": 724.274,
+            "min_ns": 691.696,
+            "max_ns": 737.264,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "echo_chunked_1024",
+            "wire_bytes": 1083,
+            "content_bytes": 1024,
+            "iterations": 32768,
+            "repetitions": 11,
+            "median_ns": 165.891,
+            "min_ns": 160.708,
+            "max_ns": 174.183,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk1024",
+            "wire_bytes": 1055796,
+            "content_bytes": 1048576,
+            "iterations": 256,
+            "repetitions": 11,
+            "median_ns": 41343.262,
+            "min_ns": 40075.684,
+            "max_ns": 41801.105,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "body_1m_chunk16384",
+            "wire_bytes": 1049140,
+            "content_bytes": 1048576,
+            "iterations": 256,
+            "repetitions": 11,
+            "median_ns": 27140.461,
+            "min_ns": 26715.82,
+            "max_ns": 27499.023,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "extension_7000",
+            "wire_bytes": 7055,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1773.977,
+            "min_ns": 1718.312,
+            "max_ns": 1796.824,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "trailer_7000",
+            "wire_bytes": 7057,
+            "content_bytes": 0,
+            "iterations": 4096,
+            "repetitions": 11,
+            "median_ns": 1767.029,
+            "min_ns": 1709.646,
+            "max_ns": 2160.37,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          },
+          {
+            "name": "head_cr_dense",
+            "wire_bytes": 8192,
+            "content_bytes": 0,
+            "iterations": 65536,
+            "repetitions": 11,
+            "median_ns": 144.864,
+            "min_ns": 139.774,
+            "max_ns": 146.692,
+            "smoke_limit_ns": 0.0,
+            "pass": true
+          }
+        ],
+        "checksum": 20542517961
+      }
+    ]
+  },
+  "summary": [
+    {
+      "name": "head_long_values_16",
+      "before_ns": 550.601,
+      "after_ns": 291.601,
+      "ratio": 0.5296049226209179,
+      "maximum_ratio": 0.85,
+      "pass": true
+    },
+    {
+      "name": "head_short_fields_1000",
+      "before_ns": 11411.215,
+      "after_ns": 7650.35,
+      "ratio": 0.6704237892284038,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "head_ows_7800",
+      "before_ns": 379.984,
+      "after_ns": 386.106,
+      "ratio": 1.0161112046823024,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "head_ows_8_fields",
+      "before_ns": 393.242,
+      "after_ns": 422.462,
+      "ratio": 1.074305389556558,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "head_one_short_field",
+      "before_ns": 48.243,
+      "after_ns": 50.273,
+      "ratio": 1.042078643533777,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "head_minimal",
+      "before_ns": 22.971,
+      "after_ns": 18.318,
+      "ratio": 0.7974402507509469,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "head_realistic_434",
+      "before_ns": 229.654,
+      "after_ns": 178.071,
+      "ratio": 0.7753881926724551,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "head_full_8192",
+      "before_ns": 6768.718,
+      "after_ns": 4900.391,
+      "ratio": 0.7239762389273714,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "head_decoder_whole",
+      "before_ns": 272.219,
+      "after_ns": 212.383,
+      "ratio": 0.7801916839015646,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "head_decoder_feed17",
+      "before_ns": 784.348,
+      "after_ns": 724.274,
+      "ratio": 0.92340899702683,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "echo_chunked_1024",
+      "before_ns": 161.315,
+      "after_ns": 166.899,
+      "ratio": 1.0346155038279143,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "body_1m_chunk1024",
+      "before_ns": 41288.086,
+      "after_ns": 41343.262,
+      "ratio": 1.001336366137195,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "body_1m_chunk16384",
+      "before_ns": 26757.648,
+      "after_ns": 27237.305,
+      "ratio": 1.0179259776494556,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "extension_7000",
+      "before_ns": 1772.268,
+      "after_ns": 1783.183,
+      "ratio": 1.006158775083678,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "trailer_7000",
+      "before_ns": 1751.709,
+      "after_ns": 1770.396,
+      "ratio": 1.0106678677794085,
+      "maximum_ratio": 1.1,
+      "pass": true
+    },
+    {
+      "name": "head_cr_dense",
+      "before_ns": 144.305,
+      "after_ns": 144.649,
+      "ratio": 1.0023838397837912,
+      "maximum_ratio": 1.1,
+      "pass": true
+    }
+  ],
+  "allocations": {
+    "before": {
+      "metric": "ordinary operator new calls and requested bytes",
+      "request_size": 96,
+      "cases": [
+        {
+          "name": "head_long_values_16",
+          "calls": 17,
+          "requested_bytes": 2944,
+          "checksum": 2194
+        },
+        {
+          "name": "head_short_fields_1000",
+          "calls": 1,
+          "requested_bytes": 48000,
+          "checksum": 9018
+        },
+        {
+          "name": "head_ows_7800",
+          "calls": 1,
+          "requested_bytes": 48,
+          "checksum": 7825
+        },
+        {
+          "name": "head_ows_8_fields",
+          "calls": 1,
+          "requested_bytes": 384,
+          "checksum": 6474
+        },
+        {
+          "name": "head_one_short_field",
+          "calls": 1,
+          "requested_bytes": 48,
+          "checksum": 27
+        },
+        {
+          "name": "head_minimal",
+          "calls": 0,
+          "requested_bytes": 0,
+          "checksum": 18
+        },
+        {
+          "name": "head_realistic_434",
+          "calls": 2,
+          "requested_bytes": 632,
+          "checksum": 443
+        },
+        {
+          "name": "head_full_8192",
+          "calls": 2,
+          "requested_bytes": 20056,
+          "checksum": 8601
+        },
+        {
+          "name": "head_decoder_whole",
+          "calls": 3,
+          "requested_bytes": 896,
+          "checksum": 443
+        },
+        {
+          "name": "head_decoder_feed17",
+          "calls": 9,
+          "requested_bytes": 2512,
+          "checksum": 443
+        },
+        {
+          "name": "echo_chunked_1024",
+          "calls": 3,
+          "requested_bytes": 1344,
+          "checksum": 2348
+        },
+        {
+          "name": "body_1m_chunk1024",
+          "calls": 13,
+          "requested_bytes": 2112816,
+          "checksum": 2104613
+        },
+        {
+          "name": "body_1m_chunk16384",
+          "calls": 9,
+          "requested_bytes": 2082096,
+          "checksum": 2097957
+        },
+        {
+          "name": "extension_7000",
+          "calls": 2,
+          "requested_bytes": 312,
+          "checksum": 7056
+        },
+        {
+          "name": "trailer_7000",
+          "calls": 2,
+          "requested_bytes": 312,
+          "checksum": 7058
+        },
+        {
+          "name": "head_cr_dense",
+          "calls": 0,
+          "requested_bytes": 0,
+          "checksum": 1
+        }
+      ]
+    },
+    "after": {
+      "metric": "ordinary operator new calls and requested bytes",
+      "request_size": 64,
+      "cases": [
+        {
+          "name": "head_long_values_16",
+          "calls": 2,
+          "requested_bytes": 2312,
+          "checksum": 2194
+        },
+        {
+          "name": "head_short_fields_1000",
+          "calls": 2,
+          "requested_bytes": 16024,
+          "checksum": 9018
+        },
+        {
+          "name": "head_ows_7800",
+          "calls": 1,
+          "requested_bytes": 8,
+          "checksum": 7825
+        },
+        {
+          "name": "head_ows_8_fields",
+          "calls": 2,
+          "requested_bytes": 96,
+          "checksum": 6474
+        },
+        {
+          "name": "head_one_short_field",
+          "calls": 1,
+          "requested_bytes": 8,
+          "checksum": 27
+        },
+        {
+          "name": "head_minimal",
+          "calls": 0,
+          "requested_bytes": 0,
+          "checksum": 18
+        },
+        {
+          "name": "head_realistic_434",
+          "calls": 2,
+          "requested_bytes": 512,
+          "checksum": 443
+        },
+        {
+          "name": "head_full_8192",
+          "calls": 2,
+          "requested_bytes": 11472,
+          "checksum": 8601
+        },
+        {
+          "name": "head_decoder_whole",
+          "calls": 3,
+          "requested_bytes": 744,
+          "checksum": 443
+        },
+        {
+          "name": "head_decoder_feed17",
+          "calls": 9,
+          "requested_bytes": 2360,
+          "checksum": 443
+        },
+        {
+          "name": "echo_chunked_1024",
+          "calls": 4,
+          "requested_bytes": 1320,
+          "checksum": 2348
+        },
+        {
+          "name": "body_1m_chunk1024",
+          "calls": 14,
+          "requested_bytes": 2112792,
+          "checksum": 2104613
+        },
+        {
+          "name": "body_1m_chunk16384",
+          "calls": 10,
+          "requested_bytes": 2082072,
+          "checksum": 2097957
+        },
+        {
+          "name": "extension_7000",
+          "calls": 3,
+          "requested_bytes": 288,
+          "checksum": 7056
+        },
+        {
+          "name": "trailer_7000",
+          "calls": 3,
+          "requested_bytes": 288,
+          "checksum": 7058
+        },
+        {
+          "name": "head_cr_dense",
+          "calls": 0,
+          "requested_bytes": 0,
+          "checksum": 1
+        }
+      ]
+    }
+  },
+  "equivalence": {
+    "before": {
+      "bytes": 66143697,
+      "sha256": "88e1a83e8a654a57f0b3657cc9097f60c82a694965ca28a5c2a1551e8d855f63",
+      "metadata": "semantic cases: 95479; seed: 0x53544F52"
+    },
+    "after": {
+      "bytes": 66143697,
+      "sha256": "88e1a83e8a654a57f0b3657cc9097f60c82a694965ca28a5c2a1551e8d855f63",
+      "metadata": "semantic cases: 95479; seed: 0x53544F52"
+    },
+    "equal": true,
+    "sanitized_matches_before": true
+  },
+  "environment": {
+    "compiler": "Apple clang version 21.0.0 (clang-2100.3.34.2)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+    "os": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "architecture": "arm64",
+    "cpu_model": "Not available in the sandbox; no CPU-model assertion is made.",
+    "flags": "-std=c++20 -O2 -DNDEBUG -Wall -Wextra; separate compilation; no LTO"
+  },
+  "source": {
+    "head": "1f876464862c69c5a54424d91fbfd6937983e23c",
+    "baseline": "Pre-experiment dirty working-tree parser, reconstructed by reversing the source patch.",
+    "baseline_sha256": {
+      "service/src/http_body_framing.cpp": "a22d52b14511e30ebbd924045fd547e803c81c8e6e971db1b2a6539f6765614b",
+      "service/src/http_body_framing.hpp": "3ade17053c34cf5310a4cec44f724745f36da32afcdcf6e1c74a24baf3815298",
+      "service/src/http_chunk_line.cpp": "373653ce1656249eb12b75ae87ce5e753eff9061e1ba40105df68882f3d550e6",
+      "service/src/http_chunk_line.hpp": "b3f9e24a35444d99d2251644625350421344e0c54e23f608ad98cd311f10146f",
+      "service/src/http_head_fields.hpp": "48c21fda8cc68d9e237580a16d08376e23d598334f16004c26b7b5138cb85bf8",
+      "service/src/http_messages.cpp": "32753c44d25c44f32b062d1adff835483c7b2c9e8bc0c80380338b324417fccc",
+      "service/src/http_messages.hpp": "6e7900979011460816d54770cfc5eb12764c0b9fe818ec58943a0589a1e37ae3",
+      "service/src/http_request_decoder.cpp": "0419f04ffdb983fbe229f569807bc3d37413912dedaf75efa3f86cee116f8bf3",
+      "service/src/http_request_decoder.hpp": "70f5504d3f4a79d69b06c9b71fe45d165480f57db9beeb7f0a6cfa7e7b8ada97",
+      "service/src/http_syntax.hpp": "49a020ef2bd6922d338eecee992c6ac1eea93b149a981e5c62222937fd14293a"
+    },
+    "candidate_sha256": {
+      "service/CMakeLists.txt": "bc2d50349457f76903420b780a8987a82fb345d075fa4f35ff17bcaabd996fd7",
+      "service/bench/http_parser_allocations.cpp": "af959e33073653f6c4d6d1afcddf346230a81d741cb37c09b8c3d8c051a4d45f",
+      "service/bench/http_parser_bench.cpp": "b50950045e730ba784a4a8a3f04ae0beebae75481c089cfa0571aa4c63ac13af",
+      "service/bench/http_parser_equivalence.cpp": "0215b9eaa5f62c1b088189e7dad62f0509f1006b8979962db06722a173c61d4f",
+      "service/bench/http_parser_workloads.hpp": "3eb5fbb5605ea31f1c25f93bac1e59223302190cbc712452ab44705fd8210ec1",
+      "service/bench/verify.cmake": "87fbe03112c9575bab72c81b2000363e792bfe6c1c4107914a1b9f676b07991d",
+      "service/src/http_body_framing.cpp": "c2d7164c777069a499a56323e3dc5f7779e9254ec3adb3ed3cd262e4fa809a77",
+      "service/src/http_body_framing.hpp": "3ade17053c34cf5310a4cec44f724745f36da32afcdcf6e1c74a24baf3815298",
+      "service/src/http_chunk_line.cpp": "373653ce1656249eb12b75ae87ce5e753eff9061e1ba40105df68882f3d550e6",
+      "service/src/http_chunk_line.hpp": "b3f9e24a35444d99d2251644625350421344e0c54e23f608ad98cd311f10146f",
+      "service/src/http_head_fields.hpp": "6f54a36ff11292d546c03bb38c225f262a5c829116e9afb8c231eba5def0227d",
+      "service/src/http_messages.cpp": "b09599c21b63db81e1c5dd8bd730f71370d1a697b173b91f0be4467b704213ce",
+      "service/src/http_messages.hpp": "f9e4fa4f76c646e665f439d493bdadbe0282f830f20f4f24c84f4fc5f1511455",
+      "service/src/http_request_decoder.cpp": "0419f04ffdb983fbe229f569807bc3d37413912dedaf75efa3f86cee116f8bf3",
+      "service/src/http_request_decoder.hpp": "70f5504d3f4a79d69b06c9b71fe45d165480f57db9beeb7f0a6cfa7e7b8ada97",
+      "service/src/http_syntax.hpp": "49a020ef2bd6922d338eecee992c6ac1eea93b149a981e5c62222937fd14293a",
+      "service/tests/http_chunk_line_tests.cpp": "d99c7a24fb7f658f8b71af7682616bb1b7696a8313a0ee1ecb9f6e3ab9b1c26a",
+      "service/tests/http_head_fields_tests.cpp": "a54a3eeb784e2fde14f69c2f79b1914964bd8cf0014cdc5ed88079aa4acffb36",
+      "service/tests/http_message_tests.cpp": "1d3762985b8cd3160b594f81d5c0445cf9d911e3fc62446b4ef4d4ad7caef216",
+      "service/tests/http_request_decoder_tests.cpp": "80b0d1e99ac4ee2f4b56e2a84daffdeef49ea3fcd77561803233e895eb242f37",
+      "service/tests/http_request_storage_tests.cpp": "d0fc63f65018d7443fc5d77a7a605db7c32003bb289342635d9cfbb375e68988"
+    },
+    "driver_identical": true
+  },
+  "red_observations": {
+    "long_names_values_and_request_line": {
+      "before_calls": 35,
+      "required_maximum_calls": 2,
+      "initial_test_exit": 1
+    },
+    "allocation_failure_error_translation": {
+      "initial_failures": 2,
+      "expected": "ParseError::resource_exhausted"
+    },
+    "padding_materialization": {
+      "first_candidate_calls": 2,
+      "required_maximum_calls": 1,
+      "test_exit_before_compaction": 1
+    }
+  },
+  "mutation": {
+    "change": "Replace strong copy assignment with sequential assignment of bytes, descriptors, offsets.",
+    "exit": 1,
+    "diagnostic": "long fields: 2 ordinary allocations\nCHECK failed: failed copy assignment preserves both complete request values"
+  },
+  "checks": {
+    "optimized_ctest": "6/6 pass",
+    "sanitizer_ctest": "5/5 pass; ASAN_OPTIONS=detect_leaks=0; UBSAN_OPTIONS=halt_on_error=1",
+    "governance_tests": "303/303 pass",
+    "governance_validation": "pass",
+    "clang_format": "pass",
+    "git_diff_check": "pass",
+    "reconstruction": "Reversing the source patch reproduces all four baseline parser files byte-for-byte.",
+    "optimized_smoke": {
+      "scale": 1,
+      "pass": true,
+      "cases": 16
+    },
+    "cleanup": "Owned disposable source copies, compiler/test output and binary comparison streams were removed; the pre-existing service/build directory was preserved."
+  }
+}

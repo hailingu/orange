@@ -1,0 +1,9 @@
+# Governed by docs/adr/ADR-0003-local-runtime-path.md — lands with the first
+# C++ implementation change as docs/development/cpp-development-standard.md
+# (Baseline Practices, Formatting) requires. Machine formatting is
+# authoritative; do not hand-format around it.
+---
+BasedOnStyle: LLVM
+Standard: c++20
+IndentWidth: 4
+ColumnLimit: 100

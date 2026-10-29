@@ -1,0 +1,454 @@
+--- a/service/src/http_server.cpp
++++ b/service/src/http_server.cpp
+@@ -108,12 +108,11 @@
+ 
+ // One served connection: its descriptor, decoding progress, queued output,
+ // and the lifecycle flags the loop transitions.
+-// The decoder is held by pointer because its type is deliberately neither
+-// copyable nor movable (service ADR-0004 contract), while connections
+-// relocate when the vector grows or compacts.
++// KS-5: the owner vector moves unique_ptrs, never these objects. Both the
++// nonmovable decoder and kqueue's borrowed Connection pointer stay in place.
+ struct Connection {
+     OwnedFd fd;
+-    std::unique_ptr<RequestDecoder> decoder;
++    RequestDecoder decoder;
+     std::string outgoing;
+     std::size_t outgoing_offset = 0;
+     bool closing_after_flush = false;
+@@ -122,6 +121,10 @@
+     Interest write_interest = Interest::absent;
+     std::chrono::steady_clock::time_point last_activity{};
+ };
++
++// Stable pointees survive growth and compaction; closed owners are collected
++// only after both passes over the returned event batch (KS-6).
++using Connections = std::vector<std::unique_ptr<Connection>>;
+ 
+ // True when a request's Connection field carries the close option
+ // (RFC 9110 7.6.1: comma-separated, case-insensitive option list).
+@@ -189,11 +192,11 @@
+ // in this receive window synchronously, before the borrowed stack bytes expire.
+ void drive_messages(Connection &connection, std::string_view input, const RequestHandler &handler) {
+     while (!input.empty() && !connection.closing_after_flush) {
+-        const DecodeResult result = connection.decoder->feed(input);
++        const DecodeResult result = connection.decoder.feed(input);
+         input.remove_prefix(result.consumed);
+         if (auto *message = std::get_if<ParsedMessage>(&result.outcome)) {
+             append_response(connection, *message, handler);
+-            connection.decoder->reset();
++            connection.decoder.reset();
+             continue;
+         }
+         if (auto *error = std::get_if<ParseError>(&result.outcome)) {
+@@ -269,25 +272,22 @@
+     }
+ }
+ 
+-// Maps a returned event's descriptor to its connection. The kernel
+-// identifies knotes by descriptor while connections relocate inside their
+-// vector, so lookup is by descriptor value; loopback's small connection
+-// count keeps the scan negligible. A miss means the connection died
+-// earlier in this batch (its descriptor is already invalid).
+-Connection *find_connection(std::vector<Connection> &connections, int fd) {
+-    for (Connection &connection : connections)
+-        if (connection.fd.valid() && connection.fd.get() == fd)
+-            return &connection;
+-    return nullptr;
++// KS-5/KS-6: dispatch in constant time using the kernel's unchanged udata.
++// A prior event may have closed this connection, but its object remains alive
++// until the whole batch ends. A reused descriptor therefore cannot revive it.
++Connection *event_connection(const struct kevent &event) {
++    auto *connection = static_cast<Connection *>(event.udata);
++    return connection != nullptr && connection->fd.get() == static_cast<int>(event.ident)
++               ? connection
++               : nullptr;
+ }
+ 
+ // Wake budget: the soonest idle deadline, capped so stop stays responsive.
+-int next_wake_ms(std::chrono::steady_clock::time_point now,
+-                 const std::vector<Connection> &connections,
++int next_wake_ms(std::chrono::steady_clock::time_point now, const Connections &connections,
+                  std::chrono::milliseconds idle_timeout) {
+     auto deadline = now + std::chrono::milliseconds(wake_slice_ms);
+-    for (const Connection &connection : connections)
+-        deadline = std::min(deadline, connection.last_activity + idle_timeout);
++    for (const auto &connection : connections)
++        deadline = std::min(deadline, connection->last_activity + idle_timeout);
+     const auto wait = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+     return static_cast<int>(std::clamp(wait.count(), 0LL, static_cast<long long>(wake_slice_ms)));
+ }
+@@ -296,20 +296,21 @@
+ // the tracked state. EV_SET writes through its pointer argument field by
+ // field, so it must never receive a fresh temporary such as the address
+ // of an emplace_back() call — push first, then fill the back element.
+-void set_interest(std::vector<struct kevent> &changes, int fd, short filter, Interest &state,
+-                  bool want_enabled) {
++void set_interest(std::vector<struct kevent> &changes, Connection &connection, short filter,
++                  Interest &state, bool want_enabled) {
+     if (state == Interest::absent) {
+         if (!want_enabled)
+             return; // never registered: nothing to arm or silence
+         changes.push_back({});
+-        EV_SET(&changes.back(), fd, filter, EV_ADD, 0, 0, nullptr);
++        EV_SET(&changes.back(), connection.fd.get(), filter, EV_ADD, 0, 0, &connection);
+         state = Interest::enabled;
+         return;
+     }
+     if (want_enabled == (state == Interest::enabled))
+         return;
+     changes.push_back({});
+-    EV_SET(&changes.back(), fd, filter, want_enabled ? EV_ENABLE : EV_DISABLE, 0, 0, nullptr);
++    EV_SET(&changes.back(), connection.fd.get(), filter, want_enabled ? EV_ENABLE : EV_DISABLE, 0,
++           0, &connection);
+     state = want_enabled ? Interest::enabled : Interest::disabled;
+ }
+ 
+@@ -320,41 +321,42 @@
+ // under level-triggered semantics a permanently ready write filter would
+ // spin the loop, exactly the trap the poll predecessor's interest mask
+ // avoided by never registering POLLOUT unconditionally.
+-void build_interest_changes(std::vector<struct kevent> &changes,
+-                            std::vector<Connection> &connections) {
++void build_interest_changes(std::vector<struct kevent> &changes, Connections &connections) {
+     changes.clear();
+-    for (Connection &connection : connections) {
++    for (const auto &owner : connections) {
++        Connection &connection = *owner;
+         if (!connection.fd.valid())
+             continue;
+         const bool want_read =
+             !connection.closing_after_flush && !connection.peer_eof &&
+             connection.outgoing.size() - connection.outgoing_offset < read_pause_cap;
+-        set_interest(changes, connection.fd.get(), EVFILT_READ, connection.read_interest,
+-                     want_read);
++        set_interest(changes, connection, EVFILT_READ, connection.read_interest, want_read);
+         const bool want_write = connection.outgoing_offset < connection.outgoing.size();
+-        set_interest(changes, connection.fd.get(), EVFILT_WRITE, connection.write_interest,
+-                     want_write);
++        set_interest(changes, connection, EVFILT_WRITE, connection.write_interest, want_write);
+     }
+ }
+ 
+ // Accepts every pending connection from the non-blocking listener.
+-void accept_incoming(int listen_fd, std::vector<Connection> &connections,
++void accept_incoming(int listen_fd, Connections &connections,
+                      std::chrono::steady_clock::time_point now) {
+     for (;;) {
+-        const int fd = ::accept(listen_fd, nullptr, nullptr);
+-        if (fd < 0) {
++        OwnedFd fd{::accept(listen_fd, nullptr, nullptr)};
++        if (!fd.valid()) {
+             if (errno == EINTR)
+                 continue;
+             return;
+         }
+-        if (set_non_blocking(fd) != 0 || set_no_sigpipe(fd) != 0 || set_no_delay(fd) != 0) {
+-            ::close(fd);
+-            continue;
+-        }
+-        Connection &connection = connections.emplace_back();
+-        connection.fd = OwnedFd(fd);
+-        connection.decoder = std::make_unique<RequestDecoder>();
+-        connection.last_activity = now;
++        if (set_non_blocking(fd.get()) != 0 || set_no_sigpipe(fd.get()) != 0 ||
++            set_no_delay(fd.get()) != 0)
++            continue;
++        try {
++            auto connection = std::make_unique<Connection>();
++            connection->fd = std::move(fd);
++            connection->last_activity = now;
++            connections.push_back(std::move(connection));
++        } catch (const std::bad_alloc &) {
++            return; // RAII closes this unregistered accept; existing owners survive.
++        }
+     }
+ }
+ 
+@@ -406,7 +408,7 @@
+     EV_SET(&listener_change, listen_fd_, EVFILT_READ, EV_ADD, 0, 0, nullptr);
+     if (::kevent(kq.get(), &listener_change, 1, nullptr, 0, nullptr) < 0)
+         return errno;
+-    std::vector<Connection> connections;
++    Connections connections;
+     std::vector<struct kevent> changes;
+     std::array<struct kevent, event_capacity> events{};
+     while (!stop.load(std::memory_order_relaxed)) {
+@@ -434,7 +436,7 @@
+             if (event.flags & EV_ERROR) {
+                 if (fd == listen_fd_)
+                     return EINVAL;
+-                if (Connection *connection = find_connection(connections, fd))
++                if (Connection *connection = event_connection(event))
+                     connection->fd.reset();
+                 continue;
+             }
+@@ -444,7 +446,7 @@
+             }
+             if (event.filter != EVFILT_READ)
+                 continue;
+-            Connection *connection = find_connection(connections, fd);
++            Connection *connection = event_connection(event);
+             if (connection == nullptr)
+                 continue;
+             service_connection(*connection, handler, true);
+@@ -452,22 +454,24 @@
+         // Write pass after the read pass, mirroring the predecessor's
+         // per-connection ordering: a read above may queue the very bytes
+         // this pass flushes, and a connection closed above is skipped by
+-        // the lookup because its descriptor is already invalid.
++        // the identity guard because its descriptor is already invalid.
+         for (int i = 0; i < ready; ++i) {
+             const struct kevent &event = events[static_cast<std::size_t>(i)];
+             if (event.filter != EVFILT_WRITE)
+                 continue;
+-            Connection *connection = find_connection(connections, static_cast<int>(event.ident));
++            Connection *connection = event_connection(event);
+             if (connection == nullptr)
+                 continue;
+             service_connection(*connection, handler, false);
+         }
+-        for (Connection &connection : connections)
+-            if (connection.fd.valid() && progressed - connection.last_activity >= idle_timeout)
+-                connection.fd.reset();
++        for (const auto &connection : connections)
++            if (connection->fd.valid() && progressed - connection->last_activity >= idle_timeout)
++                connection->fd.reset();
++        // No returned udata is used after this point. close() has removed the
++        // kernel filters; only now may closed objects and their addresses die.
+         connections.erase(
+             std::remove_if(connections.begin(), connections.end(),
+-                           [](const Connection &connection) { return !connection.fd.valid(); }),
++                           [](const auto &connection) { return !connection->fd.valid(); }),
+             connections.end());
+     }
+     return 0;
+--- a/service/CMakeLists.txt
++++ b/service/CMakeLists.txt
+@@ -88,6 +88,9 @@
+ add_executable(http_server_input_tests tests/http_server_input_tests.cpp)
+ target_link_libraries(http_server_input_tests PRIVATE orange_http)
+ add_test(NAME http_server_input_tests COMMAND http_server_input_tests)
++add_executable(http_server_dispatch_tests tests/http_server_dispatch_tests.cpp)
++target_link_libraries(http_server_dispatch_tests PRIVATE orange_http)
++add_test(NAME http_server_dispatch_tests COMMAND http_server_dispatch_tests)
+ 
+ # Route dispatch is the first serving rung of ADR-0003 T-2.
+ add_executable(http_routes_tests tests/http_routes_tests.cpp)
+--- /dev/null
++++ b/service/tests/http_server_dispatch_tests.cpp
+@@ -0,0 +1,214 @@
++// ADR: service/docs/adr/ADR-0008-kqueue-response-scheduling.md
++// KS-5/KS-6: real kqueue registrations carry stable connection identities;
++// growth, collection, descriptor reuse and same-batch write hints preserve wire.
++#include "http_server.hpp"
++#include <atomic>
++#include <cerrno>
++#include <chrono>
++#include <cstdio>
++#include <cstdlib>
++#include <dlfcn.h>
++#include <map>
++#include <netinet/in.h>
++#include <poll.h>
++#include <string>
++#include <sys/event.h>
++#include <sys/socket.h>
++#include <thread>
++#include <unistd.h>
++#include <utility>
++#include <vector>
++
++namespace {
++thread_local int listener = -1;
++thread_local std::map<int, void *> identities;
++thread_local bool tokens_valid = true;
++thread_local unsigned registrations = 0;
++thread_local unsigned write_hints = 0;
++
++// Forwards to the operating system rather than replacing socket behavior.
++template <class T> T system_call(const char *name) {
++    const auto symbol = ::dlsym(RTLD_NEXT, name);
++    if (!symbol)
++        std::abort();
++    return reinterpret_cast<T>(symbol);
++}
++
++// Tracks only the explicit kernel identity contract, independent of layout.
++void observe_changes(const struct kevent *changes, int count) {
++    for (int i = 0; i < count; ++i) {
++        const auto &change = changes[i];
++        const int fd = static_cast<int>(change.ident);
++        if (listener < 0)
++            listener = fd;
++        if (fd == listener)
++            continue;
++        if (change.filter == EVFILT_READ && (change.flags & EV_ADD)) {
++            identities[fd] = change.udata;
++            ++registrations;
++        }
++        const auto found = identities.find(fd);
++        tokens_valid = tokens_valid && change.udata != nullptr && found != identities.end() &&
++                       found->second == change.udata;
++    }
++}
++
++// Adds a currently writable hint after a real read, forcing both event passes
++// to observe the same connection even if the read closes it. All I/O stays real.
++int observe_events(struct kevent *events, int ready, int capacity) {
++    int total = ready;
++    for (int i = 0; i < ready; ++i) {
++        const auto &event = events[i];
++        const int fd = static_cast<int>(event.ident);
++        if (fd == listener || (event.flags & EV_ERROR))
++            continue;
++        const auto found = identities.find(fd);
++        tokens_valid = tokens_valid && event.udata != nullptr && found != identities.end() &&
++                       found->second == event.udata;
++        pollfd writable{fd, POLLOUT, 0};
++        if (event.filter == EVFILT_READ && total < capacity && ::poll(&writable, 1, 0) == 1 &&
++            (writable.revents & POLLOUT)) {
++            events[total] = event;
++            events[total++].filter = EVFILT_WRITE;
++            ++write_hints;
++        }
++    }
++    return total;
++}
++
++// Owns one client socket through every early test-failure path.
++struct Client {
++    int fd = -1;
++    explicit Client(int descriptor) : fd(descriptor) {}
++    ~Client() {
++        if (fd >= 0)
++            ::close(fd);
++    }
++    Client(Client &&other) noexcept : fd(std::exchange(other.fd, -1)) {}
++    Client(const Client &) = delete;
++};
++
++// Connects with bounded reads/writes so a routing defect cannot hang CTest.
++Client connect_to(std::uint16_t port) {
++    Client client(::socket(AF_INET, SOCK_STREAM, 0));
++    const timeval timeout{2, 0};
++    const int on = 1;
++    sockaddr_in address{};
++    address.sin_family = AF_INET;
++    address.sin_port = htons(port);
++    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
++    if (client.fd < 0 ||
++        ::setsockopt(client.fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0 ||
++        ::setsockopt(client.fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0 ||
++        ::setsockopt(client.fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) != 0 ||
++        ::connect(client.fd, reinterpret_cast<sockaddr *>(&address), sizeof(address)) != 0) {
++        if (client.fd >= 0)
++            ::close(std::exchange(client.fd, -1));
++    }
++    return client;
++}
++
++// Every request has a distinct expected target, exposing cross-connection reuse.
++bool exchange(const Client &client, int id, bool close) {
++    const std::string target = "/connection/" + std::to_string(id);
++    const std::string request =
++        "GET " + target + " HTTP/1.1\r\n" + (close ? "Connection: close\r\n" : "") + "\r\n";
++    const std::string expected =
++        "HTTP/1.1 200 OK\r\nContent-Length: " + std::to_string(target.size()) + "\r\n" +
++        (close ? "Connection: close\r\n" : "") + "\r\n" + target;
++    std::size_t sent = 0;
++    while (sent < request.size()) {
++        const auto n = ::send(client.fd, request.data() + sent, request.size() - sent, 0);
++        if (n < 0 && errno == EINTR)
++            continue;
++        if (n <= 0)
++            return false;
++        sent += static_cast<std::size_t>(n);
++    }
++    std::string received;
++    while (received.size() < expected.size()) {
++        char bytes[256];
++        const auto n = ::recv(client.fd, bytes, sizeof(bytes), 0);
++        if (n < 0 && errno == EINTR)
++            continue;
++        if (n <= 0)
++            return false;
++        received.append(bytes, static_cast<std::size_t>(n));
++    }
++    if (received != expected)
++        return false;
++    if (close) {
++        char byte;
++        return ::recv(client.fd, &byte, 1, 0) == 0;
++    }
++    return true;
++}
++
++// Holds an early connection through vector growth, alternating collection,
++// new accepts and descriptor reuse. Closing reads also get same-batch writes.
++bool exercise(std::uint16_t port) {
++    auto first = connect_to(port);
++    if (!exchange(first, 0, false))
++        return false;
++    std::vector<Client> clients;
++    for (int i = 1; i <= 96; ++i) {
++        clients.push_back(connect_to(port));
++        if (!exchange(clients.back(), i, false))
++            return false;
++    }
++    for (int i = 0; i < 96; i += 2)
++        if (!exchange(clients[static_cast<std::size_t>(i)], 1000 + i, true))
++            return false;
++    for (int i = 0; i < 64; ++i) {
++        auto replacement = connect_to(port);
++        if (!exchange(replacement, 2000 + i, true))
++            return false;
++    }
++    for (int i = 1; i < 96; i += 2)
++        if (!exchange(clients[static_cast<std::size_t>(i)], 3000 + i, true))
++            return false;
++    return exchange(first, 4000, true);
++}
++} // namespace
++
++// Observes actual registrations and returns genuine readiness plus write hints.
++extern "C" int kevent(int queue, const struct kevent *changes, int count, struct kevent *events,
++                      int capacity, const timespec *timeout) {
++    static const auto real = system_call<decltype(&::kevent)>("kevent");
++    observe_changes(changes, count);
++    const int ready = real(queue, changes, count, events, capacity, timeout);
++    return ready > 0 ? observe_events(events, ready, capacity) : ready;
++}
++
++// Joins before reading server-thread observations; no production instrumentation.
++int main() {
++    orange::http::LoopbackServer server;
++    std::uint16_t port = 0;
++    if (server.bind(0, &port) != 0)
++        return 1;
++    std::atomic_bool stop{false};
++    int result = -1;
++    bool identities_valid = false;
++    unsigned registered = 0;
++    unsigned hints = 0;
++    std::thread worker([&] {
++        result = server.serve(
++            [](const orange::http::ParsedMessage &message) {
++                return orange::http::Response{200,
++                                              orange::http::BodyFraming::content_length,
++                                              message.request.target(),
++                                              {},
++                                              false};
++            },
++            std::chrono::seconds(10), stop);
++        identities_valid = tokens_valid;
++        registered = registrations;
++        hints = write_hints;
++    });
++    const bool wire = exercise(port);
++    stop.store(true);
++    worker.join();
++    std::printf("KS-5/KS-6: wire=%s stable_udata=%s registrations=%u same_batch_write_hints=%u\n",
++                wire ? "Pass" : "Fail", identities_valid ? "Pass" : "Fail", registered, hints);
++    return wire && identities_valid && registered == 161 && hints > 0 && result == 0 ? 0 : 1;
++}

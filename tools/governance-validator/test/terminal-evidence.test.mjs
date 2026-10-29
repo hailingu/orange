@@ -1,4 +1,4 @@
-// ADR: docs/adr/ADR-0002-governance-validator-adoption.md
+// ADR: docs/adr/ADR-0002-governance-validator-adoption.md, docs/adr/ADR-0007-governance-fixture-lifecycle.md
 
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -53,15 +53,15 @@ function completeAdr(root, id = "0002") {
   return path;
 }
 
-test("accepts a fully evidenced Complete ADR", () => {
-  const root = validRepository();
+test("accepts a fully evidenced Complete ADR", (t) => {
+  const root = validRepository(t);
   completeAdr(root);
   const result = run(root);
   assert.equal(result.status, 0, result.stderr);
 });
 
-test("rejects a terminal ADR without an Implementation Plan table", () => {
-  const root = validRepository();
+test("rejects a terminal ADR without an Implementation Plan table", (t) => {
+  const root = validRepository(t);
   const path = completeAdr(root);
   writeFileSync(path, replaceSection(
     readFileSync(path, "utf8"),
@@ -73,8 +73,8 @@ test("rejects a terminal ADR without an Implementation Plan table", () => {
   assert.match(result.stderr, /Implementation Plan requires a structured table for a terminal record/);
 });
 
-test("rejects a terminal ADR without an Acceptance Checks table", () => {
-  const root = validRepository();
+test("rejects a terminal ADR without an Acceptance Checks table", (t) => {
+  const root = validRepository(t);
   const path = completeAdr(root);
   writeFileSync(path, replaceSection(
     readFileSync(path, "utf8"),
@@ -86,8 +86,8 @@ test("rejects a terminal ADR without an Acceptance Checks table", () => {
   assert.match(result.stderr, /Acceptance Checks requires a structured table for a terminal record/);
 });
 
-test("rejects a terminal subtask row with an illegal ID", () => {
-  const root = validRepository();
+test("rejects a terminal subtask row with an illegal ID", (t) => {
+  const root = validRepository(t);
   const path = completeAdr(root);
   writeFileSync(
     path,
@@ -98,8 +98,8 @@ test("rejects a terminal subtask row with an illegal ID", () => {
   assert.match(result.stderr, /Implementation Plan table has a row with a missing or illegal ID \(X-1\)/);
 });
 
-test("rejects a duplicated terminal subtask ID", () => {
-  const root = validRepository();
+test("rejects a duplicated terminal subtask ID", (t) => {
+  const root = validRepository(t);
   const path = completeAdr(root);
   writeFileSync(
     path,
@@ -113,8 +113,8 @@ test("rejects a duplicated terminal subtask ID", () => {
   assert.match(result.stderr, /Implementation Plan table duplicates subtask ID T-1/);
 });
 
-test("rejects a terminal subtask that is not Complete", () => {
-  const root = validRepository();
+test("rejects a terminal subtask that is not Complete", (t) => {
+  const root = validRepository(t);
   const path = completeAdr(root);
   writeFileSync(
     path,
@@ -128,8 +128,8 @@ test("rejects a terminal subtask that is not Complete", () => {
   assert.match(result.stderr, /subtask T-1 must be Complete or N\/A for a terminal record \(is In Progress\)/);
 });
 
-test("rejects a terminal acceptance check that is not Pass", () => {
-  const root = validRepository();
+test("rejects a terminal acceptance check that is not Pass", (t) => {
+  const root = validRepository(t);
   const path = completeAdr(root);
   writeFileSync(
     path,
@@ -140,8 +140,8 @@ test("rejects a terminal acceptance check that is not Pass", () => {
   assert.match(result.stderr, /acceptance check AC-1 must be Pass or N\/A for a terminal record \(is Fail\)/);
 });
 
-test("rejects a Passing terminal acceptance check without actual evidence", () => {
-  const root = validRepository();
+test("rejects a Passing terminal acceptance check without actual evidence", (t) => {
+  const root = validRepository(t);
   const path = completeAdr(root);
   writeFileSync(
     path,
@@ -155,8 +155,8 @@ test("rejects a Passing terminal acceptance check without actual evidence", () =
   assert.match(result.stderr, /acceptance check AC-1 must record actual completion evidence \(is Pending\)/);
 });
 
-test("rejects a terminal Completion Checklist missing an item", () => {
-  const root = validRepository();
+test("rejects a terminal Completion Checklist missing an item", (t) => {
+  const root = validRepository(t);
   const path = completeAdr(root);
   writeFileSync(
     path,
@@ -167,8 +167,8 @@ test("rejects a terminal Completion Checklist missing an item", () => {
   assert.match(result.stderr, /Completion Checklist item A-3 is missing for a terminal record/);
 });
 
-test("rejects a duplicated Completion Checklist item", () => {
-  const root = validRepository();
+test("rejects a duplicated Completion Checklist item", (t) => {
+  const root = validRepository(t);
   const path = completeAdr(root);
   writeFileSync(
     path,
@@ -182,8 +182,8 @@ test("rejects a duplicated Completion Checklist item", () => {
   assert.match(result.stderr, /Completion Checklist duplicates item A-8/);
 });
 
-test("rejects a terminal ADR whose A-1 approval item is not Complete", () => {
-  const root = validRepository();
+test("rejects a terminal ADR whose A-1 approval item is not Complete", (t) => {
+  const root = validRepository(t);
   const path = completeAdr(root);
   writeFileSync(
     path,
@@ -197,8 +197,8 @@ test("rejects a terminal ADR whose A-1 approval item is not Complete", () => {
   assert.match(result.stderr, /Completion Checklist item A-1 must be Complete for a terminal record/);
 });
 
-test("rejects a terminal risk dimension that is not Pass", () => {
-  const root = validRepository();
+test("rejects a terminal risk dimension that is not Pass", (t) => {
+  const root = validRepository(t);
   const path = completeAdr(root);
   writeFileSync(
     path,
@@ -212,8 +212,8 @@ test("rejects a terminal risk dimension that is not Pass", () => {
   assert.match(result.stderr, /Risk Coverage Matrix dimension concurrency and ordering must be Pass or N\/A for a terminal record \(is Fail\)/);
 });
 
-test("rejects a Passing terminal risk row without stable evidence", () => {
-  const root = validRepository();
+test("rejects a Passing terminal risk row without stable evidence", (t) => {
+  const root = validRepository(t);
   const path = completeAdr(root);
   writeFileSync(
     path,
@@ -263,16 +263,16 @@ function archiveTerminalOcr(root, id) {
   );
 }
 
-test("accepts a fully evidenced Complete OCR", () => {
-  const root = validRepository();
+test("accepts a fully evidenced Complete OCR", (t) => {
+  const root = validRepository(t);
   completeOcr(root, "0002");
   archiveTerminalOcr(root, "0002");
   const result = run(root);
   assert.equal(result.status, 0, result.stderr);
 });
 
-test("rejects a terminal OCR runbook stage without actual evidence", () => {
-  const root = validRepository();
+test("rejects a terminal OCR runbook stage without actual evidence", (t) => {
+  const root = validRepository(t);
   completeOcr(root, "0002");
   const path = join(root, "docs/adr/ocr/OCR-0002-example.md");
   writeFileSync(
@@ -287,8 +287,8 @@ test("rejects a terminal OCR runbook stage without actual evidence", () => {
   assert.match(result.stderr, /stage Verify must record actual result evidence for a terminal OCR/);
 });
 
-test("rejects a terminal OCR whose Governance validation review is not Pass", () => {
-  const root = validRepository();
+test("rejects a terminal OCR whose Governance validation review is not Pass", (t) => {
+  const root = validRepository(t);
   completeOcr(root, "0002");
   const path = join(root, "docs/adr/ocr/OCR-0002-example.md");
   writeFileSync(
@@ -303,8 +303,8 @@ test("rejects a terminal OCR whose Governance validation review is not Pass", ()
   assert.match(result.stderr, /Closure field Governance validation must be Pass for a terminal OCR/);
 });
 
-test("rejects a terminal OCR without a complete Final result", () => {
-  const root = validRepository();
+test("rejects a terminal OCR without a complete Final result", (t) => {
+  const root = validRepository(t);
   completeOcr(root, "0002");
   const path = join(root, "docs/adr/ocr/OCR-0002-example.md");
   writeFileSync(

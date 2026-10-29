@@ -1,4 +1,4 @@
-// ADR: docs/adr/ADR-0002-governance-validator-adoption.md
+// ADR: docs/adr/ADR-0002-governance-validator-adoption.md, docs/adr/ADR-0007-governance-fixture-lifecycle.md
 
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -33,8 +33,8 @@ for (const [id, field, canonical, contradictory] of [
   ["0081", "Approver", "@linhai", "@codex"],
   ["0082", "Approval Evidence", "Approve", "Reject"],
 ]) {
-  test(`rejects duplicate active ${field} metadata`, () => {
-    const root = validRepository();
+  test(`rejects duplicate active ${field} metadata`, (t) => {
+    const root = validRepository(t);
     acceptedAdr(root, id);
     rewrite(root, `docs/adr/ADR-${id}-example.md`, (content) => content.replace(
       `- **${field}**: ${canonical}`,
@@ -50,8 +50,8 @@ for (const [id, field, canonical, contradictory] of [
   });
 }
 
-test("does not satisfy Accepted approval metadata from Change Log history", () => {
-  const root = validRepository();
+test("does not satisfy Accepted approval metadata from Change Log history", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0099");
   rewrite(root, "docs/adr/ADR-0099-example.md", (content) => content
     .replace(/- \*\*(?:Approver|Approval Time|Approval Evidence)\*\*:[^\n]+\n/g, "")
@@ -69,8 +69,8 @@ Initial.
   assert.match(result.stderr, /Accepted requires complete Approver.*Approval Time.*Approval Evidence/i);
 });
 
-test("does not satisfy Accepted approval metadata from an HTML comment", () => {
-  const root = validRepository();
+test("does not satisfy Accepted approval metadata from an HTML comment", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0091");
   rewrite(root, "docs/adr/ADR-0091-example.md", (content) => content
     .replace(/- \*\*(?:Approver|Approval Time|Approval Evidence)\*\*:[^\n]+\n/g, "")
@@ -90,8 +90,8 @@ test("does not satisfy Accepted approval metadata from an HTML comment", () => {
   assert.match(result.stderr, /Accepted requires complete Approver.*Approval Time.*Approval Evidence/i);
 });
 
-test("does not satisfy a required section from an HTML comment", () => {
-  const root = validRepository();
+test("does not satisfy a required section from an HTML comment", (t) => {
+  const root = validRepository(t);
   rewrite(root, "docs/adr/ADR-0001-example.md", (content) => content.replace(
     "## Decision [Required]\nDecision.",
     "<!--\n## Decision [Required]\nDecision.\n-->",
@@ -102,8 +102,8 @@ test("does not satisfy a required section from an HTML comment", () => {
   assert.match(result.stderr, /missing required section Decision/i);
 });
 
-test("does not satisfy a structured table from an HTML comment", () => {
-  const root = validRepository();
+test("does not satisfy a structured table from an HTML comment", (t) => {
+  const root = validRepository(t);
   makeCurrentAdd(root);
   rewrite(root, "docs/architecture/ADD-0001-example.md", (content) => content.replace(
     `| ID | Component |
@@ -121,8 +121,8 @@ test("does not satisfy a structured table from an HTML comment", () => {
   assert.match(result.stderr, /Architecture Design requires a structured component table/i);
 });
 
-test("does not satisfy an eligibility checklist item from an HTML comment", () => {
-  const root = validRepository();
+test("does not satisfy an eligibility checklist item from an HTML comment", (t) => {
+  const root = validRepository(t);
   acceptedOcr(root, "0090");
   rewrite(root, "docs/adr/ocr/OCR-0090-example.md", (content) => content.replace(
     "- [x] Uses an accepted architecture, pipeline, artifact contract, security boundary, and data boundary.",
@@ -136,8 +136,8 @@ test("does not satisfy an eligibility checklist item from an HTML comment", () =
   assert.match(result.stderr, /Eligibility item "boundary" must be present and confirmed/i);
 });
 
-test("rejects an Accepted OCR with a missing required runbook stage", () => {
-  const root = validRepository();
+test("rejects an Accepted OCR with a missing required runbook stage", (t) => {
+  const root = validRepository(t);
   acceptedOcr(root, "0098");
   rewrite(root, "docs/adr/ocr/OCR-0098-example.md", (content) => content.replace(
     "### Execute [Required]",
@@ -155,8 +155,8 @@ for (const [id, field] of [
   ["0094", "Input Source or Version"],
   ["0093", "Expected Output or Target State"],
 ]) {
-  test(`rejects an Accepted OCR with missing ${field} metadata`, () => {
-    const root = validRepository();
+  test(`rejects an Accepted OCR with missing ${field} metadata`, (t) => {
+    const root = validRepository(t);
     acceptedOcr(root, id);
     const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     rewrite(root, `docs/adr/ocr/OCR-${id}-example.md`, (content) => content.replace(
@@ -170,8 +170,8 @@ for (const [id, field] of [
   });
 }
 
-test("rejects an Accepted OCR with a missing stage actual-result field", () => {
-  const root = validRepository();
+test("rejects an Accepted OCR with a missing stage actual-result field", (t) => {
+  const root = validRepository(t);
   acceptedOcr(root, "0096");
   rewrite(root, "docs/adr/ocr/OCR-0096-example.md", (content) => content.replace(
     /^\*\*Actual result and stable evidence\*\*:[^\n]*\n/gm,
@@ -183,8 +183,8 @@ test("rejects an Accepted OCR with a missing stage actual-result field", () => {
   assert.match(result.stderr, /field Actual result and stable evidence must be present/i);
 });
 
-test("rejects a standalone Pending placeholder later in a conditional section", () => {
-  const root = validRepository();
+test("rejects a standalone Pending placeholder later in a conditional section", (t) => {
+  const root = validRepository(t);
   makeCurrentAdd(root);
   rewrite(root, "docs/architecture/ADD-0001-example.md", (content) => content.replace(
     "## Assumptions And Open Questions [Conditionally Required — assumptions exist]\nN/A — this fixture has no assumptions or open questions.",
@@ -200,8 +200,8 @@ Pending — resolution pending
   assert.match(result.stderr, /Assumptions And Open Questions body must contain substantive content/i);
 });
 
-test("accepts a reasoned N/A in a retained optional section", () => {
-  const root = validRepository();
+test("accepts a reasoned N/A in a retained optional section", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0094");
   rewrite(root, "docs/adr/ADR-0094-example.md", (content) => content.replace(
     "## Change Log [Required]\nInitial.",
@@ -215,8 +215,8 @@ N/A — no supporting notes apply to this record
   assert.equal(result.status, 0, `a reasoned N/A optional section passes, found ${result.stderr}`);
 });
 
-test("rejects a bare unreasoned N/A in a retained optional section", () => {
-  const root = validRepository();
+test("rejects a bare unreasoned N/A in a retained optional section", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0095");
   rewrite(root, "docs/adr/ADR-0095-example.md", (content) => content.replace(
     "## Change Log [Required]\nInitial.",
@@ -231,8 +231,8 @@ N/A
   assert.match(result.stderr, /Supporting Notes.*retained optional section.*complete content/i);
 });
 
-test("rejects a Pending value inside a Markdown field", () => {
-  const root = validRepository();
+test("rejects a Pending value inside a Markdown field", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0093");
   rewrite(root, "docs/adr/ADR-0093-example.md", (content) => content.replace(
     "## Context [Required]\nContext.",
@@ -248,8 +248,8 @@ Substantive opening sentence.
   assert.match(result.stderr, /Context body must contain substantive content/i);
 });
 
-test("rejects a Pending value inside a Markdown table cell", () => {
-  const root = validRepository();
+test("rejects a Pending value inside a Markdown table cell", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0092");
   rewrite(root, "docs/adr/ADR-0092-example.md", (content) => content.replace(
     "## Context [Required]\nContext.",
@@ -265,8 +265,8 @@ test("rejects a Pending value inside a Markdown table cell", () => {
   assert.match(result.stderr, /Context body must contain substantive content/i);
 });
 
-test("rejects a standalone Pending placeholder later in a required section", () => {
-  const root = validRepository();
+test("rejects a standalone Pending placeholder later in a required section", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0097");
   rewrite(root, "docs/adr/ADR-0097-example.md", (content) => content.replace(
     "## Context [Required]\nContext.",
@@ -282,8 +282,8 @@ Pending — reapproval required
   assert.match(result.stderr, /Context body must contain substantive content/i);
 });
 
-test("rejects a blank retained optional section at a final lifecycle gate", () => {
-  const root = validRepository();
+test("rejects a blank retained optional section at a final lifecycle gate", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0096");
   rewrite(root, "docs/adr/ADR-0096-example.md", (content) => content.replace(
     "## Change Log [Required]\nInitial.",
@@ -298,8 +298,8 @@ Pending
   assert.match(result.stderr, /Supporting Notes.*retained optional section.*complete content/i);
 });
 
-test("does not count a Mermaid comment as covering a flow ID", () => {
-  const root = validRepository();
+test("does not count a Mermaid comment as covering a flow ID", (t) => {
+  const root = validRepository(t);
   makeCurrentAdd(root);
   rewrite(root, "docs/architecture/ADD-0001-example.md", (content) => content.replace(
     "## Control Flow Design [Conditionally Required — multi-step behavior]\nN/A — this fixture has no multi-step control flow.",
@@ -320,8 +320,8 @@ flowchart LR
   assert.match(result.stderr, /Mermaid control-flow diagram does not cover CF-1/i);
 });
 
-test("does not exempt a triggered flow section from its diagram when N/A appears after real content", () => {
-  const root = validRepository();
+test("does not exempt a triggered flow section from its diagram when N/A appears after real content", (t) => {
+  const root = validRepository(t);
   makeCurrentAdd(root);
   rewrite(root, "docs/architecture/ADD-0001-example.md", (content) => content.replace(
     "## Control Flow Design [Conditionally Required — multi-step behavior]\nN/A — this fixture has no multi-step control flow.",
@@ -338,8 +338,8 @@ N/A — stray exemption line after a real table with no diagram.`,
   assert.match(result.stderr, /Control Flow Design requires a Mermaid diagram for a Current ADD/i);
 });
 
-test("does not count a Mermaid example nested inside an outer fence as the required diagram", () => {
-  const root = validRepository();
+test("does not count a Mermaid example nested inside an outer fence as the required diagram", (t) => {
+  const root = validRepository(t);
   makeCurrentAdd(root);
   rewrite(root, "docs/architecture/ADD-0001-example.md", (content) => content.replace(
     "```mermaid\nflowchart LR\n  C1[\"C-1\"]\n```",
@@ -351,8 +351,8 @@ test("does not count a Mermaid example nested inside an outer fence as the requi
   assert.match(result.stderr, /Architecture Design requires a Mermaid flowchart in this section/i);
 });
 
-test("does not syntax-check a Mermaid example nested inside an outer fence", () => {
-  const root = validRepository();
+test("does not syntax-check a Mermaid example nested inside an outer fence", (t) => {
+  const root = validRepository(t);
   rewrite(root, "docs/architecture/ADD-0001-example.md", (content) => content.replace(
     "## Control Flow Design [Conditionally Required — multi-step behavior]",
     `## Control Flow Design [Conditionally Required — multi-step behavior]
@@ -369,8 +369,8 @@ garbage diagram syntax ((( [[
   assert.equal(result.status, 0, `nested example must not be syntax-checked: ${result.stderr}`);
 });
 
-test("rejects a Current ADD component list without a Markdown table separator", () => {
-  const root = validRepository();
+test("rejects a Current ADD component list without a Markdown table separator", (t) => {
+  const root = validRepository(t);
   makeCurrentAdd(root);
   rewrite(root, "docs/architecture/ADD-0001-example.md", (content) => content.replace(
     "| --- | --- |\n| C-1 | Component |",
@@ -386,8 +386,8 @@ for (const [section, id, diagram] of [
   ["Control Flow Design", "CF-1", "flowchart LR\n  F[\"CF-1\"]"],
   ["Interaction Flow Design", "IX-1", "sequenceDiagram\n  participant U as IX-1"],
 ]) {
-  test(`rejects a Current ADD ${section} list without a Markdown table separator`, () => {
-    const root = validRepository();
+  test(`rejects a Current ADD ${section} list without a Markdown table separator`, (t) => {
+    const root = validRepository(t);
     makeCurrentAdd(root);
     rewrite(root, "docs/architecture/ADD-0001-example.md", (content) => content.replace(
       new RegExp(`## ${section} \\[Conditionally Required — [^\\]]+\\]\\n[^\\n]+`),

@@ -1,4 +1,4 @@
-// ADR: docs/adr/ADR-0002-governance-validator-adoption.md
+// ADR: docs/adr/ADR-0002-governance-validator-adoption.md, docs/adr/ADR-0007-governance-fixture-lifecycle.md
 
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -77,8 +77,8 @@ function makeTerminalSourceAdr(root, id) {
   );
 }
 
-test("accepts reasoned N/A source-only sections in a governance Full ADR", () => {
-  const root = validRepository();
+test("accepts reasoned N/A source-only sections in a governance Full ADR", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0023");
   makeGovernanceOnly(root, "0023");
 
@@ -86,8 +86,8 @@ test("accepts reasoned N/A source-only sections in a governance Full ADR", () =>
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("accepts a reasoned N/A applicability for one risk dimension", () => {
-  const root = validRepository();
+test("accepts a reasoned N/A applicability for one risk dimension", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0024");
   const path = join(root, "docs/adr/ADR-0024-example.md");
   writeFileSync(
@@ -102,8 +102,8 @@ test("accepts a reasoned N/A applicability for one risk dimension", () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("requires touchpoints from a newly terminal source Full ADR", () => {
-  const root = validRepository();
+test("requires touchpoints from a newly terminal source Full ADR", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0025");
   makeTerminalSourceAdr(root, "0025");
 
@@ -112,8 +112,8 @@ test("requires touchpoints from a newly terminal source Full ADR", () => {
   assert.match(result.stderr, /Stable Implementation Touchpoints requires a structured table/i);
 });
 
-test("rejects a touchpoint pipe block without a Markdown separator row", () => {
-  const root = validRepository();
+test("rejects a touchpoint pipe block without a Markdown separator row", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0026");
   const path = join(root, "docs/adr/ADR-0026-example.md");
   writeFileSync(
@@ -129,8 +129,8 @@ test("rejects a touchpoint pipe block without a Markdown separator row", () => {
   assert.match(result.stderr, /Stable Implementation Touchpoints requires a structured table/i);
 });
 
-test("accepts a valid touchpoint table after pipe-delimited prose", () => {
-  const root = validRepository();
+test("accepts a valid touchpoint table after pipe-delimited prose", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0027");
   const path = join(root, "docs/adr/ADR-0027-example.md");
   writeFileSync(

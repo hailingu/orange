@@ -1,13 +1,12 @@
-// ADR: docs/adr/ADR-0002-governance-validator-adoption.md
+// ADR: docs/adr/ADR-0002-governance-validator-adoption.md, docs/adr/ADR-0007-governance-fixture-lifecycle.md
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { acceptedAdr, run, validRepository, write } from "./fixtures.mjs";
+import { acceptedAdr, run, temporaryDirectory, validRepository, write } from "./fixtures.mjs";
 
 const validator = fileURLToPath(new URL("../validate.mjs", import.meta.url));
 
@@ -17,8 +16,8 @@ test("exits with usage guidance when --root is missing", () => {
   assert.match(result.stderr, /usage: node validate\.mjs --root <repository-root>/);
 });
 
-test("rejects an illegal Implementation Status value", () => {
-  const root = validRepository();
+test("rejects an illegal Implementation Status value", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -29,8 +28,8 @@ test("rejects an illegal Implementation Status value", () => {
   assert.match(result.stderr, /illegal Implementation Status Bogus/);
 });
 
-test("rejects a Rejected record that is not Not Applicable", () => {
-  const root = validRepository();
+test("rejects a Rejected record that is not Not Applicable", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -46,8 +45,8 @@ test("rejects a Rejected record that is not Not Applicable", () => {
   assert.match(result.stderr, /Rejected requires Implementation Status Not Applicable/);
 });
 
-test("rejects a Deprecated record without a terminal Implementation Status", () => {
-  const root = validRepository();
+test("rejects a Deprecated record without a terminal Implementation Status", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   let markdown = readFileSync(path, "utf8");
   markdown = markdown
@@ -70,8 +69,8 @@ test("rejects a Deprecated record without a terminal Implementation Status", () 
   assert.match(result.stderr, /retired decision requires a terminal Implementation Status/);
 });
 
-test("rejects an illegal ADD Design Status", () => {
-  const root = validRepository();
+test("rejects an illegal ADD Design Status", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     path,
@@ -87,8 +86,8 @@ test("rejects an illegal ADD Design Status", () => {
   assert.match(result.stderr, /illegal Design Status Draftish/);
 });
 
-test("recognizes metadata fields carrying a requirement-level suffix", () => {
-  const root = validRepository();
+test("recognizes metadata fields carrying a requirement-level suffix", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0002");
   const path = join(root, "docs/adr/ADR-0002-example.md");
   writeFileSync(
@@ -125,16 +124,16 @@ function supersededAdr(root, supersededBy, indexedAs = supersededBy) {
   );
 }
 
-test("rejects a Superseded record whose replacement is not Accepted", () => {
-  const root = validRepository();
+test("rejects a Superseded record whose replacement is not Accepted", (t) => {
+  const root = validRepository(t);
   supersededAdr(root, "docs/adr/ADR-0001-example.md");
   const result = run(root);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Superseded By replacement docs\/adr\/ADR-0001-example\.md must be Accepted \(is Proposed\)/);
 });
 
-test("rejects a Superseded record whose replacement does not reciprocate", () => {
-  const root = validRepository();
+test("rejects a Superseded record whose replacement does not reciprocate", (t) => {
+  const root = validRepository(t);
   acceptedAdr(root, "0002");
   supersededAdr(root, "docs/adr/ADR-0002-example.md");
   const result = run(root);
@@ -142,8 +141,8 @@ test("rejects a Superseded record whose replacement does not reciprocate", () =>
   assert.match(result.stderr, /does not reciprocally Supersede this record/);
 });
 
-test("rejects a Superseded record whose replacement is not indexed", () => {
-  const root = validRepository();
+test("rejects a Superseded record whose replacement is not indexed", (t) => {
+  const root = validRepository(t);
   const unindexed = readFileSync(join(root, "docs/adr/ADR-0001-example.md"), "utf8");
   write(root, "docs/adr/ADR-0004-unindexed.md", unindexed);
   // The index row drifts to `None`, so the replacement path appears nowhere in
@@ -154,24 +153,24 @@ test("rejects a Superseded record whose replacement is not indexed", () => {
   assert.match(result.stderr, /Superseded By replacement docs\/adr\/ADR-0004-unindexed\.md is not in the index/);
 });
 
-test("rejects a Superseded record naming a non-record replacement", () => {
-  const root = validRepository();
+test("rejects a Superseded record naming a non-record replacement", (t) => {
+  const root = validRepository(t);
   supersededAdr(root, "docs/adr/INDEX.md");
   const result = run(root);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Superseded By must name an ADR, ADD, or OCR record: docs\/adr\/INDEX\.md/);
 });
 
-test("reports unresolved template variables in instantiated documents", () => {
-  const root = validRepository();
+test("reports unresolved template variables in instantiated documents", (t) => {
+  const root = validRepository(t);
   write(root, "docs/notes.md", "# Notes\n\nThis draft still contains {{FOO}}.\n");
   const result = run(root);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /docs\/notes\.md: unresolved template variable FOO/);
 });
 
-test("reports undeclared and unused variables in template documents", () => {
-  const root = validRepository();
+test("reports undeclared and unused variables in template documents", (t) => {
+  const root = validRepository(t);
   write(
     root,
     "docs/adr/template/authoring-guide.md",
@@ -193,9 +192,9 @@ test("reports undeclared and unused variables in template documents", () => {
   assert.match(result.stderr, /declared template variable LAZY is not used/);
 });
 
-test("reports an index path that resolves outside the repository root", () => {
-  const root = validRepository();
-  const outside = join(tmpdir(), "orange-governance-outside.md");
+test("reports an index path that resolves outside the repository root", (t) => {
+  const root = validRepository(t);
+  const outside = join(temporaryDirectory(t, "orange-governance-outside-"), "outside.md");
   writeFileSync(outside, "# Outside\n");
   const link = join(root, "docs/adr/ADR-0009-escape.md");
   symlinkSync(outside, link);
@@ -207,13 +206,12 @@ test("reports an index path that resolves outside the repository root", () => {
     ),
   );
   const result = run(root);
-  rmSync(outside, { force: true });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /index path resolves outside the repository root: docs\/adr\/ADR-0009-escape\.md/);
 });
 
-test("rejects an ADD candidate table missing a required column", () => {
-  const root = validRepository();
+test("rejects an ADD candidate table missing a required column", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     path,
@@ -224,8 +222,8 @@ test("rejects an ADD candidate table missing a required column", () => {
   assert.match(result.stderr, /ADR Task Candidates table is missing required ID, Status, or ADR path columns/);
 });
 
-test("reports an index Demand Source that disagrees with the record", () => {
-  const root = validRepository();
+test("reports an index Demand Source that disagrees with the record", (t) => {
+  const root = validRepository(t);
   const indexPath = join(root, "docs/architecture/INDEX.md");
   writeFileSync(
     indexPath,
@@ -259,8 +257,8 @@ function currentAdd(root) {
   return path;
 }
 
-test("rejects a Current ADD whose Architecture Design diagram is not a flowchart", () => {
-  const root = validRepository();
+test("rejects a Current ADD whose Architecture Design diagram is not a flowchart", (t) => {
+  const root = validRepository(t);
   const path = currentAdd(root);
   writeFileSync(
     path,
@@ -274,8 +272,8 @@ test("rejects a Current ADD whose Architecture Design diagram is not a flowchart
   assert.match(result.stderr, /Architecture Design Mermaid diagram must be a flowchart/);
 });
 
-test("rejects a Current ADD Control Flow diagram of a disallowed type", () => {
-  const root = validRepository();
+test("rejects a Current ADD Control Flow diagram of a disallowed type", (t) => {
+  const root = validRepository(t);
   const path = currentAdd(root);
   const markdown = readFileSync(path, "utf8").replace(
     "## Control Flow Design [Conditionally Required — multi-step behavior]\nN/A — this fixture has no multi-step control flow.",

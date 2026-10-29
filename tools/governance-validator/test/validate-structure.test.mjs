@@ -1,17 +1,17 @@
-// ADR: docs/adr/ADR-0002-governance-validator-adoption.md
+// ADR: docs/adr/ADR-0002-governance-validator-adoption.md, docs/adr/ADR-0007-governance-fixture-lifecycle.md
 
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { ACCEPTED_RISK_MATRIX_TABLE, RISK_MATRIX_TABLE, acceptedAdr, acceptedOcr, completeOcr, replaceSection, run, validRepository, write } from "./fixtures.mjs";
-test("accepts a structurally valid governance repository", () => {
-  const result = run(validRepository());
+test("accepts a structurally valid governance repository", (t) => {
+  const result = run(validRepository(t));
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("rejects a record missing a required section", () => {
-  const root = validRepository();
+test("rejects a record missing a required section", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   const content = readFileSync(path, "utf8").replace("## Decision [Required]\n", "");
   writeFileSync(path, content);
@@ -21,8 +21,8 @@ test("rejects a record missing a required section", () => {
   assert.match(result.stderr, /missing required section.*Decision/i);
 });
 
-test("rejects a duplicated normalized required section", () => {
-  const root = validRepository();
+test("rejects a duplicated normalized required section", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   const content = `${readFileSync(path, "utf8")}\n## Decision [Required]\nContradictory duplicate.\n`;
   writeFileSync(path, content);
@@ -32,8 +32,8 @@ test("rejects a duplicated normalized required section", () => {
   assert.match(result.stderr, /duplicate required section.*Decision/i);
 });
 
-test("rejects a required section without a requirement-level label", () => {
-  const root = validRepository();
+test("rejects a required section without a requirement-level label", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(path, readFileSync(path, "utf8").replace("## Decision [Required]", "## Decision"));
 
@@ -42,8 +42,8 @@ test("rejects a required section without a requirement-level label", () => {
   assert.match(result.stderr, /section Decision must declare a requirement level/i);
 });
 
-test("rejects structural parsing contracts split across lines", () => {
-  const root = validRepository();
+test("rejects structural parsing contracts split across lines", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -58,8 +58,8 @@ test("rejects structural parsing contracts split across lines", () => {
   assert.match(result.stderr, /missing required section.*Decision/i);
 });
 
-test("rejects an illegal lifecycle status", () => {
-  const root = validRepository();
+test("rejects an illegal lifecycle status", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   const content = readFileSync(path, "utf8").replace(
     "Decision Status**: Proposed",
@@ -72,8 +72,8 @@ test("rejects an illegal lifecycle status", () => {
   assert.match(result.stderr, /illegal Decision Status.*Banana/i);
 });
 
-test("rejects a dangling index path", () => {
-  const root = validRepository();
+test("rejects a dangling index path", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/INDEX.md");
   const content = readFileSync(path, "utf8").replace(
     "docs/adr/ADR-0001-example.md",
@@ -86,8 +86,8 @@ test("rejects a dangling index path", () => {
   assert.match(result.stderr, /index path does not exist.*ADR-9999-missing/i);
 });
 
-test("rejects a stale ADD to ADR reciprocal link", () => {
-  const root = validRepository();
+test("rejects a stale ADD to ADR reciprocal link", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   const content = readFileSync(addPath, "utf8").replace(
     "| CAND-1 | Ready | None |",
@@ -100,8 +100,8 @@ test("rejects a stale ADD to ADR reciprocal link", () => {
   assert.match(result.stderr, /reciprocal.*Architecture Source/i);
 });
 
-test("rejects a Selected ADD candidate whose ADR path is missing", () => {
-  const root = validRepository();
+test("rejects a Selected ADD candidate whose ADR path is missing", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -116,8 +116,8 @@ test("rejects a Selected ADD candidate whose ADR path is missing", () => {
   assert.match(result.stderr, /linked ADR path does not exist.*ADR-9999-missing/i);
 });
 
-test("rejects an ADR whose Architecture Source has no reciprocal ADD link", () => {
-  const root = validRepository();
+test("rejects an ADR whose Architecture Source has no reciprocal ADD link", (t) => {
+  const root = validRepository(t);
   const adrPath = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     adrPath,
@@ -132,8 +132,8 @@ test("rejects an ADR whose Architecture Source has no reciprocal ADD link", () =
   assert.match(result.stderr, /reciprocal ADD candidate link is missing/i);
 });
 
-test("rejects invalid Mermaid syntax", () => {
-  const root = validRepository();
+test("rejects invalid Mermaid syntax", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/architecture/ADD-0001-example.md");
   const content = readFileSync(path, "utf8").replace("flowchart LR", "flowchart ???");
   writeFileSync(path, content);
@@ -143,8 +143,8 @@ test("rejects invalid Mermaid syntax", () => {
   assert.match(result.stderr, /invalid Mermaid/i);
 });
 
-test("rejects unresolved template variables in instantiated records", () => {
-  const root = validRepository();
+test("rejects unresolved template variables in instantiated records", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(path, readFileSync(path, "utf8").replace("Context.", "{{CONTEXT}}"));
 
@@ -153,8 +153,8 @@ test("rejects unresolved template variables in instantiated records", () => {
   assert.match(result.stderr, /unresolved template variable.*CONTEXT/i);
 });
 
-test("rejects Current ADD content without complete approval metadata", () => {
-  const root = validRepository();
+test("rejects Current ADD content without complete approval metadata", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -168,8 +168,8 @@ test("rejects Current ADD content without complete approval metadata", () => {
   assert.match(result.stderr, /Current requires complete Approver.*Approval Time.*Approval Evidence/i);
 });
 
-test("rejects a Mermaid architecture diagram that omits a component table ID", () => {
-  const root = validRepository();
+test("rejects a Mermaid architecture diagram that omits a component table ID", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(path, readFileSync(path, "utf8").replace('C1["C-1"]', 'C1["Component"]'));
 
@@ -178,8 +178,8 @@ test("rejects a Mermaid architecture diagram that omits a component table ID", (
   assert.match(result.stderr, /Mermaid architecture diagram does not cover.*C-1/i);
 });
 
-test("rejects a Mermaid ID prefix that omits the complete component ID", () => {
-  const root = validRepository();
+test("rejects a Mermaid ID prefix that omits the complete component ID", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(path, readFileSync(path, "utf8").replace('C1["C-1"]', 'C10["C-10"]'));
 
@@ -188,8 +188,8 @@ test("rejects a Mermaid ID prefix that omits the complete component ID", () => {
   assert.match(result.stderr, /Mermaid architecture diagram does not cover.*C-1/i);
 });
 
-test("rejects index status that disagrees with the indexed record", () => {
-  const root = validRepository();
+test("rejects index status that disagrees with the indexed record", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/INDEX.md");
   writeFileSync(path, readFileSync(path, "utf8").replace("| Proposed |", "| Accepted |"));
 
@@ -198,8 +198,8 @@ test("rejects index status that disagrees with the indexed record", () => {
   assert.match(result.stderr, /index Decision Status Accepted disagrees.*Proposed/i);
 });
 
-test("rejects a decision record omitted from the repository index", () => {
-  const root = validRepository();
+test("rejects a decision record omitted from the repository index", (t) => {
+  const root = validRepository(t);
   write(
     root,
     "docs/adr/ADR-0002-unindexed.md",
@@ -214,8 +214,8 @@ test("rejects a decision record omitted from the repository index", () => {
   assert.match(result.stderr, /ADR-0002-unindexed\.md: record is missing from docs\/adr\/INDEX\.md/i);
 });
 
-test("rejects an undeclared template variable", () => {
-  const root = validRepository();
+test("rejects an undeclared template variable", (t) => {
+  const root = validRepository(t);
   write(root, "docs/adr/template/0000-template.md", "# {{UNDECLARED}}\n");
 
   const result = run(root);
@@ -223,8 +223,8 @@ test("rejects an undeclared template variable", () => {
   assert.match(result.stderr, /template variable UNDECLARED is not declared/i);
 });
 
-test("ignores pseudo-headings inside fenced code blocks", () => {
-  const root = validRepository();
+test("ignores pseudo-headings inside fenced code blocks", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -238,8 +238,8 @@ test("ignores pseudo-headings inside fenced code blocks", () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("accepts record classification contracts outside fenced code", () => {
-  const root = validRepository();
+test("accepts record classification contracts outside fenced code", (t) => {
+  const root = validRepository(t);
   acceptedOcr(root, "0002");
   const adrPath = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
@@ -255,8 +255,8 @@ test("accepts record classification contracts outside fenced code", () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("does not satisfy the Decision section with Decision Drivers", () => {
-  const root = validRepository();
+test("does not satisfy the Decision section with Decision Drivers", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   // The fixture keeps `Decision Drivers` present; removing `Decision` must
   // still fail because an exact name, not a prefix, is required.
@@ -270,8 +270,8 @@ test("does not satisfy the Decision section with Decision Drivers", () => {
   assert.match(result.stderr, /missing required section Decision/i);
 });
 
-test("rejects a Full ADR missing a required Options Considered section", () => {
-  const root = validRepository();
+test("rejects a Full ADR missing a required Options Considered section", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -283,8 +283,8 @@ test("rejects a Full ADR missing a required Options Considered section", () => {
   assert.match(result.stderr, /missing required section Options Considered/i);
 });
 
-test("rejects an ADD missing a required Cross-Cutting Design section", () => {
-  const root = validRepository();
+test("rejects an ADD missing a required Cross-Cutting Design section", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     path,
@@ -299,8 +299,8 @@ test("rejects an ADD missing a required Cross-Cutting Design section", () => {
   assert.match(result.stderr, /missing required section Cross-Cutting Design/i);
 });
 
-test("rejects a Lightweight ADR missing its required eligibility check", () => {
-  const root = validRepository();
+test("rejects a Lightweight ADR missing its required eligibility check", (t) => {
+  const root = validRepository(t);
   write(
     root,
     "docs/adr/ADR-0002-lightweight.md",
@@ -353,8 +353,8 @@ Initial.
   assert.match(result.stderr, /missing required section Lightweight Eligibility Check/i);
 });
 
-test("accepts a complete Lightweight ADR", () => {
-  const root = validRepository();
+test("accepts a complete Lightweight ADR", (t) => {
+  const root = validRepository(t);
   write(
     root,
     "docs/adr/ADR-0002-lightweight.md",
@@ -408,8 +408,8 @@ Initial.
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("rejects an Architecture Source that is neither an ADD link nor N/A", () => {
-  const root = validRepository();
+test("rejects an Architecture Source that is neither an ADD link nor N/A", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -424,8 +424,8 @@ test("rejects an Architecture Source that is neither an ADD link nor N/A", () =>
   assert.match(result.stderr, /Architecture Source must be an ADD path plus candidate ID or N\/A/i);
 });
 
-test("rejects a missing Architecture Source field", () => {
-  const root = validRepository();
+test("rejects a missing Architecture Source field", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -440,8 +440,8 @@ test("rejects a missing Architecture Source field", () => {
   assert.match(result.stderr, /Architecture Source is missing/i);
 });
 
-test("rejects a reciprocal candidate ID matched only by substring", () => {
-  const root = validRepository();
+test("rejects a reciprocal candidate ID matched only by substring", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -464,8 +464,8 @@ test("rejects a reciprocal candidate ID matched only by substring", () => {
   assert.match(result.stderr, /reciprocal Architecture Source is missing.*CAND-1/i);
 });
 
-test("rejects a Full ADR missing Contract-To-Check Traceability", () => {
-  const root = validRepository();
+test("rejects a Full ADR missing Contract-To-Check Traceability", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -480,8 +480,8 @@ test("rejects a Full ADR missing Contract-To-Check Traceability", () => {
   assert.match(result.stderr, /missing required section Contract-To-Check Traceability/i);
 });
 
-test("rejects a Full ADR missing its Risk Coverage Matrix", () => {
-  const root = validRepository();
+test("rejects a Full ADR missing its Risk Coverage Matrix", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(path, readFileSync(path, "utf8").replace("## Risk Coverage Matrix [Required]\n", ""));
 
@@ -490,8 +490,8 @@ test("rejects a Full ADR missing its Risk Coverage Matrix", () => {
   assert.match(result.stderr, /missing required section Risk Coverage Matrix/i);
 });
 
-test("rejects a Risk Coverage Matrix missing a baseline dimension", () => {
-  const root = validRepository();
+test("rejects a Risk Coverage Matrix missing a baseline dimension", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -506,8 +506,8 @@ test("rejects a Risk Coverage Matrix missing a baseline dimension", () => {
   );
 });
 
-test("does not read metadata from inside fenced code blocks", () => {
-  const root = validRepository();
+test("does not read metadata from inside fenced code blocks", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -524,8 +524,8 @@ test("does not read metadata from inside fenced code blocks", () => {
   assert.match(result.stderr, /illegal Decision Status/i);
 });
 
-test("reads the ADR path only from the candidate table column", () => {
-  const root = validRepository();
+test("reads the ADR path only from the candidate table column", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   // CAND-1 is Selected and its evidence column names the ADR path, but the
   // formal `ADR path` column is `None`; the validator must read the column.
@@ -556,8 +556,8 @@ test("reads the ADR path only from the candidate table column", () => {
   assert.match(result.stderr, /CAND-1 is missing its linked ADR path/i);
 });
 
-test("rejects a malformed ADR Task Candidates table instead of skipping validation", () => {
-  const root = validRepository();
+test("rejects a malformed ADR Task Candidates table instead of skipping validation", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   // The header drops the `ADR path` column, so the table cannot be parsed; a
   // Selected candidate must not bypass the reciprocal-link check.
@@ -576,8 +576,8 @@ test("rejects a malformed ADR Task Candidates table instead of skipping validati
   assert.match(result.stderr, /ADR Task Candidates table is missing required/i);
 });
 
-test("rejects a Risk Coverage Matrix with a duplicated dimension", () => {
-  const root = validRepository();
+test("rejects a Risk Coverage Matrix with a duplicated dimension", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -592,8 +592,8 @@ test("rejects a Risk Coverage Matrix with a duplicated dimension", () => {
   assert.match(result.stderr, /duplicates baseline dimension cancellation and interruption/i);
 });
 
-test("rejects a Risk Coverage Matrix with a non-baseline dimension row", () => {
-  const root = validRepository();
+test("rejects a Risk Coverage Matrix with a non-baseline dimension row", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -608,8 +608,8 @@ test("rejects a Risk Coverage Matrix with a non-baseline dimension row", () => {
   assert.match(result.stderr, /non-baseline dimension row/i);
 });
 
-test("rejects an ADD candidate with an illegal status", () => {
-  const root = validRepository();
+test("rejects an ADD candidate with an illegal status", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -621,8 +621,8 @@ test("rejects an ADD candidate with an illegal status", () => {
   assert.match(result.stderr, /CAND-1 has illegal status Banana/i);
 });
 
-test("rejects a Selected candidate whose linked ADR is already terminal", () => {
-  const root = validRepository();
+test("rejects a Selected candidate whose linked ADR is already terminal", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -649,8 +649,8 @@ test("rejects a Selected candidate whose linked ADR is already terminal", () => 
   assert.match(result.stderr, /CAND-1 is Selected but linked ADR/i);
 });
 
-test("rejects a Complete candidate whose linked ADR is not terminal", () => {
-  const root = validRepository();
+test("rejects a Complete candidate whose linked ADR is not terminal", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -673,8 +673,8 @@ test("rejects a Complete candidate whose linked ADR is not terminal", () => {
   assert.match(result.stderr, /CAND-1 is Complete but linked ADR/i);
 });
 
-test("rejects a Rejected ADR without rejection evidence", () => {
-  const root = validRepository();
+test("rejects a Rejected ADR without rejection evidence", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -695,8 +695,8 @@ test("rejects a Rejected ADR without rejection evidence", () => {
   assert.match(result.stderr, /Rejected requires complete Rejector.*Rejection Time.*Rejection Evidence/i);
 });
 
-test("rejects a retired ADR without retirement evidence", () => {
-  const root = validRepository();
+test("rejects a retired ADR without retirement evidence", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -720,8 +720,8 @@ test("rejects a retired ADR without retirement evidence", () => {
   );
 });
 
-test("rejects an empty Risk Coverage Matrix without an explicit N/A", () => {
-  const root = validRepository();
+test("rejects an empty Risk Coverage Matrix without an explicit N/A", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -736,8 +736,8 @@ test("rejects an empty Risk Coverage Matrix without an explicit N/A", () => {
   assert.match(result.stderr, /Risk Coverage Matrix must contain a five-dimension table or N\/A/i);
 });
 
-test("accepts an explicit N/A Risk Coverage Matrix with a reason", () => {
-  const root = validRepository();
+test("accepts an explicit N/A Risk Coverage Matrix with a reason", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -751,8 +751,8 @@ test("accepts an explicit N/A Risk Coverage Matrix with a reason", () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("rejects a Deprecated ADD without retirement evidence", () => {
-  const root = validRepository();
+test("rejects a Deprecated ADD without retirement evidence", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -769,8 +769,8 @@ test("rejects a Deprecated ADD without retirement evidence", () => {
   );
 });
 
-test("rejects a Deprecated ADR whose retirement evidence does not match", () => {
-  const root = validRepository();
+test("rejects a Deprecated ADR whose retirement evidence does not match", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -794,8 +794,8 @@ test("rejects a Deprecated ADR whose retirement evidence does not match", () => 
   assert.match(result.stderr, /retired decision requires complete Retired By.*Retirement Evidence: Deprecate/i);
 });
 
-test("rejects duplicate ADD candidate IDs", () => {
-  const root = validRepository();
+test("rejects duplicate ADD candidate IDs", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -810,8 +810,8 @@ test("rejects duplicate ADD candidate IDs", () => {
   assert.match(result.stderr, /duplicate candidate ID CAND-1/i);
 });
 
-test("rejects a role label as an Approver", () => {
-  const root = validRepository();
+test("rejects a role label as an Approver", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -830,8 +830,8 @@ test("rejects a role label as an Approver", () => {
   assert.match(result.stderr, /Accepted requires complete Approver.*Approval Time.*Approval Evidence/i);
 });
 
-test("ignores metadata inside tilde-fenced code blocks", () => {
-  const root = validRepository();
+test("ignores metadata inside tilde-fenced code blocks", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -848,8 +848,8 @@ test("ignores metadata inside tilde-fenced code blocks", () => {
   assert.match(result.stderr, /illegal Decision Status/i);
 });
 
-test("rejects a template placeholder as an Approver", () => {
-  const root = validRepository();
+test("rejects a template placeholder as an Approver", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -868,8 +868,8 @@ test("rejects a template placeholder as an Approver", () => {
   assert.match(result.stderr, /Accepted requires complete Approver/i);
 });
 
-test("rejects a Blocked ADR without blocker evidence", () => {
-  const root = validRepository();
+test("rejects a Blocked ADR without blocker evidence", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -897,8 +897,8 @@ test("rejects a Blocked ADR without blocker evidence", () => {
   );
 });
 
-test("rejects an ADD candidate row with an illegal ID", () => {
-  const root = validRepository();
+test("rejects an ADD candidate row with an illegal ID", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -913,8 +913,8 @@ test("rejects an ADD candidate row with an illegal ID", () => {
   assert.match(result.stderr, /row with a missing or illegal ID \(CAND-X\)/i);
 });
 
-test("rejects an ADD whose Architecture Design flowchart is only in another section", () => {
-  const root = validRepository();
+test("rejects an ADD whose Architecture Design flowchart is only in another section", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -938,8 +938,8 @@ test("rejects an ADD whose Architecture Design flowchart is only in another sect
   assert.match(result.stderr, /Architecture Design requires a Mermaid flowchart in this section/i);
 });
 
-test("rejects a retired ADD that remains in the active directory", () => {
-  const root = validRepository();
+test("rejects a retired ADD that remains in the active directory", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -958,8 +958,8 @@ test("rejects a retired ADD that remains in the active directory", () => {
   assert.match(result.stderr, /retired .* record must reside under an archive/i);
 });
 
-test("does not close a four-backtick fence with three backticks", () => {
-  const root = validRepository();
+test("does not close a four-backtick fence with three backticks", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -976,8 +976,8 @@ test("does not close a four-backtick fence with three backticks", () => {
   assert.match(result.stderr, /illegal Decision Status/i);
 });
 
-test("rejects a Proposed ADR that has entered In Progress", () => {
-  const root = validRepository();
+test("rejects a Proposed ADR that has entered In Progress", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -994,8 +994,8 @@ test("rejects a Proposed ADR that has entered In Progress", () => {
   assert.match(result.stderr, /Proposed requires Implementation Status Not Started/i);
 });
 
-test("rejects Pending as Blocked blocker evidence", () => {
-  const root = validRepository();
+test("rejects Pending as Blocked blocker evidence", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -1023,8 +1023,8 @@ test("rejects Pending as Blocked blocker evidence", () => {
   );
 });
 
-test("rejects a non-existent ISO approval time", () => {
-  const root = validRepository();
+test("rejects a non-existent ISO approval time", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -1043,8 +1043,8 @@ test("rejects a non-existent ISO approval time", () => {
   assert.match(result.stderr, /Accepted requires complete Approver.*Approval Time.*Approval Evidence/i);
 });
 
-test("rejects a retired ADD with a non-terminal candidate", () => {
-  const root = validRepository();
+test("rejects a retired ADD with a non-terminal candidate", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -1063,8 +1063,8 @@ test("rejects a retired ADD with a non-terminal candidate", () => {
   assert.match(result.stderr, /retired ADD candidate CAND-1 must be Deferred or Complete/i);
 });
 
-test("rejects a Rejected ADR that remains in the active directory", () => {
-  const root = validRepository();
+test("rejects a Rejected ADR that remains in the active directory", (t) => {
+  const root = validRepository(t);
   const path = join(root, "docs/adr/ADR-0001-example.md");
   writeFileSync(
     path,
@@ -1089,8 +1089,8 @@ test("rejects a Rejected ADR that remains in the active directory", () => {
   assert.match(result.stderr, /Rejected\/Not Applicable record must reside under an archive/i);
 });
 
-test("rejects a Current ADD that skips Architecture Design via N/A", () => {
-  const root = validRepository();
+test("rejects a Current ADD that skips Architecture Design via N/A", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -1116,8 +1116,8 @@ test("rejects a Current ADD that skips Architecture Design via N/A", () => {
   );
 });
 
-test("allows a Draft ADD with incomplete Architecture Design", () => {
-  const root = validRepository();
+test("allows a Draft ADD with incomplete Architecture Design", (t) => {
+  const root = validRepository(t);
   const addPath = join(root, "docs/architecture/ADD-0001-example.md");
   writeFileSync(
     addPath,
@@ -1131,8 +1131,8 @@ test("allows a Draft ADD with incomplete Architecture Design", () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("does not force-archive a Blocked OCR that may be re-attempted", () => {
-  const root = validRepository();
+test("does not force-archive a Blocked OCR that may be re-attempted", (t) => {
+  const root = validRepository(t);
   write(
     root,
     "docs/adr/ocr/OCR-0002-example.md",
