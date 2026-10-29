@@ -1,0 +1,23 @@
+<!doctype html>
+<!-- ADR: docs/adr/ADR-0003-local-runtime-path.md (T-3) -->
+<!-- The orange status page: shows the loopback service health. The initial
+     loading state is replaced by src/status.ts after the /api/health
+     request settles (success, or a connection error within two seconds). -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>orange</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem; }
+      #status[data-state="loading"] { color: gray; }
+      #status[data-state="ok"] { color: green; }
+      #status[data-state="error"] { color: #b00020; }
+    </style>
+  </head>
+  <body>
+    <h1>orange</h1>
+    <p>Service status: <span id="status" data-state="loading">loading…</span></p>
+    <script type="module" src="/status.js"></script>
+  </body>
+</html>

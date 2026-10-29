@@ -75,3 +75,7 @@ node_modules/
 
 # Local runtime certificate material (ADR-0003 T-2: generated, never committed)
 run/
+
+# Web client generated output (ADR-0003 T-3)
+web/dist/
+web/.test-out/

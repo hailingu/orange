@@ -1,0 +1,15 @@
+{
+  "name": "orange-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "orange local web client (ADR-0003 T-3): the status page served by the loopback service.",
+  "scripts": {
+    "build": "tsc --project tsconfig.json && mkdir -p dist && cp index.html dist/index.html",
+    "test": "tsc --project tsconfig.test.json && node --test .test-out/test/*.test.js"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/node": "24.10.1"
+  }
+}
