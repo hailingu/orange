@@ -118,6 +118,18 @@ add_executable(http_routes_tests tests/http_routes_tests.cpp)
 target_link_libraries(http_routes_tests PRIVATE orange_http)
 add_test(NAME http_routes_tests COMMAND http_routes_tests)
 
+# The assembled runtime binds both documented fixed listeners (ADR-0003 T-2).
+add_executable(orange_service src/main.cpp)
+target_link_libraries(orange_service PRIVATE orange_http)
+
+# The both-listener integration suite drives the assembled executable and
+# curl against the fixed 8080/8443 origins (ADR-0003 T-2, AC-2).
+add_executable(http_integration_tests tests/http_integration_tests.cpp)
+target_link_libraries(http_integration_tests PRIVATE orange_http)
+target_compile_definitions(http_integration_tests
+                           PRIVATE ORANGE_SERVICE_PATH="$<TARGET_FILE:orange_service>")
+add_test(NAME http_integration_tests COMMAND http_integration_tests)
+
 # Static serving with the declared single-range behavior is the second
 # serving rung of ADR-0003 T-2.
 add_executable(http_static_files_tests tests/http_static_files_tests.cpp)

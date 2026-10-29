@@ -72,3 +72,6 @@ node_modules/
 
 # macOS Finder metadata
 .DS_Store
+
+# Local runtime certificate material (ADR-0003 T-2: generated, never committed)
+run/
